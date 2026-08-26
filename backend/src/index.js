@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import app from './app.js';
 import redis from './config/redis.js';
 import { initSockets } from './sockets/index.js';
+import { startReservationExpirer } from './jobs/reservationExpirer.js';
 
 const PORT = process.env.PORT || 3001;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -21,6 +22,7 @@ const io = new Server(server, {
 });
 
 initSockets(io);
+startReservationExpirer();
 
 async function start() {
   try {

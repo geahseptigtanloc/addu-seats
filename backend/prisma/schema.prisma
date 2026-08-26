@@ -1,4 +1,4 @@
-// AdDU-Seats database schema — Phase 1
+// AdDU-Seats database schema — Phase 3
 // Prisma manages migrations and type-safe queries against PostgreSQL.
 
 generator client {
@@ -14,6 +14,7 @@ datasource db {
 
 enum UserRole {
   student
+  staff
   admin
 
   @@map("user_role")
@@ -29,12 +30,14 @@ enum Building {
 enum SeatType {
   individual
   table_node
+  cubicle
 
   @@map("seat_type")
 }
 
 enum SeatStatus {
   available
+  pending
   pending_verification
   occupied
   on_break
@@ -45,6 +48,7 @@ enum SeatStatus {
 
 enum ReservationStatus {
   pending
+  pending_entry
   active
   on_break
   completed
@@ -55,12 +59,14 @@ enum ReservationStatus {
 }
 
 enum ValidationEventType {
-  front_desk_verify
-  break_start
-  break_return
-  flag_raised
+  front_desk_approved
+  front_desk_rejected
+  break_started
+  break_extended
+  break_returned
+  break_expired
+  flagged
   flag_resolved
-  forfeited
 
   @@map("validation_event_type")
 }
@@ -78,14 +84,16 @@ enum OccupancyEventType {
 
 model User {
   userId       String   @id @default(uuid()) @map("user_id") @db.Uuid
+  googleId      String?  @unique @map("google_id")
   role         UserRole @default(student)
   name         String   @db.VarChar(255)
   email        String   @unique @db.VarChar(255)
   adduIdLast4  String?  @map("addu_id_last4") @db.VarChar(4)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
-  reservations     Reservation[]
-  validationEvents ValidationEvent[] @relation("AdminValidationEvents")
+  reservations         Reservation[]
+  validationEvents     ValidationEvent[] @relation("AdminValidationEvents")
+  flaggedReservations  Reservation[]     @relation("FlaggedReservations")
 
   @@map("users")
 }
@@ -96,6 +104,8 @@ model Seat {
   floor          Int
   seatType       SeatType   @map("seat_type")
   status         SeatStatus @default(available)
+  posX           Float?     @map("pos_x")
+  posY           Float?     @map("pos_y")
   currentQrToken String?    @map("current_qr_token") @db.VarChar(255)
   createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamp(6)
 
@@ -108,16 +118,24 @@ model Seat {
 }
 
 model Reservation {
-  reservationId String            @id @default(uuid()) @map("reservation_id") @db.Uuid
-  userId        String            @map("user_id") @db.Uuid
-  seatId        String            @map("seat_id") @db.Uuid
-  status        ReservationStatus @default(pending)
-  reservedAt    DateTime          @default(now()) @map("reserved_at") @db.Timestamp(6)
-  verifiedAt    DateTime?         @map("verified_at") @db.Timestamp(6)
-  checkedOutAt  DateTime?         @map("checked_out_at") @db.Timestamp(6)
+  reservationId    String            @id @default(uuid()) @map("reservation_id") @db.Uuid
+  userId           String            @map("user_id") @db.Uuid
+  seatId           String            @map("seat_id") @db.Uuid
+  status           ReservationStatus @default(pending)
+  reservedAt       DateTime          @default(now()) @map("reserved_at") @db.Timestamp(6)
+  entryDeadline    DateTime?         @map("entry_deadline") @db.Timestamp(6)
+  verifiedAt       DateTime?         @map("verified_at") @db.Timestamp(6)
+  checkedOutAt     DateTime?         @map("checked_out_at") @db.Timestamp(6)
+  breakStartedAt   DateTime?         @map("break_started_at") @db.Timestamp(6)
+  breakDeadline    DateTime?         @map("break_deadline") @db.Timestamp(6)
+  breakMinutesUsed Int               @default(0) @map("break_minutes_used")
+  cooldownUntil    DateTime?         @map("cooldown_until") @db.Timestamp(6)
+  flaggedAt        DateTime?         @map("flagged_at") @db.Timestamp(6)
+  flaggedBy        String?           @map("flagged_by") @db.Uuid
 
   user             User              @relation(fields: [userId], references: [userId])
   seat             Seat              @relation(fields: [seatId], references: [seatId])
+  flagger          User?             @relation("FlaggedReservations", fields: [flaggedBy], references: [userId])
   validationEvents ValidationEvent[]
 
   @@index([userId])
@@ -131,6 +149,7 @@ model ValidationEvent {
   reservationId String              @map("reservation_id") @db.Uuid
   adminId       String?             @map("admin_id") @db.Uuid
   eventType     ValidationEventType @map("event_type")
+  note          String?
   timestamp     DateTime            @default(now()) @db.Timestamp(6)
 
   reservation Reservation @relation(fields: [reservationId], references: [reservationId])

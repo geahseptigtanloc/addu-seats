@@ -2,11 +2,26 @@
  * Shared page layout with header navigation.
  */
 import { Link, useNavigate } from 'react-router-dom';
+import { apiClient } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  async function handleOpenMyReservation() {
+    try {
+      const data = await apiClient('/api/reservations/me/current');
+      navigate('/receipt', {
+        state: {
+          reservation: data.reservation,
+          qrToken: data.qrToken
+        }
+      });
+    } catch (err) {
+      alert('You do not have an active reservation to view right now.');
+    }
+  }
 
   function handleLogout() {
     logout();
@@ -22,10 +37,23 @@ export default function Layout({ children }) {
           </Link>
 
           {user && (
-            <nav className="flex items-center gap-4 text-sm">
+            <nav className="flex items-center gap-3 text-sm">
               <Link to="/" className="hover:text-addu-gold transition-colors">
                 Seat Map
               </Link>
+              {user.role === 'student' && (
+                <button
+                  onClick={handleOpenMyReservation}
+                  className="rounded bg-white/10 px-3 py-1 font-medium text-white hover:bg-white/20 transition-colors"
+                >
+                  My Reservation
+                </button>
+              )}
+              {['staff', 'admin'].includes(user.role) && (
+                <Link to="/frontdesk" className="hover:text-addu-gold transition-colors">
+                  Front Desk
+                </Link>
+              )}
               {user.role === 'admin' && (
                 <Link to="/admin" className="hover:text-addu-gold transition-colors">
                   Admin

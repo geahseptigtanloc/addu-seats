@@ -9,8 +9,12 @@ import SeatMap from './pages/SeatMap.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import { useSocket } from './hooks/useSocket.js';
 
+import BuildingFloorSelector from './pages/BuildingFloorSelector.jsx';
+import ReservationReceipt from './pages/ReservationReceipt.jsx';
+import FrontDeskView from './pages/FrontDeskView.jsx';
+import VerifyPage from './pages/VerifyPage.jsx';
+
 function AppRoutes() {
-  // Phase 1: establish Socket.IO connection early so it's ready for Phase 2
   useSocket();
 
   return (
@@ -21,7 +25,25 @@ function AppRoutes() {
         path="/"
         element={
           <ProtectedRoute>
+            <BuildingFloorSelector />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/map/:building/:floor"
+        element={
+          <ProtectedRoute>
             <SeatMap />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/receipt"
+        element={
+          <ProtectedRoute>
+            <ReservationReceipt />
           </ProtectedRoute>
         }
       />
@@ -31,6 +53,24 @@ function AppRoutes() {
         element={
           <ProtectedRoute adminOnly>
             <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/frontdesk"
+        element={
+          <ProtectedRoute staffOnly>
+            <FrontDeskView />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/verify"
+        element={
+          <ProtectedRoute staffOnly>
+            <VerifyPage />
           </ProtectedRoute>
         }
       />
