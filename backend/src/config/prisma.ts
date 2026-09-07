@@ -2,23 +2,21 @@ import { PrismaClient } from '@prisma/client';
 import { env } from './env';
 
 /**
- * ts-node-dev tears down and re-imports modules on every file change, which
- * would normally create a brand new PrismaClient (and a brand new DB
- * connection pool) on every hot-reload. Stashing the instance on `global`
- * survives the module re-evaluation, so dev mode reuses the same client
- * instead of leaking connections. In production there's only ever one
- * module load, so this has no effect beyond ordinary singleton behavior.
+ * Single PrismaClient instance, reused for the lifetime of the process.
+ *
+ * if the code creates a database client with new PrismaClient()
+ * sitting at the top of a file, and the dev tool swaps in the
+ * updated code without fully restarting the program, the backend can end up
+ * creating a second, third, fourth... database client every time a file is saved.
+ *
+ * ts-node-dev fully restarts the Node process on every file change
+ * (confirmed by checking process.pid before and after a reload),
+ * rather than reloading code in place. That means this file is
+ * only ever evaluated once per running process, so a plain module-level
+ * singleton is enough, there's no scenario where multiple PrismaClient
+ * instances (and multiple connection pools) could end up coexisting
+ * within one process.
  */
-declare global {
-  var __prisma: PrismaClient | undefined;
-}
-
-export const prisma =
-  global.__prisma ??
-  new PrismaClient({
-    log: env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
-  });
-
-if (env.NODE_ENV === 'development') {
-  global.__prisma = prisma;
-}
+export const prisma = new PrismaClient({
+  log: env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+});
