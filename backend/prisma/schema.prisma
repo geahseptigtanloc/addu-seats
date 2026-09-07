@@ -98,6 +98,8 @@ model Reservation {
   confirmedAt DateTime? @map("confirmed_at") // set when front desk approves; null = never occupied
   endedAt     DateTime? @map("ended_at") // set on any terminal status
 
+  validationEvents ValidationEvent[]
+
   @@index([userId])
   @@index([seatId])
   @@index([status, createdAt]) // supports admin's pending-queue dashboard
@@ -107,4 +109,19 @@ model Reservation {
     // migration.sql), Prisma 6's schema syntax can't express a WHERE clause
     // on an index, so this constraint is invisible here but real in the DB.
   @@map("reservations")
+}
+
+model ValidationEvent {
+  id            String              @id @default(uuid(7))
+  reservationId String              @map("reservation_id")
+  eventType     ValidationEventType @map("event_type")
+
+  // Cascade here, an event has no standalone meaning without its reservation, so it
+  // should go with it if the reservation is ever hard-deleted.
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at") // append-only log; no updatedAt
+
+  @@index([reservationId])
+  @@map("validation_events")
 }
