@@ -48,3 +48,18 @@ enum OccupancyEventType {
   OCCUPIED
   VACATED
 }
+
+// No password field, auth is Google OAuth only.
+model User {
+  id             String   @id @default(uuid(7)) // v7: sortable, better index locality
+  googleId       String   @unique @map("google_id") // stable OAuth key; email can change
+  email          String   @unique
+  name           String
+  role           UserRole @default(STUDENT)
+  studentIdLast4 String?  @map("student_id_last4") // set during post-OAuth registration step
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
