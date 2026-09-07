@@ -101,5 +101,10 @@ model Reservation {
   @@index([userId])
   @@index([seatId])
   @@index([status, createdAt]) // supports admin's pending-queue dashboard
+    // NOTE: "one active (PENDING/CONFIRMED) reservation per seat/user" is
+    // enforced by two partial unique indexes hand-written directly into a
+    // migration file (prisma/migrations/..._add_active_reservation_constraints/
+    // migration.sql), Prisma 6's schema syntax can't express a WHERE clause
+    // on an index, so this constraint is invisible here but real in the DB.
   @@map("reservations")
 }
