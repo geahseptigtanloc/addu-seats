@@ -101,6 +101,8 @@ model Reservation {
   validationEvents ValidationEvent[]
   occupancyLogs OccupancyLog[]
 
+  @@index([userId])
+  @@index([seatId])
   @@index([status, createdAt]) // supports admin's pending-queue dashboard
     // NOTE: "one active (PENDING/CONFIRMED) reservation per seat/user" is
     // enforced by two partial unique indexes hand-written directly into a
