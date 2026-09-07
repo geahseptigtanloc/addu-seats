@@ -57,6 +57,7 @@ model User {
   name           String
   role           UserRole @default(STUDENT)
   studentIdLast4 String?  @map("student_id_last4") // set during post-OAuth registration step
+  reservations Reservation[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -74,8 +75,31 @@ model Seat {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  // reservations, occupancyLogs relations added once those models exist 
+  reservations Reservation[]
 
   @@index([building, floor]) // supports GET /seats?building=&floor= 
   @@map("seats")
+}
+
+model Reservation {
+  id     String            @id @default(uuid(7))
+  userId String            @map("user_id")
+  seatId String            @map("seat_id")
+  status ReservationStatus @default(PENDING)
+
+  // Restrict, not Cascade
+  // Deleting a user/seat should never silently
+  // wipe reservation history that occupancy analytics depends on. Seats
+  // are meant to be retired via status = UNAVAILABLE, not deleted.
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  seat Seat @relation(fields: [seatId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  confirmedAt DateTime? @map("confirmed_at") // set when front desk approves; null = never occupied
+  endedAt     DateTime? @map("ended_at") // set on any terminal status
+
+  @@index([userId])
+  @@index([seatId])
+  @@index([status, createdAt]) // supports admin's pending-queue dashboard
+  @@map("reservations")
 }
