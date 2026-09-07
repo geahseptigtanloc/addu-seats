@@ -14,8 +14,10 @@ const envSchema = z.object({
   REDIS_URL: z.string().url(),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET should be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().min(1, 'JWT_EXPIRES_IN cannot be blank').default('5h'),
+  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID cannot be blank'),
+  GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET cannot be blank'),
+  GOOGLE_CALLBACK_URL: z.string().url(),
 });
-
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
