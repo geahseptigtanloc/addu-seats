@@ -17,6 +17,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID cannot be blank'),
   GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET cannot be blank'),
   GOOGLE_CALLBACK_URL: z.string().url(),
+  CORS_ORIGIN: z.string().url(),
 });
 const parsed = envSchema.safeParse(process.env);
 
