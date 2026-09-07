@@ -99,9 +99,8 @@ model Reservation {
   endedAt     DateTime? @map("ended_at") // set on any terminal status
 
   validationEvents ValidationEvent[]
+  occupancyLogs OccupancyLog[]
 
-  @@index([userId])
-  @@index([seatId])
   @@index([status, createdAt]) // supports admin's pending-queue dashboard
     // NOTE: "one active (PENDING/CONFIRMED) reservation per seat/user" is
     // enforced by two partial unique indexes hand-written directly into a
@@ -124,4 +123,18 @@ model ValidationEvent {
 
   @@index([reservationId])
   @@map("validation_events")
+}
+
+model OccupancyLog {
+  id            String             @id @default(uuid(7))
+  reservationId String             @map("reservation_id")
+  eventType     OccupancyEventType @map("event_type")
+
+  // userId and seatId is derived from reservationId
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at") // append-only log; no updatedAt
+
+  @@index([reservationId])
+  @@map("occupancy_logs")
 }
