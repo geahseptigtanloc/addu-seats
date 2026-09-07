@@ -1,0 +1,14 @@
+-- CreateEnum
+CREATE TYPE "UserRole" AS ENUM ('STUDENT', 'ADMIN');
+
+-- CreateEnum
+CREATE TYPE "SeatStatus" AS ENUM ('AVAILABLE', 'OCCUPIED', 'OCCUPIED_ON_BREAK', 'UNAVAILABLE');
+
+-- CreateEnum
+CREATE TYPE "ReservationStatus" AS ENUM ('PENDING', 'CONFIRMED', 'CANCELLED', 'FORFEITED', 'EVICTED', 'VOIDED', 'COMPLETED');
+
+-- CreateEnum
+CREATE TYPE "ValidationEventType" AS ENUM ('BREAK_RETURN', 'FLAG_REVERIFICATION');
+
+-- CreateEnum
+CREATE TYPE "OccupancyEventType" AS ENUM ('OCCUPIED', 'VACATED');

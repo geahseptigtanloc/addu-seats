@@ -10,7 +10,7 @@ import { env } from '../config/env';
  */
 export interface JwtPayload {
   userId: string;
-  role: 'student' | 'admin';
+  role: 'STUDENT' | 'ADMIN';
 }
 
 /**

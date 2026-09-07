@@ -6,3 +6,45 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+
+enum UserRole {
+  STUDENT
+  ADMIN
+}
+
+enum SeatStatus {
+  AVAILABLE
+  OCCUPIED
+  OCCUPIED_ON_BREAK
+  UNAVAILABLE
+}
+
+// PENDING/CONFIRMED are the active states; the rest are terminal states,
+// kept distinct for occupancy analytics
+//   CANCELLED  — entry-timer expired before front-desk approval (no-show)
+//   FORFEITED  — break timer expired before the student returned
+//   EVICTED    — community-flagged as vacant, not re-verified in time
+//   VOIDED     — staff manually ended it
+//   COMPLETED  — student checked out normally
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  FORFEITED
+  EVICTED
+  VOIDED
+  COMPLETED
+}
+
+// A student re-validating their presence via QR scan. 
+enum ValidationEventType {
+  BREAK_RETURN
+  FLAG_REVERIFICATION
+}
+
+// Seat-level occupancy timeline.
+enum OccupancyEventType {
+  OCCUPIED
+  VACATED
+}

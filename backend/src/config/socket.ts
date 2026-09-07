@@ -11,7 +11,7 @@ import { verifyToken } from '../utils/jwt';
  */
 interface SocketData {
   userId: string;
-  role: 'student' | 'admin';
+  role: 'STUDENT' | 'ADMIN';
 }
 
 type AppSocketServer = SocketIOServer<
