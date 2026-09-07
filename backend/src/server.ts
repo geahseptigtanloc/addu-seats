@@ -1,10 +1,10 @@
 import 'dotenv/config';
 import { createApp } from './app';
+import { env } from './config/env';
+import { logger } from './config/logger';
 
-const PORT = process.env.PORT ?? 4000;
 const app = createApp();
 
-app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Server listening on port ${PORT}`);
+app.listen(env.PORT, () => {
+  logger.info(`Server listening on port ${env.PORT}`);
 });
