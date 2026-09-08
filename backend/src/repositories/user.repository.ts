@@ -25,3 +25,7 @@ export interface UpdateUserInput {
 export function update(id: string, data: UpdateUserInput): Promise<User> {
   return prisma.user.update({ where: { id }, data });
 }
+
+export function findById(id: string): Promise<User | null> {
+  return prisma.user.findUnique({ where: { id } });
+}
