@@ -1,27 +1,50 @@
 import type { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, type DefaultEventsMap } from 'socket.io';
+import { z } from 'zod';
+import type { SeatStatus } from '@prisma/client';
 import { env } from './env';
 import { logger } from './logger';
 import { verifyToken } from '../utils/jwt';
 
 /**
- * Additional properties attached to each socket instance after handshake
- * auth succeeds. Typing this is what makes
- * `socket.data.userId` type-safe everywhere instead of `any`.
+ * Floor rooms carry deltas only.
+ * clients load the initial full state via
+ * GET /seats, then join a room here to receive incremental updates.
  */
+interface ClientToServerEvents {
+  join_floor: (payload: { building: string; floor: number }) => void;
+  leave_floor: () => void;
+}
+
+interface ServerToClientEvents {
+  joined_floor: (payload: { room: string }) => void;
+  seat_status_update: (payload: { seatId: string; status: SeatStatus }) => void;
+  socket_error: (payload: { message: string }) => void;
+}
+
 interface SocketData {
   userId: string;
   role: 'STUDENT' | 'ADMIN';
+  currentFloorRoom?: string;
 }
 
 type AppSocketServer = SocketIOServer<
-  DefaultEventsMap,
-  DefaultEventsMap,
+  ClientToServerEvents,
+  ServerToClientEvents,
   DefaultEventsMap,
   SocketData
 >;
 
 let io: AppSocketServer | undefined;
+
+const joinFloorSchema = z.object({
+  building: z.string().min(1),
+  floor: z.number().int(),
+});
+
+export function getFloorRoom(building: string, floor: number): string {
+  return `floor:${building}-${floor}`;
+}
 
 /**
  * Call once at startup (from server.ts), passing the raw http.Server,
@@ -62,6 +85,35 @@ export function initSocket(httpServer: HttpServer): AppSocketServer {
   io.on('connection', (socket) => {
     logger.info({ userId: socket.data.userId }, 'Socket connected');
 
+    // A socket only ever watches one floor at a time. Joining a new one
+    // leaves the previous, so a student switching floors on the map
+    // doesn't keep receiving updates for a floor they're no longer viewing.
+    socket.on('join_floor', (payload) => {
+      const parsed = joinFloorSchema.safeParse(payload);
+
+      if (!parsed.success) {
+        socket.emit('socket_error', { message: 'Invalid join_floor payload' });
+        return;
+      }
+
+      if (socket.data.currentFloorRoom) {
+        void socket.leave(socket.data.currentFloorRoom);
+      }
+
+      const room = getFloorRoom(parsed.data.building, parsed.data.floor);
+      void socket.join(room);
+      socket.data.currentFloorRoom = room;
+      socket.emit('joined_floor', { room });
+    });
+
+    socket.on('leave_floor', () => {
+      if (socket.data.currentFloorRoom) {
+        void socket.leave(socket.data.currentFloorRoom);
+        socket.data.currentFloorRoom = undefined;
+      }
+    });
+
+    // Socket.IO removes a disconnected socket from all its rooms automatically.
     socket.on('disconnect', () => {
       logger.info({ userId: socket.data.userId }, 'Socket disconnected');
     });
@@ -71,9 +123,17 @@ export function initSocket(httpServer: HttpServer): AppSocketServer {
 }
 
 /**
- * Services (and background jobs) call this to emit seat-status
- * updates into a floor room, e.g. getIO().to('floor/main-2').emit(...).
+ * Services (and background jobs) call this to push a seat
+ * status change to everyone currently viewing that floor.
  */
+export function broadcastSeatStatusUpdate(
+  building: string,
+  floor: number,
+  payload: { seatId: string; status: SeatStatus },
+): void {
+  getIO().to(getFloorRoom(building, floor)).emit('seat_status_update', payload);
+}
+
 export function getIO(): AppSocketServer {
   if (!io) {
     throw new Error('Socket.IO not initialized, call initSocket() before getIO()');
