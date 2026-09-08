@@ -1,9 +1,13 @@
-import type { Seat } from '@prisma/client';
+import type { Seat, SeatStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
 
 export interface FindSeatsFilter {
   building?: string;
   floor?: number;
+}
+
+export interface UpdateSeatInput {
+  status?: SeatStatus;
 }
 
 // Ordered by createdAt so the seat map renders in a stable, consistent
@@ -20,4 +24,8 @@ export function findMany(filter: FindSeatsFilter = {}): Promise<Seat[]> {
 
 export function findByQrToken(token: string): Promise<Seat | null> {
   return prisma.seat.findUnique({ where: { currentQrToken: token } });
+}
+
+export function update(id: string, data: UpdateSeatInput): Promise<Seat> {
+  return prisma.seat.update({ where: { id }, data });
 }

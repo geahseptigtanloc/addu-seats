@@ -1,8 +1,10 @@
-import { ReservationStatus, type Reservation } from '@prisma/client';
+import { ReservationStatus, SeatStatus, type Reservation } from '@prisma/client';
+import { prisma } from '../config/prisma';
 import * as reservationRepository from '../repositories/reservation.repository';
 import * as seatRepository from '../repositories/seat.repository';
 import { redisClient } from '../config/redis';
 import { logger } from '../config/logger';
+import { broadcastSeatStatusUpdate } from '../config/socket';
 import { NotFoundError, ConflictError } from '../utils/AppError';
 
 const ENTRY_TIMER_SECONDS = 5 * 60;
@@ -91,4 +93,51 @@ export async function cancelReservation(
   }
 
   return updated;
+}
+// Front desk staff visually check the student's name/ID against the
+// reservation before calling this — this API records the outcome, it
+// can't verify that check itself.
+export async function approveReservation(reservationId: string): Promise<Reservation> {
+  const reservation = await reservationRepository.findById(reservationId);
+
+  if (!reservation) {
+    throw new NotFoundError('Reservation not found');
+  }
+
+  if (reservation.status !== ReservationStatus.PENDING) {
+    throw new ConflictError('Only a pending reservation can be approved');
+  }
+
+  // Both updates succeed or fail together — a CONFIRMED reservation with
+  // a seat still marked AVAILABLE would be a real data-integrity bug.
+  // Composed directly here (not via the single-model repositories) since
+  // a two-model transaction doesn't belong to either one alone.
+  const [updatedReservation, updatedSeat] = await prisma.$transaction(async (tx) => {
+    const res = await tx.reservation.update({
+      where: { id: reservationId },
+      data: { status: ReservationStatus.CONFIRMED, confirmedAt: new Date() },
+    });
+    const seat = await tx.seat.update({
+      where: { id: reservation.seatId },
+      data: { status: SeatStatus.OCCUPIED },
+    });
+    return [res, seat] as const;
+  });
+
+  try {
+    await redisClient.del(entryTimerKey(reservationId));
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to clear entry timer in Redis');
+  }
+
+  try {
+    broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
+      seatId: updatedSeat.id,
+      status: updatedSeat.status,
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to broadcast seat status update');
+  }
+
+  return updatedReservation;
 }
