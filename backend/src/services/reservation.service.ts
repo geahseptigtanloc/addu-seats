@@ -233,8 +233,8 @@ export async function voidReservation(reservationId: string): Promise<Reservatio
   let updatedReservation: Reservation;
 
   if (wasConfirmed) {
-    // Seat is actually OCCUPIED in this case, reservation and seat must
-    // change together, same reasoning as approveReservation.
+    // Seat is OCCUPIED in this case. Reservation, seat, and the
+    // occupancy log entry must all change together.
     const [res, seat] = await prisma.$transaction(async (tx) => {
       const r = await tx.reservation.update({
         where: { id: reservationId },
@@ -243,6 +243,9 @@ export async function voidReservation(reservationId: string): Promise<Reservatio
       const s = await tx.seat.update({
         where: { id: reservation.seatId },
         data: { status: SeatStatus.AVAILABLE },
+      });
+      await tx.occupancyLog.create({
+        data: { reservationId, eventType: OccupancyEventType.VACATED },
       });
       return [r, s] as const;
     });
