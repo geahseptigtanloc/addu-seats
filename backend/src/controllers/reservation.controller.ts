@@ -82,3 +82,16 @@ export async function approveReservation(
     next(err);
   }
 }
+
+export async function getPendingQueue(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const queue = await reservationService.getPendingQueue();
+    res.json(queue);
+  } catch (err) {
+    next(err);
+  }
+}

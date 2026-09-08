@@ -48,10 +48,13 @@ export function update(id: string, data: UpdateReservationInput): Promise<Reserv
 }
 
 // Oldest-first, matching the front-desk admin queue's expected order.
-// Returns bare Reservation rows.
-export function findPending(): Promise<Reservation[]> {
+export function findPending() {
   return prisma.reservation.findMany({
     where: { status: ReservationStatus.PENDING },
     orderBy: { createdAt: 'asc' },
+    include: {
+      user: { select: { name: true, studentIdLast4: true } },
+      seat: { select: { id: true, building: true, floor: true } },
+    },
   });
 }

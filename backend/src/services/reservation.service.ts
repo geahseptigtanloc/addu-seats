@@ -141,3 +141,45 @@ export async function approveReservation(reservationId: string): Promise<Reserva
 
   return updatedReservation;
 }
+
+async function getRemainingSeconds(reservationId: string, createdAt: Date): Promise<number> {
+  try {
+    const ttl = await redisClient.ttl(entryTimerKey(reservationId));
+    if (ttl >= 0) {
+      return ttl;
+    }
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to read entry timer from Redis');
+  }
+
+  // Redis miss (expired, cleared, or never set), fall back to computing
+  // from Postgres's createdAt.
+  const elapsedSeconds = (Date.now() - createdAt.getTime()) / 1000;
+  return Math.max(0, Math.round(ENTRY_TIMER_SECONDS - elapsedSeconds));
+}
+
+export interface PendingQueueItem {
+  reservationId: string;
+  studentName: string;
+  studentIdLast4: string | null;
+  seatId: string;
+  building: string;
+  floor: number;
+  remainingSeconds: number;
+}
+
+export async function getPendingQueue(): Promise<PendingQueueItem[]> {
+  const pending = await reservationRepository.findPending();
+
+  return Promise.all(
+    pending.map(async (r) => ({
+      reservationId: r.id,
+      studentName: r.user.name,
+      studentIdLast4: r.user.studentIdLast4,
+      seatId: r.seat.id,
+      building: r.seat.building,
+      floor: r.seat.floor,
+      remainingSeconds: await getRemainingSeconds(r.id, r.createdAt),
+    })),
+  );
+}
