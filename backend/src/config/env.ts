@@ -31,6 +31,7 @@ const envSchema = z.object({
         .map((email) => email.trim().toLowerCase())
         .filter((email) => email.length > 0),
     ),
+  SESSION_SECRET: z.string().min(32, 'SESSION_SECRET should be at least 32 characters'),
 });
 const parsed = envSchema.safeParse(process.env);
 

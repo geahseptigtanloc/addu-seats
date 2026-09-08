@@ -5,13 +5,12 @@ import {
   type VerifyCallback,
 } from 'passport-google-oauth20';
 import { env } from './env';
+import { findOrCreateFromGoogleProfile } from '../services/auth.service';
 
 /**
- * Registers the Google OAuth strategy.
- * `scope` (['profile', 'email']) is deliberately not set here.
- * per passport-google-oauth20 convention it
- * belongs on the `passport.authenticate('google', { scope: [...] })` call
- * at the route level.
+ * `scope` and `session: false` are set at the route level,
+ * not here, see passport-google-oauth20 convention and the architecture
+ * doc's JWT-only auth decision.
  */
 passport.use(
   new GoogleStrategy(
@@ -20,18 +19,17 @@ passport.use(
       clientSecret: env.GOOGLE_CLIENT_SECRET,
       callbackURL: env.GOOGLE_CALLBACK_URL,
     },
-    (_accessToken: string, _refreshToken: string, _profile: Profile, done: VerifyCallback) => {
-      // TODO later: find-or-create User by googleId (not email),
-      // grant the 'admin' role automatically if the email matches STAFF_EMAILS.
-      //
-      // Note: The Google Cloud OAuth consent screen for this project
-      // is "External" type (not "Internal"/Workspace-restricted, which needs
-      // Workspace admin access most student developers won't have)
-      // so Google does NOT enforce that only @addu.edu.ph accounts can sign
-      // in. That restriction must be checked explicitly in this callback
-      // (e.g. reject if profile.emails[0].value doesn't end with the
-      // school's domain) rather than assumed from Console configuration.
-      done(new Error('Google OAuth verify callback not implemented yet'));
+    (_accessToken: string, _refreshToken: string, profile: Profile, done: VerifyCallback) => {
+      const email = profile.emails?.[0]?.value;
+
+      if (!email) {
+        done(new Error('Google account has no email'));
+        return;
+      }
+
+      findOrCreateFromGoogleProfile({ googleId: profile.id, email, name: profile.displayName })
+        .then((user) => done(null, user))
+        .catch((err: unknown) => done(err));
     },
   ),
 );
