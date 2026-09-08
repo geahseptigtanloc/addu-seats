@@ -1,4 +1,11 @@
-import { ReservationStatus, SeatStatus, type Reservation, type Seat } from '@prisma/client';
+import {
+  ReservationStatus,
+  SeatStatus,
+  ValidationEventType,
+  OccupancyEventType,
+  type Reservation,
+  type Seat,
+} from '@prisma/client';
 import { prisma } from '../config/prisma';
 import * as reservationRepository from '../repositories/reservation.repository';
 import * as seatRepository from '../repositories/seat.repository';
@@ -17,17 +24,40 @@ function isUniqueConstraintError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2002';
 }
 
+const BREAK_COOLDOWN_SECONDS = 30 * 60;
+
+function breakCooldownKey(userId: string): string {
+  return `user:break-cooldown:${userId}`;
+}
+
+// Fails open (assumes no cooldown) on a Redis error, blocking a student's
+// entire reservation over an unrelated Redis hiccup is worse than
+// occasionally missing a 30-min cooldown. No Postgres fallback exists for
+// this one, unlike the entry timer; accepted trade-off.
+async function isOnBreakCooldown(userId: string): Promise<boolean> {
+  try {
+    return (await redisClient.get(breakCooldownKey(userId))) !== null;
+  } catch (err) {
+    logger.warn({ err, userId }, 'Failed to check break cooldown in Redis — assuming none');
+    return false;
+  }
+}
+
 // Separate from the return-from-break scan, same physical QR.
 // seat.status stays unchanged until front-desk approval, so no
 // broadcast here, a second scan on the same seat just gets a conflict error.
 export async function createReservation(userId: string, qrToken: string): Promise<Reservation> {
+  if (await isOnBreakCooldown(userId)) {
+    throw new ConflictError('You are on a break cooldown — please try again later');
+  }
+
   const seat = await seatRepository.findByQrToken(qrToken);
 
   if (!seat) {
     throw new NotFoundError('Seat not found');
   }
 
-  // UX fast-path only, the real guarantee is the DB's partial unique index.
+  // UX fast-path only — the real guarantee is the DB's partial unique index.
   const [activeOnSeat, activeForUser] = await Promise.all([
     reservationRepository.findActiveBySeat(seat.id),
     reservationRepository.findActiveByUser(userId),
@@ -280,14 +310,27 @@ export async function startBreak(userId: string, reservationId: string): Promise
     throw new ConflictError('A break is already in progress for this reservation');
   }
 
-  const state: BreakTimerState = { breakStartedAt: new Date().toISOString(), extensionsUsed: 0 };
-  await redisClient.set(breakTimerKey(reservationId), JSON.stringify(state), {
-    EX: BREAK_BASE_SECONDS,
+  const updatedSeat = await prisma.$transaction(async (tx) => {
+    const s = await tx.seat.update({
+      where: { id: reservation.seatId },
+      data: { status: SeatStatus.OCCUPIED_ON_BREAK },
+    });
+    await tx.occupancyLog.create({
+      data: { reservationId, eventType: OccupancyEventType.VACATED },
+    });
+    return s;
   });
 
-  const updatedSeat = await seatRepository.update(reservation.seatId, {
-    status: SeatStatus.OCCUPIED_ON_BREAK,
-  });
+  // Best-effort. The timer's authoritative "started" fact is the seat/log
+  // update above, which already succeeded; this just powers extend/return.
+  const state: BreakTimerState = { breakStartedAt: new Date().toISOString(), extensionsUsed: 0 };
+  try {
+    await redisClient.set(breakTimerKey(reservationId), JSON.stringify(state), {
+      EX: BREAK_BASE_SECONDS,
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to set break timer in Redis');
+  }
 
   try {
     broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
@@ -339,4 +382,80 @@ export async function extendBreak(
   });
 
   return { remainingSeconds };
+}
+
+// QR scan, not a UI click (unlike start/extend).
+// Cooldown is based on whether both extensions were used (reached the
+// 15-min cap), not on whether the timer actually expired. A student who
+// scans back in with e.g. 1s left after using both extensions still gets
+// the cooldown, since they exhausted the maximum either way.
+export async function returnFromBreak(userId: string, qrToken: string): Promise<Seat> {
+  const seat = await seatRepository.findByQrToken(qrToken);
+
+  if (!seat) {
+    throw new NotFoundError('Seat not found');
+  }
+
+  if (seat.status !== SeatStatus.OCCUPIED_ON_BREAK) {
+    throw new ConflictError('This seat is not currently on break');
+  }
+
+  const reservation = await reservationRepository.findActiveBySeat(seat.id);
+
+  if (!reservation || reservation.userId !== userId) {
+    throw new NotFoundError('No matching reservation found for this seat');
+  }
+
+  // Missing key (expired, or lost to the best-effort write in startBreak)
+  // is treated as 0 extensions used, fails open, no cooldown applied,
+  // consistent with how Redis misses are handled everywhere else here.
+  let extensionsUsed = 0;
+  try {
+    const raw = await redisClient.get(breakTimerKey(reservation.id));
+    if (raw) {
+      extensionsUsed = (JSON.parse(raw) as BreakTimerState).extensionsUsed;
+    }
+  } catch (err) {
+    logger.warn({ err, reservationId: reservation.id }, 'Failed to read break timer from Redis');
+  }
+  const cooldownApplies = extensionsUsed >= BREAK_MAX_EXTENSIONS;
+
+  const updatedSeat = await prisma.$transaction(async (tx) => {
+    const s = await tx.seat.update({
+      where: { id: seat.id },
+      data: { status: SeatStatus.OCCUPIED },
+    });
+    await tx.validationEvent.create({
+      data: { reservationId: reservation.id, eventType: ValidationEventType.BREAK_RETURN },
+    });
+    await tx.occupancyLog.create({
+      data: { reservationId: reservation.id, eventType: OccupancyEventType.OCCUPIED },
+    });
+    return s;
+  });
+
+  try {
+    await redisClient.del(breakTimerKey(reservation.id));
+  } catch (err) {
+    logger.warn({ err, reservationId: reservation.id }, 'Failed to clear break timer in Redis');
+  }
+
+  if (cooldownApplies) {
+    try {
+      await redisClient.set(breakCooldownKey(userId), '1', { EX: BREAK_COOLDOWN_SECONDS });
+    } catch (err) {
+      logger.warn({ err, userId }, 'Failed to set break cooldown in Redis');
+    }
+  }
+
+  try {
+    broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
+      seatId: updatedSeat.id,
+      status: updatedSeat.status,
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId: reservation.id }, 'Failed to broadcast seat status update');
+  }
+
+  return updatedSeat;
 }

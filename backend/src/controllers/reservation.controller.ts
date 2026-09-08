@@ -158,3 +158,28 @@ export async function extendBreak(req: Request, res: Response, next: NextFunctio
     next(err);
   }
 }
+
+export async function returnFromBreak(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  const parsed = createReservationSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: { message: 'qrToken is required' } });
+    return;
+  }
+
+  try {
+    const seat = await reservationService.returnFromBreak(req.user.id, parsed.data.qrToken);
+    res.json(seat);
+  } catch (err) {
+    next(err);
+  }
+}
