@@ -5,6 +5,7 @@ import { notFoundHandler, errorHandler } from './middlewares/errorHandler';
 import { env } from './config/env';
 import { passport } from './config/passport';
 import authRoutes from './routes/auth.routes';
+import seatRoutes from './routes/seat.routes';
 
 export function createApp(): Application {
   const app = express();
@@ -26,7 +27,7 @@ export function createApp(): Application {
   app.use(passport.initialize());
 
   // Route mounts go here as feature slices are built (Phase 6):
-  // app.use('/seats', seatRoutes);
+  app.use('/seats', seatRoutes);
   // app.use('/reservations', reservationRoutes);
   app.use('/auth', authRoutes);
   app.use(healthRoutes);
