@@ -36,3 +36,28 @@ export async function createReservation(
     next(err);
   }
 }
+
+export async function cancelReservation(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  const { id } = req.params;
+
+  if (typeof id !== 'string') {
+    res.status(400).json({ error: { message: 'Invalid reservation id' } });
+    return;
+  }
+
+  try {
+    const reservation = await reservationService.cancelReservation(req.user.id, id);
+    res.json(reservation);
+  } catch (err) {
+    next(err);
+  }
+}

@@ -1,4 +1,4 @@
-import type { Reservation } from '@prisma/client';
+import { ReservationStatus, type Reservation } from '@prisma/client';
 import * as reservationRepository from '../repositories/reservation.repository';
 import * as seatRepository from '../repositories/seat.repository';
 import { redisClient } from '../config/redis';
@@ -58,4 +58,37 @@ export async function createReservation(userId: string, qrToken: string): Promis
   }
 
   return reservation;
+}
+
+// PENDING only, ending an already-CONFIRMED reservation (checkout) is a
+// different action with a different resulting status, not built yet.
+export async function cancelReservation(
+  userId: string,
+  reservationId: string,
+): Promise<Reservation> {
+  const reservation = await reservationRepository.findById(reservationId);
+
+  // Not found and "not yours" are treated the same, to avoid confirming
+  // to a caller that a reservation ID exists but belongs to someone else.
+  if (!reservation || reservation.userId !== userId) {
+    throw new NotFoundError('Reservation not found');
+  }
+
+  if (reservation.status !== ReservationStatus.PENDING) {
+    throw new ConflictError('Only a pending reservation can be cancelled');
+  }
+
+  const updated = await reservationRepository.update(reservationId, {
+    status: ReservationStatus.CANCELLED,
+    endedAt: new Date(),
+  });
+
+  // Best-effort cleanup, the key would self-expire anyway just cleaner not to leave it.
+  try {
+    await redisClient.del(entryTimerKey(reservationId));
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to clear entry timer in Redis');
+  }
+
+  return updated;
 }
