@@ -1,4 +1,4 @@
-import { ReservationStatus, SeatStatus, type Reservation } from '@prisma/client';
+import { ReservationStatus, SeatStatus, type Reservation, type Seat } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import * as reservationRepository from '../repositories/reservation.repository';
 import * as seatRepository from '../repositories/seat.repository';
@@ -242,4 +242,101 @@ export async function voidReservation(reservationId: string): Promise<Reservatio
   }
 
   return updatedReservation;
+}
+
+const BREAK_BASE_SECONDS = 5 * 60;
+const BREAK_EXTENSION_SECONDS = 5 * 60;
+const BREAK_MAX_EXTENSIONS = 2;
+const BREAK_MAX_SECONDS = BREAK_BASE_SECONDS + BREAK_MAX_EXTENSIONS * BREAK_EXTENSION_SECONDS; // 15 min
+
+function breakTimerKey(reservationId: string): string {
+  return `reservation:break-timer:${reservationId}`;
+}
+
+interface BreakTimerState {
+  breakStartedAt: string; // ISO timestamp, durations computed from this, not from Redis TTL alone
+  extensionsUsed: number;
+}
+
+// Reservation.status stays CONFIRMED throughout a break. Only Seat.status
+// changes (to OCCUPIED_ON_BREAK) so "already on break" has to be checked
+// against the seat, not the reservation. Without this check, a student
+// could bypass the 15-min cap entirely by calling start again instead of
+// extend, resetting the timer to a fresh 5 minutes each time.
+export async function startBreak(userId: string, reservationId: string): Promise<Seat> {
+  const reservation = await reservationRepository.findById(reservationId);
+
+  if (!reservation || reservation.userId !== userId) {
+    throw new NotFoundError('Reservation not found');
+  }
+
+  if (reservation.status !== ReservationStatus.CONFIRMED) {
+    throw new ConflictError('Only a confirmed reservation can start a break');
+  }
+
+  const seat = await seatRepository.findById(reservation.seatId);
+
+  if (!seat || seat.status !== SeatStatus.OCCUPIED) {
+    throw new ConflictError('A break is already in progress for this reservation');
+  }
+
+  const state: BreakTimerState = { breakStartedAt: new Date().toISOString(), extensionsUsed: 0 };
+  await redisClient.set(breakTimerKey(reservationId), JSON.stringify(state), {
+    EX: BREAK_BASE_SECONDS,
+  });
+
+  const updatedSeat = await seatRepository.update(reservation.seatId, {
+    status: SeatStatus.OCCUPIED_ON_BREAK,
+  });
+
+  try {
+    broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
+      seatId: updatedSeat.id,
+      status: updatedSeat.status,
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to broadcast seat status update');
+  }
+
+  return updatedSeat;
+}
+
+// Total break duration is capped relative to breakStartedAt (5, 10, then
+// 15 min), not "add 5 more minutes to whatever's left", otherwise the
+// 15-minute cap could never actually be enforced.
+export async function extendBreak(
+  userId: string,
+  reservationId: string,
+): Promise<{ remainingSeconds: number }> {
+  const reservation = await reservationRepository.findById(reservationId);
+
+  if (!reservation || reservation.userId !== userId) {
+    throw new NotFoundError('Reservation not found');
+  }
+
+  const raw = await redisClient.get(breakTimerKey(reservationId));
+
+  if (!raw) {
+    throw new ConflictError('No active break to extend');
+  }
+
+  const state = JSON.parse(raw) as BreakTimerState;
+
+  if (state.extensionsUsed >= BREAK_MAX_EXTENSIONS) {
+    throw new ConflictError('Maximum break extensions already used');
+  }
+
+  state.extensionsUsed += 1;
+  const allowedSeconds = Math.min(
+    BREAK_BASE_SECONDS + state.extensionsUsed * BREAK_EXTENSION_SECONDS,
+    BREAK_MAX_SECONDS,
+  );
+  const elapsedSeconds = (Date.now() - new Date(state.breakStartedAt).getTime()) / 1000;
+  const remainingSeconds = Math.max(0, Math.round(allowedSeconds - elapsedSeconds));
+
+  await redisClient.set(breakTimerKey(reservationId), JSON.stringify(state), {
+    EX: remainingSeconds || 1, // EX must be > 0; guards an already-expired edge case
+  });
+
+  return { remainingSeconds };
 }

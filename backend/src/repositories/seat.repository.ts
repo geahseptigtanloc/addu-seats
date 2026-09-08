@@ -29,3 +29,7 @@ export function findByQrToken(token: string): Promise<Seat | null> {
 export function update(id: string, data: UpdateSeatInput): Promise<Seat> {
   return prisma.seat.update({ where: { id }, data });
 }
+
+export function findById(id: string): Promise<Seat | null> {
+  return prisma.seat.findUnique({ where: { id } });
+}

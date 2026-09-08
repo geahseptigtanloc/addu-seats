@@ -116,3 +116,45 @@ export async function voidReservation(
     next(err);
   }
 }
+
+export async function startBreak(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  const { id } = req.params;
+
+  if (typeof id !== 'string') {
+    res.status(400).json({ error: { message: 'Invalid reservation id' } });
+    return;
+  }
+
+  try {
+    const seat = await reservationService.startBreak(req.user.id, id);
+    res.json(seat);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function extendBreak(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  const { id } = req.params;
+
+  if (typeof id !== 'string') {
+    res.status(400).json({ error: { message: 'Invalid reservation id' } });
+    return;
+  }
+
+  try {
+    const result = await reservationService.extendBreak(req.user.id, id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
