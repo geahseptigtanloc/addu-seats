@@ -36,5 +36,11 @@ export default tseslint.config(
     files: ['eslint.config.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
   },
+  {
+    files: ['prisma/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
   eslintConfigPrettier,
 );

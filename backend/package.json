@@ -13,6 +13,9 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
