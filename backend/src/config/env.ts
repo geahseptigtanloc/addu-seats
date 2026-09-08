@@ -18,6 +18,19 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET cannot be blank'),
   GOOGLE_CALLBACK_URL: z.string().url(),
   CORS_ORIGIN: z.string().url(),
+  // No default
+  // see src/config/passport.ts's security note
+  SCHOOL_EMAIL_DOMAIN: z.string().min(1, 'SCHOOL_EMAIL_DOMAIN cannot be blank'),
+  // Comma-separated in .env; parsed into a lowercase string[] here.
+  STAFF_EMAILS: z
+    .string()
+    .default('')
+    .transform((val) =>
+      val
+        .split(',')
+        .map((email) => email.trim().toLowerCase())
+        .filter((email) => email.length > 0),
+    ),
 });
 const parsed = envSchema.safeParse(process.env);
 
