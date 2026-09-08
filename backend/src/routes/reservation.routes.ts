@@ -13,8 +13,7 @@ router.post(
   requireRole('ADMIN'),
   reservationController.approveReservation,
 );
-// Registered ahead of any future GET /:id route, otherwise Express would
-// treat "pending" as an :id value instead of matching this literal path.
+router.post('/:id/void', requireAuth, requireRole('ADMIN'), reservationController.voidReservation);
 router.get('/pending', requireAuth, requireRole('ADMIN'), reservationController.getPendingQueue);
 
 export default router;

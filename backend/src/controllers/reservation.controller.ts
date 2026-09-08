@@ -95,3 +95,24 @@ export async function getPendingQueue(
     next(err);
   }
 }
+
+// Admin-only, enforced at the route level.
+export async function voidReservation(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const { id } = req.params;
+
+  if (typeof id !== 'string') {
+    res.status(400).json({ error: { message: 'Invalid reservation id' } });
+    return;
+  }
+
+  try {
+    const reservation = await reservationService.voidReservation(id);
+    res.json(reservation);
+  } catch (err) {
+    next(err);
+  }
+}

@@ -183,3 +183,63 @@ export async function getPendingQueue(): Promise<PendingQueueItem[]> {
     })),
   );
 }
+
+// Admin-only forced end of an active reservation.
+// Unlike student cancellation (PENDING only), void works on PENDING or CONFIRMED.
+export async function voidReservation(reservationId: string): Promise<Reservation> {
+  const reservation = await reservationRepository.findById(reservationId);
+
+  if (!reservation) {
+    throw new NotFoundError('Reservation not found');
+  }
+
+  const wasConfirmed = reservation.status === ReservationStatus.CONFIRMED;
+  const isActive = reservation.status === ReservationStatus.PENDING || wasConfirmed;
+
+  if (!isActive) {
+    throw new ConflictError('Only an active reservation can be voided');
+  }
+
+  let updatedReservation: Reservation;
+
+  if (wasConfirmed) {
+    // Seat is actually OCCUPIED in this case, reservation and seat must
+    // change together, same reasoning as approveReservation.
+    const [res, seat] = await prisma.$transaction(async (tx) => {
+      const r = await tx.reservation.update({
+        where: { id: reservationId },
+        data: { status: ReservationStatus.VOIDED, endedAt: new Date() },
+      });
+      const s = await tx.seat.update({
+        where: { id: reservation.seatId },
+        data: { status: SeatStatus.AVAILABLE },
+      });
+      return [r, s] as const;
+    });
+
+    updatedReservation = res;
+
+    try {
+      broadcastSeatStatusUpdate(seat.building, seat.floor, {
+        seatId: seat.id,
+        status: seat.status,
+      });
+    } catch (err) {
+      logger.warn({ err, reservationId }, 'Failed to broadcast seat status update');
+    }
+  } else {
+    // PENDING, seat.status was never changed on creation, nothing to revert.
+    updatedReservation = await reservationRepository.update(reservationId, {
+      status: ReservationStatus.VOIDED,
+      endedAt: new Date(),
+    });
+  }
+
+  try {
+    await redisClient.del(entryTimerKey(reservationId));
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to clear entry timer in Redis');
+  }
+
+  return updatedReservation;
+}
