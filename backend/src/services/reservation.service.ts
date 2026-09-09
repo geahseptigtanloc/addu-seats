@@ -11,7 +11,7 @@ import * as reservationRepository from '../repositories/reservation.repository';
 import * as seatRepository from '../repositories/seat.repository';
 import { redisClient } from '../config/redis';
 import { logger } from '../config/logger';
-import { broadcastSeatStatusUpdate } from '../config/socket';
+import { broadcastSeatStatusUpdate, notifySeatFlagged } from '../config/socket';
 import { NotFoundError, ConflictError } from '../utils/AppError';
 
 const ENTRY_TIMER_SECONDS = 5 * 60;
@@ -461,4 +461,58 @@ export async function returnFromBreak(userId: string, qrToken: string): Promise<
   }
 
   return updatedSeat;
+}
+
+const FLAG_WINDOW_SECONDS = 10 * 60;
+
+function seatFlagKey(seatId: string): string {
+  return `seat:flag:${seatId}`;
+}
+
+// Any authenticated user can flag someone else's seat as apparently
+// vacant. Not the seat's own reservation holder,
+// and not a seat that isn't currently OCCUPIED (a seat on break or
+// already free has nothing to flag).
+export async function flagSeat(flaggingUserId: string, seatId: string): Promise<void> {
+  const seat = await seatRepository.findById(seatId);
+
+  if (!seat) {
+    throw new NotFoundError('Seat not found');
+  }
+
+  if (seat.status !== SeatStatus.OCCUPIED) {
+    throw new ConflictError('Only an occupied seat can be flagged');
+  }
+
+  const reservation = await reservationRepository.findActiveBySeat(seatId);
+
+  if (!reservation) {
+    // Shouldn't happen if seat.status is OCCUPIED.
+    // Guards a data inconsistency rather than a normal, expected case.
+    throw new ConflictError('No active reservation found for this seat');
+  }
+
+  if (reservation.userId === flaggingUserId) {
+    throw new ConflictError('You cannot flag your own reservation');
+  }
+
+  // Two students flagging the same seat at once
+  // can't both succeed (a plain get-then-set would race).
+  const set = await redisClient.set(seatFlagKey(seatId), reservation.id, {
+    expiration: { type: 'EX', value: FLAG_WINDOW_SECONDS },
+    condition: 'NX',
+  });
+
+  if (set === null) {
+    throw new ConflictError('This seat has already been flagged');
+  }
+
+  try {
+    notifySeatFlagged(reservation.userId, { seatId, windowSeconds: FLAG_WINDOW_SECONDS });
+  } catch (err) {
+    logger.warn(
+      { err, seatId, reservationId: reservation.id },
+      'Failed to notify reservation holder of flag',
+    );
+  }
 }

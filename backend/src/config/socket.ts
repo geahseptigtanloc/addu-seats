@@ -19,6 +19,7 @@ interface ClientToServerEvents {
 interface ServerToClientEvents {
   joined_floor: (payload: { room: string }) => void;
   seat_status_update: (payload: { seatId: string; status: SeatStatus }) => void;
+  seat_flagged: (payload: { seatId: string; windowSeconds: number }) => void;
   socket_error: (payload: { message: string }) => void;
 }
 
@@ -44,6 +45,12 @@ const joinFloorSchema = z.object({
 
 export function getFloorRoom(building: string, floor: number): string {
   return `floor:${building}-${floor}`;
+}
+
+// Personal room, auto-joined on connect
+// Lets services notify one specific user directly (e.g. seat_flagged) instead of a whole floor.
+export function getUserRoom(userId: string): string {
+  return `user:${userId}`;
 }
 
 /**
@@ -84,6 +91,7 @@ export function initSocket(httpServer: HttpServer): AppSocketServer {
 
   io.on('connection', (socket) => {
     logger.info({ userId: socket.data.userId }, 'Socket connected');
+    void socket.join(getUserRoom(socket.data.userId));
 
     // A socket only ever watches one floor at a time. Joining a new one
     // leaves the previous, so a student switching floors on the map
@@ -132,6 +140,15 @@ export function broadcastSeatStatusUpdate(
   payload: { seatId: string; status: SeatStatus },
 ): void {
   getIO().to(getFloorRoom(building, floor)).emit('seat_status_update', payload);
+}
+
+// Targets only the reservation holder, not the whole floor, a no-op if
+// they aren't currently connected (Socket.IO just finds an empty room).
+export function notifySeatFlagged(
+  userId: string,
+  payload: { seatId: string; windowSeconds: number },
+): void {
+  getIO().to(getUserRoom(userId)).emit('seat_flagged', payload);
 }
 
 export function getIO(): AppSocketServer {
