@@ -20,6 +20,7 @@ interface ServerToClientEvents {
   joined_floor: (payload: { room: string }) => void;
   seat_status_update: (payload: { seatId: string; status: SeatStatus }) => void;
   seat_flagged: (payload: { seatId: string; windowSeconds: number }) => void;
+  seat_flagged_admin_notice: (payload: { seatId: string; reservationId: string }) => void;
   socket_error: (payload: { message: string }) => void;
 }
 
@@ -52,6 +53,11 @@ export function getFloorRoom(building: string, floor: number): string {
 export function getUserRoom(userId: string): string {
   return `user:${userId}`;
 }
+
+// Shared room for every connected admin.
+// For "front desk passively notified of the flag"
+// feature, not requiring any action.
+const ADMIN_ROOM = 'role:admin';
 
 /**
  * Call once at startup (from server.ts), passing the raw http.Server,
@@ -93,9 +99,11 @@ export function initSocket(httpServer: HttpServer): AppSocketServer {
     logger.info({ userId: socket.data.userId }, 'Socket connected');
     void socket.join(getUserRoom(socket.data.userId));
 
+    if (socket.data.role === 'ADMIN') {
+      void socket.join(ADMIN_ROOM);
+    }
+
     // A socket only ever watches one floor at a time. Joining a new one
-    // leaves the previous, so a student switching floors on the map
-    // doesn't keep receiving updates for a floor they're no longer viewing.
     socket.on('join_floor', (payload) => {
       const parsed = joinFloorSchema.safeParse(payload);
 
@@ -149,6 +157,11 @@ export function notifySeatFlagged(
   payload: { seatId: string; windowSeconds: number },
 ): void {
   getIO().to(getUserRoom(userId)).emit('seat_flagged', payload);
+}
+
+// Passive, every connected admin sees it, nobody is required to act.
+export function notifyAdminsSeatFlagged(payload: { seatId: string; reservationId: string }): void {
+  getIO().to(ADMIN_ROOM).emit('seat_flagged_admin_notice', payload);
 }
 
 export function getIO(): AppSocketServer {

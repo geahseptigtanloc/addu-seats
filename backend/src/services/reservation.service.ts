@@ -11,7 +11,11 @@ import * as reservationRepository from '../repositories/reservation.repository';
 import * as seatRepository from '../repositories/seat.repository';
 import { redisClient } from '../config/redis';
 import { logger } from '../config/logger';
-import { broadcastSeatStatusUpdate, notifySeatFlagged } from '../config/socket';
+import {
+  broadcastSeatStatusUpdate,
+  notifySeatFlagged,
+  notifyAdminsSeatFlagged,
+} from '../config/socket';
 import { NotFoundError, ConflictError } from '../utils/AppError';
 
 const ENTRY_TIMER_SECONDS = 5 * 60;
@@ -514,5 +518,11 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
       { err, seatId, reservationId: reservation.id },
       'Failed to notify reservation holder of flag',
     );
+  }
+
+  try {
+    notifyAdminsSeatFlagged({ seatId, reservationId: reservation.id });
+  } catch (err) {
+    logger.warn({ err, seatId, reservationId: reservation.id }, 'Failed to notify admins of flag');
   }
 }
