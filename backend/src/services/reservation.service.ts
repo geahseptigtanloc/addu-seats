@@ -9,6 +9,7 @@ import {
 import { prisma } from '../config/prisma';
 import * as reservationRepository from '../repositories/reservation.repository';
 import * as seatRepository from '../repositories/seat.repository';
+import * as validationEventRepository from '../repositories/validationEvent.repository';
 import { redisClient } from '../config/redis';
 import { logger } from '../config/logger';
 import {
@@ -525,4 +526,36 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
   } catch (err) {
     logger.warn({ err, seatId, reservationId: reservation.id }, 'Failed to notify admins of flag');
   }
+}
+
+// Clears a flag by proving the holder is actually still there (see
+// flagSeat). Seat.status never changed during a flag, so there's nothing
+// to transition back and no OccupancyLog entry only the scan itself is
+// recorded, via ValidationEvent.
+export async function reverifyPresence(userId: string, qrToken: string): Promise<void> {
+  const seat = await seatRepository.findByQrToken(qrToken);
+
+  if (!seat) {
+    throw new NotFoundError('Seat not found');
+  }
+
+  const reservation = await reservationRepository.findActiveBySeat(seat.id);
+
+  if (!reservation || reservation.userId !== userId) {
+    throw new NotFoundError('No matching reservation found for this seat');
+  }
+
+  // getDel, same atomic get-and-delete pattern as the OAuth exchange
+  // code. Avoids a check-then-delete race and confirms
+  // there was actually an active flag to clear.
+  const flaggedReservationId = await redisClient.getDel(seatFlagKey(seat.id));
+
+  if (!flaggedReservationId) {
+    throw new ConflictError('No active flag to re-verify');
+  }
+
+  await validationEventRepository.create({
+    reservationId: reservation.id,
+    eventType: ValidationEventType.FLAG_REVERIFICATION,
+  });
 }

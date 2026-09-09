@@ -183,3 +183,28 @@ export async function returnFromBreak(
     next(err);
   }
 }
+
+export async function reverifyPresence(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  const parsed = createReservationSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: { message: 'qrToken is required' } });
+    return;
+  }
+
+  try {
+    await reservationService.reverifyPresence(req.user.id, parsed.data.qrToken);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
