@@ -33,3 +33,7 @@ export function update(id: string, data: UpdateSeatInput): Promise<Seat> {
 export function findById(id: string): Promise<Seat | null> {
   return prisma.seat.findUnique({ where: { id } });
 }
+
+export function findByStatus(status: SeatStatus): Promise<Seat[]> {
+  return prisma.seat.findMany({ where: { status } });
+}

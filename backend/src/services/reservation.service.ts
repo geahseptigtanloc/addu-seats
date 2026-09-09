@@ -571,3 +571,63 @@ export async function expireEntryTimers(): Promise<void> {
     logger.info({ count }, 'Expired stale pending reservations (entry timer)');
   }
 }
+
+// Called by the break-timer-expiry background job. Postgres
+// (seat.status) tells that a break is in progress; Redis's own TTL tells
+// whether time's run out.
+export async function expireBreakTimers(): Promise<void> {
+  const onBreakSeats = await seatRepository.findByStatus(SeatStatus.OCCUPIED_ON_BREAK);
+  let expiredCount = 0;
+
+  for (const seat of onBreakSeats) {
+    // Per-seat try/catch, one failure shouldn't abort the whole batch and
+    // delay every other seat behind it until the next tick.
+    try {
+      const reservation = await reservationRepository.findActiveBySeat(seat.id);
+
+      if (!reservation) {
+        // Shouldn't happen (ON_BREAK implies an active reservation).
+        logger.warn({ seatId: seat.id }, 'Seat is ON_BREAK but has no active reservation');
+        continue;
+      }
+
+      const stillOnBreak = await redisClient.exists(breakTimerKey(reservation.id));
+
+      if (stillOnBreak) {
+        continue;
+      }
+
+      // Reservation + seat must change together
+      const updatedSeat = await prisma.$transaction(async (tx) => {
+        await tx.reservation.update({
+          where: { id: reservation.id },
+          data: { status: ReservationStatus.FORFEITED, endedAt: new Date() },
+        });
+        return tx.seat.update({
+          where: { id: seat.id },
+          data: { status: SeatStatus.AVAILABLE },
+        });
+      });
+
+      expiredCount++;
+
+      try {
+        broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
+          seatId: updatedSeat.id,
+          status: updatedSeat.status,
+        });
+      } catch (err) {
+        logger.warn(
+          { err, reservationId: reservation.id },
+          'Failed to broadcast seat status update',
+        );
+      }
+    } catch (err) {
+      logger.error({ err, seatId: seat.id }, 'Failed to process break-timer expiry for seat');
+    }
+  }
+
+  if (expiredCount > 0) {
+    logger.info({ count: expiredCount }, 'Forfeited reservations with expired break timers');
+  }
+}
