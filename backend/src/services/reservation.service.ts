@@ -470,14 +470,21 @@ export async function returnFromBreak(userId: string, qrToken: string): Promise<
 
 const FLAG_WINDOW_SECONDS = 10 * 60;
 
-function seatFlagKey(seatId: string): string {
-  return `seat:flag:${seatId}`;
-}
-
 // Any authenticated user can flag someone else's seat as apparently
 // vacant. Not the seat's own reservation holder,
 // and not a seat that isn't currently OCCUPIED (a seat on break or
 // already free has nothing to flag).
+const FLAG_REDIS_TTL_SECONDS = FLAG_WINDOW_SECONDS + 5 * 60;
+
+function seatFlagKey(seatId: string): string {
+  return `seat:flag:${seatId}`;
+}
+
+interface FlagState {
+  reservationId: string;
+  expiresAt: string; // ISO timestamp
+}
+
 export async function flagSeat(flaggingUserId: string, seatId: string): Promise<void> {
   const seat = await seatRepository.findById(seatId);
 
@@ -492,8 +499,6 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
   const reservation = await reservationRepository.findActiveBySeat(seatId);
 
   if (!reservation) {
-    // Shouldn't happen if seat.status is OCCUPIED.
-    // Guards a data inconsistency rather than a normal, expected case.
     throw new ConflictError('No active reservation found for this seat');
   }
 
@@ -501,10 +506,13 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
     throw new ConflictError('You cannot flag your own reservation');
   }
 
-  // Two students flagging the same seat at once
-  // can't both succeed (a plain get-then-set would race).
-  const set = await redisClient.set(seatFlagKey(seatId), reservation.id, {
-    expiration: { type: 'EX', value: FLAG_WINDOW_SECONDS },
+  const state: FlagState = {
+    reservationId: reservation.id,
+    expiresAt: new Date(Date.now() + FLAG_WINDOW_SECONDS * 1000).toISOString(),
+  };
+
+  const set = await redisClient.set(seatFlagKey(seatId), JSON.stringify(state), {
+    expiration: { type: 'EX', value: FLAG_REDIS_TTL_SECONDS },
     condition: 'NX',
   });
 
@@ -548,9 +556,9 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
   // getDel, same atomic get-and-delete pattern as the OAuth exchange
   // code. Avoids a check-then-delete race and confirms
   // there was actually an active flag to clear.
-  const flaggedReservationId = await redisClient.getDel(seatFlagKey(seat.id));
+  const rawFlag = await redisClient.getDel(seatFlagKey(seat.id));
 
-  if (!flaggedReservationId) {
+  if (!rawFlag) {
     throw new ConflictError('No active flag to re-verify');
   }
 
@@ -629,5 +637,78 @@ export async function expireBreakTimers(): Promise<void> {
 
   if (expiredCount > 0) {
     logger.info({ count: expiredCount }, 'Forfeited reservations with expired break timers');
+  }
+}
+
+// Called by the flag-eviction background job. Unlike
+// break-timer expiry, seat.status gives no independent signal that a
+// flag was ever active (it stays OCCUPIED the whole time). Thats why
+// flagSeat stores an explicit expiresAt with a longer safety-net Redis
+// TTL, instead of relying on the key's own natural disappearance.
+export async function evictExpiredFlags(): Promise<void> {
+  const flagKeys: string[] = [];
+  for await (const keys of redisClient.scanIterator({ MATCH: 'seat:flag:*' })) {
+    flagKeys.push(...keys);
+  }
+
+  let evictedCount = 0;
+
+  for (const key of flagKeys) {
+    try {
+      const raw = await redisClient.get(key);
+
+      if (!raw) {
+        continue; // cleared by a concurrent re-verification
+      }
+
+      const state = JSON.parse(raw) as FlagState;
+
+      if (new Date(state.expiresAt).getTime() > Date.now()) {
+        continue; // still within the window
+      }
+
+      // Look up by the specific reservation the flag was recorded
+      // against, not by seat if the seat somehow got a new reservation
+      // since, we must not evict the wrong one.
+      const reservation = await reservationRepository.findById(state.reservationId);
+
+      if (!reservation || reservation.status !== ReservationStatus.CONFIRMED) {
+        // Already resolved some other way (voided, etc.)
+        await redisClient.del(key);
+        continue;
+      }
+
+      const updatedSeat = await prisma.$transaction(async (tx) => {
+        await tx.reservation.update({
+          where: { id: reservation.id },
+          data: { status: ReservationStatus.EVICTED, endedAt: new Date() },
+        });
+        return tx.seat.update({
+          where: { id: reservation.seatId },
+          data: { status: SeatStatus.AVAILABLE },
+        });
+      });
+
+      await redisClient.del(key);
+      evictedCount++;
+
+      try {
+        broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
+          seatId: updatedSeat.id,
+          status: updatedSeat.status,
+        });
+      } catch (err) {
+        logger.warn(
+          { err, reservationId: reservation.id },
+          'Failed to broadcast seat status update',
+        );
+      }
+    } catch (err) {
+      logger.error({ err, key }, 'Failed to process flag eviction for key');
+    }
+  }
+
+  if (evictedCount > 0) {
+    logger.info({ count: evictedCount }, 'Evicted reservations with expired flags');
   }
 }
