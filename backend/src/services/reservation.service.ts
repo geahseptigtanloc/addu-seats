@@ -48,10 +48,34 @@ async function isOnBreakCooldown(userId: string): Promise<boolean> {
   }
 }
 
-// Separate from the return-from-break scan, same physical QR.
-// seat.status stays unchanged until front-desk approval, so no
-// broadcast here, a second scan on the same seat just gets a conflict error.
-export async function createReservation(userId: string, qrToken: string): Promise<Reservation> {
+export interface ReservingStudent {
+  id: string;
+  name: string;
+  studentIdLast4: string | null;
+}
+
+// Mirrors PendingQueueItem's field names, the student's receipt and
+// front desk's queue entry describe the same reservation the same way.
+// reservationId doubles as "the code" front desk matches against; no
+// separate code generation needed.
+export interface ReservationReceipt {
+  reservationId: string;
+  status: ReservationStatus;
+  createdAt: Date;
+  seatId: string;
+  building: string;
+  floor: number;
+  studentName: string;
+  studentIdLast4: string | null;
+  remainingSeconds: number;
+}
+
+export async function createReservation(
+  student: ReservingStudent,
+  qrToken: string,
+): Promise<ReservationReceipt> {
+  const userId = student.id;
+
   if (await isOnBreakCooldown(userId)) {
     throw new ConflictError('You are on a break cooldown — please try again later');
   }
@@ -62,7 +86,6 @@ export async function createReservation(userId: string, qrToken: string): Promis
     throw new NotFoundError('Seat not found');
   }
 
-  // UX fast-path only — the real guarantee is the DB's partial unique index.
   const [activeOnSeat, activeForUser] = await Promise.all([
     reservationRepository.findActiveBySeat(seat.id),
     reservationRepository.findActiveByUser(userId),
@@ -86,17 +109,24 @@ export async function createReservation(userId: string, qrToken: string): Promis
     throw err;
   }
 
-  // Best-effort, powers the admin queue's remaining-time display,
-  // not the actual expiry check.
   try {
     await redisClient.set(entryTimerKey(reservation.id), '1', { EX: ENTRY_TIMER_SECONDS });
   } catch (err) {
     logger.warn({ err, reservationId: reservation.id }, 'Failed to set entry timer in Redis');
   }
 
-  return reservation;
+  return {
+    reservationId: reservation.id,
+    status: reservation.status,
+    createdAt: reservation.createdAt,
+    seatId: seat.id,
+    building: seat.building,
+    floor: seat.floor,
+    studentName: student.name,
+    studentIdLast4: student.studentIdLast4,
+    remainingSeconds: await getRemainingSeconds(reservation.id, reservation.createdAt),
+  };
 }
-
 // PENDING only, ending an already-CONFIRMED reservation (checkout) is a
 // different action with a different resulting status, not built yet.
 export async function cancelReservation(

@@ -27,11 +27,11 @@ export async function createReservation(
   }
 
   try {
-    const reservation = await reservationService.createReservation(
-      req.user.id,
+    const receipt = await reservationService.createReservation(
+      { id: req.user.id, name: req.user.name, studentIdLast4: req.user.studentIdLast4 },
       parsed.data.qrToken,
     );
-    res.status(201).json(reservation);
+    res.status(201).json(receipt);
   } catch (err) {
     next(err);
   }
