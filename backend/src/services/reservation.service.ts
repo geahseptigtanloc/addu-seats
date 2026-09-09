@@ -559,3 +559,15 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
     eventType: ValidationEventType.FLAG_REVERIFICATION,
   });
 }
+
+// Called by the entry-timer-expiry background job. Same
+// ENTRY_TIMER_SECONDS used when the timer was started (createReservation),
+// so "expired" means the same thing on both ends.
+export async function expireEntryTimers(): Promise<void> {
+  const cutoff = new Date(Date.now() - ENTRY_TIMER_SECONDS * 1000);
+  const count = await reservationRepository.expireStalePendingReservations(cutoff);
+
+  if (count > 0) {
+    logger.info({ count }, 'Expired stale pending reservations (entry timer)');
+  }
+}

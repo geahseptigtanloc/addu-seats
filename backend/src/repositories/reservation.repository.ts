@@ -58,3 +58,15 @@ export function findPending() {
     },
   });
 }
+
+// Bulk update, a single statement for however many
+// reservations timed out since the last tick. Returns the count for the
+// job to log. seat.status is never touched: a PENDING reservation never
+// changed it in the first place (see createReservation).
+export async function expireStalePendingReservations(olderThan: Date): Promise<number> {
+  const result = await prisma.reservation.updateMany({
+    where: { status: ReservationStatus.PENDING, createdAt: { lt: olderThan } },
+    data: { status: ReservationStatus.CANCELLED, endedAt: new Date() },
+  });
+  return result.count;
+}
