@@ -2,6 +2,8 @@
 
 Real-time library seat reservation and occupancy management for Ateneo de Davao University library facilities.
 
+The maintained product scope and non-regression checklist live in [`docs/FEATURES.md`](docs/FEATURES.md).
+
 **Phase 1** provides the project foundation: monorepo structure, database schema, Google OAuth login, health checks, Redis connectivity, and Socket.IO initialization. Seat maps, reservations, QR flows, and dashboards are built in later phases.
 
 ## Tech Stack
@@ -113,6 +115,17 @@ npm run dev
 
 Open `http://localhost:5173` in your browser.
 
+## Demo Accounts
+
+Open `/login` and use either one-click account. No password is required because these accounts are only for local UI and workflow testing.
+
+| Role | Name | Email |
+|------|------|-------|
+| Student | Alex Student | `student.demo@addu.edu.ph` |
+| Admin | Morgan Admin | `admin.demo@addu.edu.ph` |
+
+The frontend opens the selected role in local preview mode without enabling protected API actions. The seeded backend users remain available for API-level development and testing.
+
 ## API Endpoints (Phase 1)
 
 | Method | Path | Description |
@@ -130,7 +143,7 @@ Run through this list to confirm Phase 1 works:
 - [ ] Redis is running and `REDIS_URL` in `backend/.env` is correct
 - [ ] `backend/.env` and `frontend/.env` are filled in (especially Google OAuth + JWT secret)
 - [ ] `cd backend && npx prisma migrate dev --name init` completes without errors
-- [ ] `cd backend && npm run seed` inserts 10 test seats
+- [ ] `cd backend && npm run seed` inserts the current development seats and two demo accounts
 - [ ] `cd backend && npm run dev` starts on port 3001
 - [ ] `cd frontend && npm run dev` starts on port 5173
 - [ ] `curl http://localhost:3001/api/health` returns `{ "status": "ok", "postgres": "connected", "redis": "connected" }`

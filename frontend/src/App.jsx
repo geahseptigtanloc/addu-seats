@@ -13,6 +13,7 @@ import BuildingFloorSelector from './pages/BuildingFloorSelector.jsx';
 import ReservationReceipt from './pages/ReservationReceipt.jsx';
 import FrontDeskView from './pages/FrontDeskView.jsx';
 import VerifyPage from './pages/VerifyPage.jsx';
+import SeatReturn from './pages/SeatReturn.jsx';
 
 function AppRoutes() {
   useSocket();
@@ -21,23 +22,9 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
 
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <BuildingFloorSelector />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/" element={<BuildingFloorSelector />} />
 
-      <Route
-        path="/map/:building/:floor"
-        element={
-          <ProtectedRoute>
-            <SeatMap />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/map/:building/:floor" element={<SeatMap />} />
 
       <Route
         path="/receipt"
@@ -71,6 +58,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute staffOnly>
             <VerifyPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/seat-return/:seatId"
+        element={
+          <ProtectedRoute>
+            <SeatReturn />
           </ProtectedRoute>
         }
       />
