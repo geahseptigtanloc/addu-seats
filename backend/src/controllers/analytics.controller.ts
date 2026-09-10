@@ -70,3 +70,25 @@ export async function getOutcomeBreakdown(
     next(err);
   }
 }
+
+export async function getNoShowRate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const parsed = analyticsQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: { message: 'Invalid query parameters — from and to are required dates' } });
+    return;
+  }
+
+  try {
+    const report = await analyticsService.getNoShowRate(parsed.data);
+    res.json(report);
+  } catch (err) {
+    next(err);
+  }
+}

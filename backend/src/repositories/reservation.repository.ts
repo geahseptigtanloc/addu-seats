@@ -93,26 +93,52 @@ export interface OutcomeCount {
   count: number;
 }
 
-// groupBy only returns rows for statuses that actually appear in the
-// data, a status with zero matches in range is simply absent here, not
-// returned as zero. The service layer fills in the missing statuses.
-export async function countByOutcome(filters: OutcomeFilters): Promise<OutcomeCount[]> {
-  const hasSeatFilter = filters.building !== undefined || filters.floor !== undefined;
+// Shared by every reservation query that optionally scopes to a
+// building/floor via the seat relation.
+function seatWhereClause(
+  building?: string,
+  floor?: number,
+): { seat?: { building?: string; floor?: number } } {
+  if (building === undefined && floor === undefined) {
+    return {};
+  }
+  return {
+    seat: {
+      ...(building !== undefined && { building }),
+      ...(floor !== undefined && { floor }),
+    },
+  };
+}
 
+export async function countByOutcome(filters: OutcomeFilters): Promise<OutcomeCount[]> {
   const grouped = await prisma.reservation.groupBy({
     by: ['status'],
     where: {
       status: { in: OUTCOME_STATUSES },
       createdAt: { gte: filters.from, lt: filters.to },
-      ...(hasSeatFilter && {
-        seat: {
-          ...(filters.building !== undefined && { building: filters.building }),
-          ...(filters.floor !== undefined && { floor: filters.floor }),
-        },
-      }),
+      ...seatWhereClause(filters.building, filters.floor),
     },
     _count: { status: true },
   });
 
   return grouped.map((g) => ({ status: g.status, count: g._count.status }));
+}
+
+export interface CountFilters {
+  building?: string;
+  floor?: number;
+  from: Date;
+  to: Date;
+  status?: ReservationStatus;
+}
+
+// General-purpose count.
+export function countByFilters(filters: CountFilters): Promise<number> {
+  return prisma.reservation.count({
+    where: {
+      ...(filters.status !== undefined && { status: filters.status }),
+      createdAt: { gte: filters.from, lt: filters.to },
+      ...seatWhereClause(filters.building, filters.floor),
+    },
+  });
 }

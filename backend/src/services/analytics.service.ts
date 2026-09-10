@@ -1,4 +1,4 @@
-import { OccupancyEventType, type ReservationStatus } from '@prisma/client';
+import { OccupancyEventType, ReservationStatus } from '@prisma/client';
 import * as seatRepository from '../repositories/seat.repository';
 import * as occupancyLogRepository from '../repositories/occupancyLog.repository';
 import * as reservationRepository from '../repositories/reservation.repository';
@@ -279,5 +279,41 @@ export async function getOutcomeBreakdown(
     to,
     totalCount: outcomes.reduce((sum, outcome) => sum + outcome.count, 0),
     outcomes,
+  };
+}
+
+export interface NoShowRateFilters {
+  building?: string;
+  floor?: number;
+  from: Date;
+  to: Date;
+}
+
+export interface NoShowRateReport {
+  from: Date;
+  to: Date;
+  totalReservations: number;
+  cancelledCount: number;
+  noShowRatePercent: number;
+}
+
+// "No-show" here means CANCELLED a reservation that never reached
+// CONFIRMED.
+export async function getNoShowRate(filters: NoShowRateFilters): Promise<NoShowRateReport> {
+  const { from, to } = resolveDateRange(filters);
+  const scope = { building: filters.building, floor: filters.floor, from, to };
+
+  const [totalReservations, cancelledCount] = await Promise.all([
+    reservationRepository.countByFilters(scope),
+    reservationRepository.countByFilters({ ...scope, status: ReservationStatus.CANCELLED }),
+  ]);
+
+  return {
+    from,
+    to,
+    totalReservations,
+    cancelledCount,
+    noShowRatePercent:
+      totalReservations > 0 ? roundToOneDecimal((cancelledCount / totalReservations) * 100) : 0,
   };
 }
