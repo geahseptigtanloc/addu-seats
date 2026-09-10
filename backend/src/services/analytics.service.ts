@@ -2,7 +2,10 @@ import { OccupancyEventType, ReservationStatus } from '@prisma/client';
 import * as seatRepository from '../repositories/seat.repository';
 import * as occupancyLogRepository from '../repositories/occupancyLog.repository';
 import * as reservationRepository from '../repositories/reservation.repository';
-import type { SeatOccupancyEvent } from '../repositories/occupancyLog.repository';
+import type {
+  SeatOccupancyEvent,
+  ReservationOccupancyEvent,
+} from '../repositories/occupancyLog.repository';
 import { BadRequestError } from '../utils/AppError';
 
 export interface UtilizationFilters {
@@ -149,7 +152,7 @@ async function loadOccupancyData(filters: UtilizationFilters): Promise<LoadedOcc
   return { from, to, seats, eventsBySeat };
 }
 
-interface OccupiedInterval {
+interface TimeInterval {
   start: Date;
   end: Date;
 }
@@ -161,11 +164,11 @@ function extractOccupiedIntervals(
   events: SeatOccupancyEvent[],
   rangeStart: Date,
   rangeEnd: Date,
-): OccupiedInterval[] {
+): TimeInterval[] {
   const startMs = rangeStart.getTime();
   const endMs = rangeEnd.getTime();
   let occupiedSinceMs: number | null = null;
-  const intervals: OccupiedInterval[] = [];
+  const intervals: TimeInterval[] = [];
 
   for (const event of events) {
     const eventMs = event.createdAt.getTime();
@@ -190,7 +193,7 @@ function extractOccupiedIntervals(
   return intervals;
 }
 
-function sumIntervalMs(intervals: OccupiedInterval[]): number {
+function sumIntervalMs(intervals: TimeInterval[]): number {
   return intervals.reduce(
     (sum, interval) => sum + (interval.end.getTime() - interval.start.getTime()),
     0,
@@ -362,4 +365,88 @@ export async function getAverageSessionLength(
     sessionCount: sessions.length,
     averageSessionMinutes: roundToOneDecimal(totalMs / sessions.length / 60_000),
   };
+}
+
+export interface BreakStatsFilters {
+  building?: string;
+  floor?: number;
+  from: Date;
+  to: Date;
+}
+
+export interface BreakStatsReport {
+  from: Date;
+  to: Date;
+  breakCount: number;
+  averageBreakMinutes: number;
+}
+
+// Covers only breaks with a return scan (VACATED->OCCUPIED pair).
+// Excludes "% hit 15-min cap", extensionsUsed lives only in Redis,
+// never persisted to Postgres.
+export async function getBreakStats(filters: BreakStatsFilters): Promise<BreakStatsReport> {
+  const { from, to } = resolveDateRange(filters);
+
+  const seats = await seatRepository.findMany({ building: filters.building, floor: filters.floor });
+
+  if (seats.length === 0) {
+    return { from, to, breakCount: 0, averageBreakMinutes: 0 };
+  }
+
+  const events = await occupancyLogRepository.findEventsForReservationsInSeats(
+    seats.map((seat) => seat.id),
+  );
+
+  const eventsByReservation = new Map<string, ReservationOccupancyEvent[]>();
+  for (const event of events) {
+    const list = eventsByReservation.get(event.reservationId);
+    if (list) {
+      list.push(event);
+    } else {
+      eventsByReservation.set(event.reservationId, [event]);
+    }
+  }
+
+  const breaksInRange: TimeInterval[] = [];
+  for (const reservationEvents of eventsByReservation.values()) {
+    for (const breakInterval of extractBreakIntervals(reservationEvents)) {
+      if (breakInterval.end >= from && breakInterval.end < to) {
+        breaksInRange.push(breakInterval);
+      }
+    }
+  }
+
+  if (breaksInRange.length === 0) {
+    return { from, to, breakCount: 0, averageBreakMinutes: 0 };
+  }
+
+  return {
+    from,
+    to,
+    breakCount: breaksInRange.length,
+    averageBreakMinutes: roundToOneDecimal(
+      sumIntervalMs(breaksInRange) / breaksInRange.length / 60_000,
+    ),
+  };
+}
+
+// Pairs each VACATED with the next OCCUPIED (break start -> return).
+// An OCCUPIED with no prior VACATED is the initial approval, skipped.
+// A trailing, unpaired VACATED (no return yet) is also skipped.
+function extractBreakIntervals(
+  events: { eventType: OccupancyEventType; createdAt: Date }[],
+): TimeInterval[] {
+  const intervals: TimeInterval[] = [];
+  let vacatedAt: Date | null = null;
+
+  for (const event of events) {
+    if (event.eventType === OccupancyEventType.VACATED) {
+      vacatedAt = event.createdAt;
+    } else if (vacatedAt !== null) {
+      intervals.push({ start: vacatedAt, end: event.createdAt });
+      vacatedAt = null;
+    }
+  }
+
+  return intervals;
 }

@@ -44,3 +44,23 @@ export async function findEventsForSeats(
     createdAt: log.createdAt,
   }));
 }
+
+export interface ReservationOccupancyEvent {
+  reservationId: string;
+  eventType: OccupancyEventType;
+  createdAt: Date;
+}
+
+// Grouped by reservationId, break pairing must not cross
+// reservation boundaries, since a later reservation on the same seat is
+// a different student's session. reservationId is a direct field here,
+// unlike seatId in findEventsForSeats above.
+export function findEventsForReservationsInSeats(
+  seatIds: string[],
+): Promise<ReservationOccupancyEvent[]> {
+  return prisma.occupancyLog.findMany({
+    where: { reservation: { seatId: { in: seatIds } } },
+    orderBy: { createdAt: 'asc' },
+    select: { reservationId: true, eventType: true, createdAt: true },
+  });
+}

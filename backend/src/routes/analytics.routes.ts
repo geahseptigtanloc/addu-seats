@@ -15,5 +15,6 @@ router.get(
   requireRole('ADMIN'),
   analyticsController.getAverageSessionLength,
 );
+router.get('/break-stats', requireAuth, requireRole('ADMIN'), analyticsController.getBreakStats);
 
 export default router;
