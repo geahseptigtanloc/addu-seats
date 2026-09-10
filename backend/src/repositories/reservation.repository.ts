@@ -70,3 +70,49 @@ export async function expireStalePendingReservations(olderThan: Date): Promise<n
   });
   return result.count;
 }
+
+// The 5 terminal, "outcome" statuses, excludes PENDING and
+// CONFIRMED, which are still in progress, not an outcome yet.
+export const OUTCOME_STATUSES: ReservationStatus[] = [
+  ReservationStatus.COMPLETED,
+  ReservationStatus.CANCELLED,
+  ReservationStatus.FORFEITED,
+  ReservationStatus.EVICTED,
+  ReservationStatus.VOIDED,
+];
+
+export interface OutcomeFilters {
+  building?: string;
+  floor?: number;
+  from: Date;
+  to: Date;
+}
+
+export interface OutcomeCount {
+  status: ReservationStatus;
+  count: number;
+}
+
+// groupBy only returns rows for statuses that actually appear in the
+// data, a status with zero matches in range is simply absent here, not
+// returned as zero. The service layer fills in the missing statuses.
+export async function countByOutcome(filters: OutcomeFilters): Promise<OutcomeCount[]> {
+  const hasSeatFilter = filters.building !== undefined || filters.floor !== undefined;
+
+  const grouped = await prisma.reservation.groupBy({
+    by: ['status'],
+    where: {
+      status: { in: OUTCOME_STATUSES },
+      createdAt: { gte: filters.from, lt: filters.to },
+      ...(hasSeatFilter && {
+        seat: {
+          ...(filters.building !== undefined && { building: filters.building }),
+          ...(filters.floor !== undefined && { floor: filters.floor }),
+        },
+      }),
+    },
+    _count: { status: true },
+  });
+
+  return grouped.map((g) => ({ status: g.status, count: g._count.status }));
+}

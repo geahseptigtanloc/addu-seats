@@ -1,6 +1,7 @@
-import { OccupancyEventType } from '@prisma/client';
+import { OccupancyEventType, type ReservationStatus } from '@prisma/client';
 import * as seatRepository from '../repositories/seat.repository';
 import * as occupancyLogRepository from '../repositories/occupancyLog.repository';
+import * as reservationRepository from '../repositories/reservation.repository';
 import type { SeatOccupancyEvent } from '../repositories/occupancyLog.repository';
 import { BadRequestError } from '../utils/AppError';
 
@@ -217,4 +218,66 @@ function accumulateHourlyMs(start: Date, end: Date, bucketsMs: number[]): void {
     bucketsMs[hour] = (bucketsMs[hour] ?? 0) + (chunkEndMs - cursorMs);
     cursorMs = chunkEndMs;
   }
+}
+
+// Never count time that hasn't happened yet, in any report; from must
+// precede to. Shared by every analytics report that takes a date range.
+function resolveDateRange(filters: { from: Date; to: Date }): { from: Date; to: Date } {
+  const { from } = filters;
+  const to = filters.to > new Date() ? new Date() : filters.to;
+
+  if (from >= to) {
+    throw new BadRequestError('from must be before to');
+  }
+
+  return { from, to };
+}
+
+export interface OutcomeBreakdownFilters {
+  building?: string;
+  floor?: number;
+  from: Date;
+  to: Date;
+}
+
+export interface OutcomeBreakdown {
+  status: ReservationStatus;
+  count: number;
+}
+
+export interface OutcomeReport {
+  from: Date;
+  to: Date;
+  totalCount: number;
+  outcomes: OutcomeBreakdown[];
+}
+
+// Counted by createdAt not by endedAt. Every terminal status is always
+// present in the response, defaulted to 0, since groupBy silently omits
+// a status with no matches rather than returning it as zero.
+export async function getOutcomeBreakdown(
+  filters: OutcomeBreakdownFilters,
+): Promise<OutcomeReport> {
+  const { from, to } = resolveDateRange(filters);
+
+  const counts = await reservationRepository.countByOutcome({
+    building: filters.building,
+    floor: filters.floor,
+    from,
+    to,
+  });
+
+  const countByStatus = new Map(counts.map((c) => [c.status, c.count]));
+
+  const outcomes: OutcomeBreakdown[] = reservationRepository.OUTCOME_STATUSES.map((status) => ({
+    status,
+    count: countByStatus.get(status) ?? 0,
+  }));
+
+  return {
+    from,
+    to,
+    totalCount: outcomes.reduce((sum, outcome) => sum + outcome.count, 0),
+    outcomes,
+  };
 }
