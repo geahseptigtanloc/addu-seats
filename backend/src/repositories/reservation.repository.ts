@@ -142,3 +142,34 @@ export function countByFilters(filters: CountFilters): Promise<number> {
     },
   });
 }
+
+export interface SessionFilters {
+  building?: string;
+  floor?: number;
+  from: Date;
+  to: Date;
+}
+
+export interface SessionDuration {
+  confirmedAt: Date;
+  endedAt: Date;
+}
+
+// A "session" is a reservation that both got confirmed AND has since
+// ended.
+export async function findCompletedSessions(filters: SessionFilters): Promise<SessionDuration[]> {
+  const reservations = await prisma.reservation.findMany({
+    where: {
+      confirmedAt: { not: null },
+      endedAt: { gte: filters.from, lt: filters.to },
+      ...seatWhereClause(filters.building, filters.floor),
+    },
+    select: { confirmedAt: true, endedAt: true },
+  });
+
+  // The where clause guarantees both fields are non-null here, but
+  // filter defensively rather than asserting the type.
+  return reservations.filter(
+    (r): r is { confirmedAt: Date; endedAt: Date } => r.confirmedAt !== null && r.endedAt !== null,
+  );
+}

@@ -317,3 +317,49 @@ export async function getNoShowRate(filters: NoShowRateFilters): Promise<NoShowR
       totalReservations > 0 ? roundToOneDecimal((cancelledCount / totalReservations) * 100) : 0,
   };
 }
+
+export interface SessionLengthFilters {
+  building?: string;
+  floor?: number;
+  from: Date;
+  to: Date;
+}
+
+export interface SessionLengthReport {
+  from: Date;
+  to: Date;
+  sessionCount: number;
+  averageSessionMinutes: number;
+}
+
+// A session runs from confirmedAt to endedAt
+// (void, forfeit, eviction, or a future checkout action). Filtered by
+// endedAt.
+export async function getAverageSessionLength(
+  filters: SessionLengthFilters,
+): Promise<SessionLengthReport> {
+  const { from, to } = resolveDateRange(filters);
+
+  const sessions = await reservationRepository.findCompletedSessions({
+    building: filters.building,
+    floor: filters.floor,
+    from,
+    to,
+  });
+
+  if (sessions.length === 0) {
+    return { from, to, sessionCount: 0, averageSessionMinutes: 0 };
+  }
+
+  const totalMs = sessions.reduce(
+    (sum, session) => sum + (session.endedAt.getTime() - session.confirmedAt.getTime()),
+    0,
+  );
+
+  return {
+    from,
+    to,
+    sessionCount: sessions.length,
+    averageSessionMinutes: roundToOneDecimal(totalMs / sessions.length / 60_000),
+  };
+}

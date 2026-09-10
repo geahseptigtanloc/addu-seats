@@ -9,5 +9,11 @@ router.get('/utilization', requireAuth, requireRole('ADMIN'), analyticsControlle
 router.get('/peak-hours', requireAuth, requireRole('ADMIN'), analyticsController.getPeakHours);
 router.get('/outcomes', requireAuth, requireRole('ADMIN'), analyticsController.getOutcomeBreakdown);
 router.get('/no-show-rate', requireAuth, requireRole('ADMIN'), analyticsController.getNoShowRate);
+router.get(
+  '/session-length',
+  requireAuth,
+  requireRole('ADMIN'),
+  analyticsController.getAverageSessionLength,
+);
 
 export default router;
