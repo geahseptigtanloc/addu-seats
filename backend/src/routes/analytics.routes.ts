@@ -6,5 +6,6 @@ import * as analyticsController from '../controllers/analytics.controller';
 const router = Router();
 
 router.get('/utilization', requireAuth, requireRole('ADMIN'), analyticsController.getUtilization);
+router.get('/peak-hours', requireAuth, requireRole('ADMIN'), analyticsController.getPeakHours);
 
 export default router;

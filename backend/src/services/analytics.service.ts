@@ -27,41 +27,18 @@ export interface UtilizationReport {
 }
 
 export async function getUtilization(filters: UtilizationFilters): Promise<UtilizationReport> {
-  const { from } = filters;
-  // Never count time that hasn't happened yet, in either the numerator
-  // (occupied time) or the denominator (total possible time).
-  const to = filters.to > new Date() ? new Date() : filters.to;
-
-  if (from >= to) {
-    throw new BadRequestError('from must be before to');
-  }
-
-  const seats = await seatRepository.findMany({ building: filters.building, floor: filters.floor });
+  const { from, to, seats, eventsBySeat } = await loadOccupancyData(filters);
 
   if (seats.length === 0) {
     return { from, to, seatCount: 0, overallUtilizationPercent: 0, seats: [] };
-  }
-
-  const events = await occupancyLogRepository.findEventsForSeats(
-    seats.map((seat) => seat.id),
-    to,
-  );
-
-  const eventsBySeat = new Map<string, SeatOccupancyEvent[]>();
-  for (const event of events) {
-    const list = eventsBySeat.get(event.seatId);
-    if (list) {
-      list.push(event);
-    } else {
-      eventsBySeat.set(event.seatId, [event]);
-    }
   }
 
   const rangeMs = to.getTime() - from.getTime();
   let totalOccupiedMs = 0;
 
   const seatReports: SeatUtilization[] = seats.map((seat) => {
-    const occupiedMs = computeOccupiedMs(eventsBySeat.get(seat.id) ?? [], from, to);
+    const intervals = extractOccupiedIntervals(eventsBySeat.get(seat.id) ?? [], from, to);
+    const occupiedMs = sumIntervalMs(intervals);
     totalOccupiedMs += occupiedMs;
     return {
       seatId: seat.id,
@@ -82,18 +59,112 @@ export async function getUtilization(filters: UtilizationFilters): Promise<Utili
   };
 }
 
+export interface HourlyUtilization {
+  hour: number; // 0-23, UTC
+  utilizationPercent: number;
+}
+
+export interface PeakHoursReport {
+  from: Date;
+  to: Date;
+  seatCount: number;
+  hours: HourlyUtilization[];
+}
+
+// Same underlying occupied intervals as getUtilization, but split by
+// hour-of-day and summed across every day in the range, instead of
+// collapsed into one aggregate. Hour-of-day is UTC so the project has no
+// established local-timezone handling anywhere else, so this doesn't
+// introduce one; revisit if the school's local hours need to line up
+// with these buckets.
+export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHoursReport> {
+  const { from, to, seats, eventsBySeat } = await loadOccupancyData(filters);
+
+  const occupiedMsByHour = new Array<number>(24).fill(0);
+  const possibleMsByHour = new Array<number>(24).fill(0);
+
+  for (const seat of seats) {
+    const intervals = extractOccupiedIntervals(eventsBySeat.get(seat.id) ?? [], from, to);
+    for (const interval of intervals) {
+      accumulateHourlyMs(interval.start, interval.end, occupiedMsByHour);
+    }
+    // This seat's entire range counts as "possible" time
+    accumulateHourlyMs(from, to, possibleMsByHour);
+  }
+
+  const hours: HourlyUtilization[] = occupiedMsByHour.map((occupiedMs, hour) => {
+    const possibleMs = possibleMsByHour[hour] ?? 0;
+    return {
+      hour,
+      utilizationPercent: possibleMs > 0 ? roundToOneDecimal((occupiedMs / possibleMs) * 100) : 0,
+    };
+  });
+
+  return { from, to, seatCount: seats.length, hours };
+}
+
 function roundToOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+interface LoadedOccupancyData {
+  from: Date;
+  to: Date;
+  seats: Awaited<ReturnType<typeof seatRepository.findMany>>;
+  eventsBySeat: Map<string, SeatOccupancyEvent[]>;
+}
+
+// Shared setup for both reports: validate the range, resolve which seats
+// are in scope, and group their occupancy events.
+async function loadOccupancyData(filters: UtilizationFilters): Promise<LoadedOccupancyData> {
+  const { from } = filters;
+  const to = filters.to > new Date() ? new Date() : filters.to;
+
+  if (from >= to) {
+    throw new BadRequestError('from must be before to');
+  }
+
+  const seats = await seatRepository.findMany({ building: filters.building, floor: filters.floor });
+
+  if (seats.length === 0) {
+    return { from, to, seats, eventsBySeat: new Map() };
+  }
+
+  const events = await occupancyLogRepository.findEventsForSeats(
+    seats.map((seat) => seat.id),
+    to,
+  );
+
+  const eventsBySeat = new Map<string, SeatOccupancyEvent[]>();
+  for (const event of events) {
+    const list = eventsBySeat.get(event.seatId);
+    if (list) {
+      list.push(event);
+    } else {
+      eventsBySeat.set(event.seatId, [event]);
+    }
+  }
+
+  return { from, to, seats, eventsBySeat };
+}
+
+interface OccupiedInterval {
+  start: Date;
+  end: Date;
 }
 
 // Walks a seat's OCCUPIED/VACATED history (ascending) and sums the milliseconds it was occupied within
 // [rangeStart, rangeEnd]. Events before rangeStart establish the starting
 // state rather than counting toward the total.
-function computeOccupiedMs(events: SeatOccupancyEvent[], rangeStart: Date, rangeEnd: Date): number {
+function extractOccupiedIntervals(
+  events: SeatOccupancyEvent[],
+  rangeStart: Date,
+  rangeEnd: Date,
+): OccupiedInterval[] {
   const startMs = rangeStart.getTime();
   const endMs = rangeEnd.getTime();
   let occupiedSinceMs: number | null = null;
-  let totalMs = 0;
+  const intervals: OccupiedInterval[] = [];
 
   for (const event of events) {
     const eventMs = event.createdAt.getTime();
@@ -106,15 +177,44 @@ function computeOccupiedMs(events: SeatOccupancyEvent[], rangeStart: Date, range
     if (event.eventType === OccupancyEventType.OCCUPIED) {
       occupiedSinceMs ??= eventMs;
     } else if (occupiedSinceMs !== null) {
-      totalMs += Math.min(eventMs, endMs) - occupiedSinceMs;
+      intervals.push({ start: new Date(occupiedSinceMs), end: new Date(Math.min(eventMs, endMs)) });
       occupiedSinceMs = null;
     }
   }
 
-  // Still occupied with no closing VACATED in range.
   if (occupiedSinceMs !== null) {
-    totalMs += endMs - occupiedSinceMs;
+    intervals.push({ start: new Date(occupiedSinceMs), end: rangeEnd });
   }
 
-  return totalMs;
+  return intervals;
+}
+
+function sumIntervalMs(intervals: OccupiedInterval[]): number {
+  return intervals.reduce(
+    (sum, interval) => sum + (interval.end.getTime() - interval.start.getTime()),
+    0,
+  );
+}
+
+// Splits [start, end) into per-UTC-hour chunks and adds each chunk's
+// duration into the matching 0-23 bucket. Walks hour-boundary by
+// hour-boundary rather than assuming a single bucket, so an interval
+// spanning multiple hours or multiple days is split correctly.
+function accumulateHourlyMs(start: Date, end: Date, bucketsMs: number[]): void {
+  let cursorMs = start.getTime();
+  const endMs = end.getTime();
+
+  while (cursorMs < endMs) {
+    const cursor = new Date(cursorMs);
+    const hour = cursor.getUTCHours();
+    const nextHourMs = Date.UTC(
+      cursor.getUTCFullYear(),
+      cursor.getUTCMonth(),
+      cursor.getUTCDate(),
+      cursor.getUTCHours() + 1,
+    );
+    const chunkEndMs = Math.min(nextHourMs, endMs);
+    bucketsMs[hour] = (bucketsMs[hour] ?? 0) + (chunkEndMs - cursorMs);
+    cursorMs = chunkEndMs;
+  }
 }

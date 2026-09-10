@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as analyticsService from '../services/analytics.service';
 
-const utilizationQuerySchema = z.object({
+const analyticsQuerySchema = z.object({
   building: z.string().min(1).optional(),
   floor: z.coerce.number().int().optional(),
   from: z.coerce.date(),
@@ -14,7 +14,7 @@ export async function getUtilization(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const parsed = utilizationQuerySchema.safeParse(req.query);
+  const parsed = analyticsQuerySchema.safeParse(req.query);
 
   if (!parsed.success) {
     res
@@ -25,6 +25,24 @@ export async function getUtilization(
 
   try {
     const report = await analyticsService.getUtilization(parsed.data);
+    res.json(report);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getPeakHours(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const parsed = analyticsQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: { message: 'Invalid query parameters — from and to are required dates' } });
+    return;
+  }
+
+  try {
+    const report = await analyticsService.getPeakHours(parsed.data);
     res.json(report);
   } catch (err) {
     next(err);
