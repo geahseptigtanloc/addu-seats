@@ -46,7 +46,7 @@ export default function SeatReturn() {
   return (
     <Layout>
       <section className="mx-auto max-w-xl py-10 sm:py-16">
-        <div className={`overflow-hidden rounded-md border bg-white shadow-[0_18px_45px_rgba(15,23,42,0.1)] ${result.state === 'success' ? 'border-green-200' : 'border-gray-200'}`}>
+        <div className={`overflow-hidden rounded-[8px] border bg-white shadow-[0_22px_64px_rgba(14,35,56,0.14)] ${result.state === 'success' ? 'border-green-200' : 'border-gray-200'}`}>
           <div className={`${result.state === 'success' ? 'bg-green-50' : 'bg-gray-50'} grid place-items-center border-b p-8`}>
             <div className={`grid h-16 w-16 place-items-center rounded-full ${result.state === 'success' ? 'bg-green-700 text-white' : 'bg-amber-100 text-amber-800'}`}>
               {result.state === 'success'
@@ -58,7 +58,7 @@ export default function SeatReturn() {
           </div>
 
           <div className="p-6 text-center sm:p-8">
-            <p className="text-sm font-semibold text-blue-800">Physical node QR</p>
+            <p className="ui-kicker justify-center">Physical node QR</p>
             <h1 className="mt-2 text-2xl font-bold text-gray-950">
               {result.state === 'success' ? 'You are checked back in' : result.state === 'checking' ? 'Checking your return' : 'Return not confirmed'}
             </h1>
@@ -68,7 +68,7 @@ export default function SeatReturn() {
               <div className="mx-auto mt-6 grid max-w-sm grid-cols-2 gap-4 border-y border-gray-100 py-4 text-left">
                 <div>
                   <p className="text-xs font-semibold uppercase text-gray-500">Reservation node</p>
-                  <p className="mt-1 font-semibold text-blue-900">{result.nodeLabel}</p>
+                  <p className="mt-1 font-semibold text-[#063a64]">{result.nodeLabel}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase text-gray-500">Session</p>
@@ -78,12 +78,12 @@ export default function SeatReturn() {
             )}
 
             {result.cooldownUntil && (
-              <p className="mx-auto mt-4 max-w-sm rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <p className="mx-auto mt-4 max-w-sm rounded-[8px] bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 The full break allowance was used. Your 30-minute cooldown is now active.
               </p>
             )}
 
-            <Link to="/receipt" className="mt-7 inline-flex items-center gap-2 rounded-md bg-blue-800 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-900 active:translate-y-px">
+            <Link to="/receipt" className="ui-button-primary mt-7">
               Return to reservation
               <ArrowRight size={17} weight="bold" />
             </Link>

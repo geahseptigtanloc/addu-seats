@@ -74,34 +74,38 @@ export default function VerifyPage() {
   return (
     <Layout>
       <section className="mx-auto max-w-3xl">
-        <button type="button" onClick={() => navigate('/frontdesk')} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#073b66] hover:underline">
+        <button type="button" onClick={() => navigate('/frontdesk')} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-[#063a64] hover:underline">
           <ArrowLeft size={17} weight="bold" />
           Pending queue
         </button>
 
         <div className="ui-panel overflow-hidden">
-          <div className="border-b border-slate-200 bg-[#f7f9fb] px-5 py-5 sm:px-6">
+          <div className="border-b border-slate-200 bg-[#f5f9fc] px-5 py-5 sm:px-6">
             <div className="flex items-start gap-4">
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-blue-100 text-[#073b66]"><IdentificationCard size={24} weight="duotone" /></span>
-              <div><p className="text-sm font-semibold text-amber-700">Front-desk verification</p><h1 className="mt-1 text-xl font-semibold text-slate-950">Review reservation</h1></div>
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] bg-blue-100 text-[#063a64]"><IdentificationCard size={24} weight="duotone" /></span>
+              <div><p className="ui-kicker">Front-desk verification</p><h1 className="mt-1 text-xl font-semibold text-slate-950">Review reservation</h1></div>
             </div>
           </div>
 
           {loading ? (
-            <div className="grid min-h-72 place-items-center p-6 text-sm font-medium text-slate-500">Loading reservation data...</div>
+            <div className="grid min-h-72 gap-3 p-6">
+              <div className="loading-skeleton h-16 rounded-[8px]" />
+              <div className="loading-skeleton h-28 rounded-[8px]" />
+              <div className="loading-skeleton h-12 rounded-[8px]" />
+            </div>
           ) : error ? (
-            <div className="m-5 flex items-start gap-3 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800"><WarningCircle size={21} weight="fill" className="shrink-0" /><span>{error}</span></div>
+            <div className="ui-alert-danger m-5 flex items-start gap-3"><WarningCircle size={21} weight="fill" className="shrink-0" /><span>{error}</span></div>
           ) : (
             <div className="p-5 sm:p-6">
               {reservation.alreadyVerified && (
-                <div className="mb-6 flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><CheckCircle size={21} weight="fill" className="shrink-0" /><span>This reservation has already been approved and is active.</span></div>
+                <div className="mb-6 flex items-start gap-3 rounded-[8px] border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><CheckCircle size={21} weight="fill" className="shrink-0" /><span>This reservation has already been approved and is active.</span></div>
               )}
 
               <div className="grid gap-x-6 gap-y-5 sm:grid-cols-3">
                 <Detail label="Student" value={reservation.user.name} />
                 <Detail label="AdDU ID" value={`Ending in ${reservation.user.adduIdLast4 || 'N/A'}`} mono />
                 <Detail label="Reservation node" value={reservation.seat.label || 'Reservation node'} accent />
-                <Detail label="Location" value={`${reservation.seat.building.replace('_', ' ')} · Floor ${reservation.seat.floor}`} />
+                <Detail label="Location" value={`${reservation.seat.building.replace('_', ' ')} - Floor ${reservation.seat.floor}`} />
                 <Detail label="Status" value={reservation.alreadyVerified ? 'Active' : 'Pending entry'} />
                 <Detail label="Reference" value={reservation.reservationId.slice(-8).toUpperCase()} mono />
               </div>
@@ -117,15 +121,15 @@ export default function VerifyPage() {
                   </div>
 
                   {rejecting ? (
-                    <div className="mt-5 rounded-md border border-red-200 bg-red-50 p-4">
+                    <div className="mt-5 rounded-[8px] border border-red-200 bg-red-50 p-4">
                       <label htmlFor="rejection-reason" className="text-sm font-semibold text-red-950">Rejection reason</label>
-                      <input id="rejection-reason" type="text" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Enter a clear reason" className="mt-2 min-h-11 w-full rounded-md border border-red-200 bg-white px-3 text-sm" />
+                      <input id="rejection-reason" type="text" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Enter a clear reason" className="mt-2 min-h-11 w-full rounded-[8px] border border-red-200 bg-white px-3 text-sm" />
                       <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={() => setRejecting(false)} className="ui-button-secondary">Cancel</button><button type="button" onClick={handleReject} disabled={!reason.trim()} className="ui-button-danger bg-red-700 text-white hover:bg-red-800">Confirm rejection</button></div>
                     </div>
                   ) : (
                     <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
                       <button type="button" onClick={() => setRejecting(true)} className="ui-button-danger">Reject</button>
-                      <button type="button" onClick={handleApprove} disabled={!receiptConfirmed || !identityConfirmed} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45"><CheckCircle size={18} weight="bold" />Approve entry</button>
+                      <button type="button" onClick={handleApprove} disabled={!receiptConfirmed || !identityConfirmed} className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[8px] bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(4,120,87,0.18)] hover:-translate-y-0.5 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0"><CheckCircle size={18} weight="bold" />Approve entry</button>
                     </div>
                   )}
                 </>
@@ -139,13 +143,13 @@ export default function VerifyPage() {
 }
 
 function Detail({ label, value, mono, accent }) {
-  return <div className="min-w-0"><p className="ui-label">{label}</p><p className={`mt-1 break-words text-sm font-semibold ${accent ? 'text-[#073b66]' : 'capitalize text-slate-900'} ${mono ? 'font-mono' : ''}`}>{value}</p></div>;
+  return <div className="min-w-0"><p className="ui-label">{label}</p><p className={`mt-1 break-words text-sm font-semibold ${accent ? 'text-[#063a64]' : 'capitalize text-slate-900'} ${mono ? 'font-mono' : ''}`}>{value}</p></div>;
 }
 
 function CheckItem({ icon: Icon, checked, onChange, children }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-[#f7f9fb] p-4 text-sm leading-6 text-slate-700">
-      <Icon size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#073b66]" />
+    <label className="flex cursor-pointer items-start gap-3 rounded-[8px] border border-slate-200 bg-[#f5f9fc] p-4 text-sm leading-6 text-slate-700">
+      <Icon size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-1 h-4 w-4" />
       <span>{children}</span>
     </label>

@@ -134,36 +134,40 @@ export default function FrontDeskView() {
 
   return (
     <Layout>
-      <section className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end">
+      <section className="ui-surface-band flex flex-col justify-between gap-5 p-5 sm:flex-row sm:items-end">
         <div>
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-amber-700"><IdentificationCard size={18} weight="fill" />Entry verification</div>
+          <div className="ui-kicker mb-3"><IdentificationCard size={18} weight="fill" />Entry verification</div>
           <h1 className="ui-page-title">Pending entry queue</h1>
           <p className="ui-muted mt-2">Match the student's QR receipt and university ID before approving entry.</p>
         </div>
         <div className="ui-panel flex min-h-11 items-center gap-3 self-start px-4 py-2 text-sm">
-          <ClockCountdown size={20} weight="duotone" className="text-[#073b66]" />
+          <ClockCountdown size={20} weight="duotone" className="text-[#063a64]" />
           <span className="font-semibold text-slate-950">{queue.length}</span>
           <span className="text-slate-500">waiting</span>
         </div>
       </section>
 
       {!canUseProtectedApi && (
-        <div className="mt-6 border-l-4 border-blue-600 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+        <div className="ui-alert-info mt-6">
           Sample queue: approvals update only the reservation stored in this browser.
         </div>
       )}
 
       {error && (
-        <div className="mt-5 border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
+        <div className="ui-alert-danger mt-5">{error}</div>
       )}
 
       <section className="py-6" aria-label="Pending reservations">
         {loading ? (
-          <p className="py-12 text-center text-sm text-gray-500">Loading pending reservations...</p>
+          <div className="grid gap-3">
+            <div className="loading-skeleton h-28 rounded-[8px]" />
+            <div className="loading-skeleton h-28 rounded-[8px]" />
+            <div className="loading-skeleton h-28 rounded-[8px]" />
+          </div>
         ) : queue.length === 0 ? (
           <div className="ui-panel grid min-h-72 place-items-center px-6 py-12 text-center">
             <div>
-              <span className="mx-auto grid h-12 w-12 place-items-center rounded-md bg-slate-100 text-slate-500"><QrCode size={25} weight="duotone" /></span>
+              <span className="mx-auto grid h-12 w-12 place-items-center rounded-[8px] bg-[#e6f0f7] text-[#063a64]"><QrCode size={25} weight="duotone" /></span>
               <h2 className="mt-4 font-semibold text-slate-950">No students waiting</h2>
               <p className="mt-1 text-sm text-slate-500">New five-minute reservations will appear here.</p>
             </div>
@@ -178,15 +182,15 @@ export default function FrontDeskView() {
               const seatLabel = reservation.seat.label || 'Unlabeled node';
 
               return (
-                <article key={reservation.reservationId} className={`ui-panel overflow-hidden ${isUrgent ? 'border-red-300' : ''}`}>
+                <article key={reservation.reservationId} className={`ui-panel overflow-hidden ${isUrgent ? 'border-red-300 shadow-[0_18px_48px_rgba(185,28,28,0.12)]' : ''}`}>
                   <div className="grid gap-4 p-5 sm:grid-cols-[1.4fr_1fr_auto] sm:items-center">
                     <div>
                       <p className="font-semibold text-slate-950">{reservation.user.name}</p>
                       <p className="mt-1 text-sm text-slate-500">AdDU ID ending in <span className="font-mono font-semibold text-slate-800">{reservation.user.adduIdLast4 || 'N/A'}</span></p>
                     </div>
                     <div>
-                      <p className="font-semibold text-[#073b66]">{seatLabel}</p>
-                      <p className="mt-1 text-sm text-slate-500">{getNodeType(reservation.seat.seatType)} · Floor {reservation.seat.floor}</p>
+                      <p className="font-semibold text-[#063a64]">{seatLabel}</p>
+                      <p className="mt-1 text-sm text-slate-500">{getNodeType(reservation.seat.seatType)} - Floor {reservation.seat.floor}</p>
                     </div>
                     <div className="flex items-center justify-between gap-4 sm:justify-end">
                       <span className={`font-mono text-lg font-bold ${isExpired ? 'text-gray-400' : isUrgent ? 'text-red-600' : 'text-blue-700'}`}>
@@ -204,16 +208,16 @@ export default function FrontDeskView() {
                   </div>
 
                   {isReviewing && (
-                    <div className="border-t border-slate-200 bg-[#f7f9fb] px-5 py-5">
+                    <div className="border-t border-slate-200 bg-[#f5f9fc] px-5 py-5">
                       <h3 className="text-sm font-semibold text-slate-950">Required verification</h3>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
-                          <QrCode size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#073b66]" />
+                        <label className="flex cursor-pointer items-start gap-3 rounded-[8px] border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 shadow-[0_8px_18px_rgba(14,35,56,0.05)]">
+                          <QrCode size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
                           <input type="checkbox" checked={receiptConfirmed} onChange={(event) => setReceiptConfirmed(event.target.checked)} className="mt-1 h-4 w-4" />
                           <span>QR receipt matches this reservation.</span>
                         </label>
-                        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
-                          <IdentificationCard size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#073b66]" />
+                        <label className="flex cursor-pointer items-start gap-3 rounded-[8px] border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 shadow-[0_8px_18px_rgba(14,35,56,0.05)]">
+                          <IdentificationCard size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
                           <input type="checkbox" checked={identityConfirmed} onChange={(event) => setIdentityConfirmed(event.target.checked)} className="mt-1 h-4 w-4" />
                           <span>Name and ID ending in {reservation.user.adduIdLast4 || 'N/A'} match.</span>
                         </label>
@@ -226,7 +230,7 @@ export default function FrontDeskView() {
                             value={reason}
                             onChange={(event) => setReason(event.target.value)}
                             placeholder="Reason for rejection"
-                            className="min-h-10 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                            className="min-h-10 min-w-0 flex-1 rounded-[8px] border border-slate-300 bg-white px-3 py-2 text-sm"
                           />
                           <button type="button" onClick={() => setRejecting(false)} className="ui-button-secondary">Cancel</button>
                           <button type="button" onClick={() => handleReject(reservation.reservationId)} disabled={!reason.trim()} className="ui-button-danger bg-red-700 text-white hover:bg-red-800">Reject reservation</button>
@@ -238,7 +242,7 @@ export default function FrontDeskView() {
                             type="button"
                             onClick={() => handleApprove(reservation.reservationId)}
                             disabled={!identityConfirmed || !receiptConfirmed}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45"
+                            className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[8px] bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(4,120,87,0.18)] hover:-translate-y-0.5 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0"
                           >
                             <CheckCircle size={18} weight="bold" />
                             Approve entry

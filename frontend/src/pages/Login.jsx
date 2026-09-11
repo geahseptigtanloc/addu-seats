@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Buildings, ShieldCheck, Student } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowRight, Buildings, MapTrifold, ShieldCheck, Student } from '@phosphor-icons/react';
 import { getGoogleAuthUrl } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -30,21 +30,22 @@ export default function Login() {
   const authError = searchParams.get('error');
 
   return (
-    <main className="min-h-screen bg-[#f2f5f7] p-4 sm:p-6 lg:grid lg:place-items-center">
-      <section className="mx-auto grid min-h-[620px] w-full max-w-5xl overflow-hidden rounded-md border border-slate-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.12)] lg:grid-cols-[0.82fr_1.18fr]">
-        <div className="flex flex-col justify-between bg-[#062f52] p-7 text-white sm:p-10">
+    <main className="app-shell min-h-[100dvh] p-4 sm:p-6 lg:grid lg:place-items-center">
+      <section className="mx-auto grid min-h-[640px] w-full max-w-6xl overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(6,42,72,0.18)] lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="flex flex-col justify-between bg-[linear-gradient(145deg,#032946_0%,#063a64_60%,#0b4d7a_100%)] p-7 text-white sm:p-10">
           <div>
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-md bg-white text-lg font-bold text-[#073b66]">A</span>
-              <span><span className="block font-semibold">AdDU Seats</span><span className="block text-xs text-slate-300">University Libraries</span></span>
+              <span className="grid h-10 w-10 place-items-center rounded-[8px] bg-white text-lg font-bold text-[#063a64] shadow-[0_10px_24px_rgba(3,41,70,0.24)]">A</span>
+              <span><span className="block font-semibold">AdDU Seats</span><span className="block text-xs text-blue-100/70">University Libraries</span></span>
             </div>
-            <div className="mt-14 hidden lg:block">
-              <Buildings size={34} weight="duotone" className="text-amber-300" />
-              <h1 className="mt-5 max-w-xs text-3xl font-semibold leading-tight">Study-space access for the AdDU community.</h1>
-              <p className="mt-4 max-w-sm text-sm leading-7 text-slate-300">Reserve a mapped library node, verify at the front desk, and manage your active session.</p>
+            <div className="mt-12 hidden lg:block">
+              <Buildings size={34} weight="duotone" className="text-amber-200" />
+              <h1 className="mt-5 max-w-sm text-4xl font-semibold leading-tight">Library access with a clear front-desk handoff.</h1>
+              <p className="mt-4 max-w-sm text-sm leading-7 text-blue-100/78">Reserve a mapped node, present your QR receipt, and manage the session from one workspace.</p>
+              <LibraryPreview />
             </div>
           </div>
-          <button type="button" onClick={() => navigate('/')} className="mt-8 inline-flex self-start items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white">
+          <button type="button" onClick={() => navigate('/')} className="mt-8 inline-flex self-start items-center gap-2 text-sm font-semibold text-blue-100/80 hover:text-white">
             <ArrowLeft size={17} weight="bold" />
             Browse floor maps
           </button>
@@ -52,18 +53,18 @@ export default function Login() {
 
         <div className="flex items-center p-6 sm:p-10 lg:p-12">
           <div className="w-full">
-            <p className="text-sm font-semibold text-[#073b66]">Access workspace</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-950">Choose an account</h2>
+            <p className="ui-kicker"><MapTrifold size={18} weight="duotone" />Access workspace</p>
+            <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950">Choose an account</h2>
             <p className="ui-muted mt-2">Use a sample role now or continue with your university Google account.</p>
 
-            {authError && <p className="mt-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">Sign-in failed. Please try again.</p>}
+            {authError && <p className="ui-alert-danger mt-5">Sign-in failed. Please try again.</p>}
 
             <div className="mt-7 space-y-3">
               <DemoButton role="student" label="Student workspace" description="Reserve seats and manage study sessions" icon={Student} loading={demoLoading} onClick={handleDemoSignIn} />
               <DemoButton role="admin" label="Administrator workspace" description="Monitor floors and verify student entry" icon={ShieldCheck} loading={demoLoading} onClick={handleDemoSignIn} />
             </div>
 
-            <div className="my-7 flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" /><span>UNIVERSITY ACCOUNT</span><span className="h-px flex-1 bg-slate-200" /></div>
+            <div className="my-7 flex items-center gap-3 text-xs font-semibold uppercase text-slate-400"><span className="h-px flex-1 bg-slate-200" /><span>University account</span><span className="h-px flex-1 bg-slate-200" /></div>
 
             <button type="button" onClick={() => { window.location.href = getGoogleAuthUrl(); }} className="ui-button-secondary w-full">
               <GoogleIcon />
@@ -78,11 +79,36 @@ export default function Login() {
 
 function DemoButton({ role, label, description, icon: Icon, loading, onClick }) {
   return (
-    <button type="button" onClick={() => onClick(role)} disabled={Boolean(loading)} className="group flex min-h-20 w-full items-center gap-4 rounded-md border border-slate-200 bg-white p-4 text-left hover:border-blue-300 hover:bg-blue-50/40 disabled:opacity-50">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-100 text-[#073b66] group-hover:bg-blue-100"><Icon size={23} weight="duotone" /></span>
+    <button type="button" onClick={() => onClick(role)} disabled={Boolean(loading)} className="group flex min-h-20 w-full items-center gap-4 rounded-[8px] border border-slate-200 bg-white p-4 text-left shadow-[0_12px_30px_rgba(14,35,56,0.06)] hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/50 disabled:opacity-50 disabled:hover:translate-y-0">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] bg-[#e6f0f7] text-[#063a64] group-hover:bg-blue-100"><Icon size={23} weight="duotone" /></span>
       <span className="min-w-0 flex-1"><span className="block font-semibold text-slate-950">{loading === role ? 'Opening workspace...' : label}</span><span className="mt-1 block text-xs text-slate-500">{description}</span></span>
-      <ArrowRight size={19} weight="bold" className="shrink-0 text-slate-400 group-hover:translate-x-1 group-hover:text-[#073b66]" />
+      <ArrowRight size={19} weight="bold" className="shrink-0 text-slate-400 group-hover:translate-x-1 group-hover:text-[#063a64]" />
     </button>
+  );
+}
+
+function LibraryPreview() {
+  return (
+    <div className="mt-8 overflow-hidden rounded-[8px] border border-white/14 bg-white/10 p-4 shadow-[0_18px_44px_rgba(3,41,70,0.24)]">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">Gisbert Floor 2</p>
+          <p className="mt-1 text-xs text-blue-100/65">130 mapped nodes</p>
+        </div>
+        <span className="rounded-[8px] bg-amber-200 px-3 py-1 text-xs font-semibold text-[#3d2d04]">Live map</span>
+      </div>
+      <div className="mt-4 grid grid-cols-[0.7fr_1fr] gap-3">
+        <span className="h-28 rounded-[8px] border border-white/14 bg-white/12" />
+        <span className="grid h-28 grid-cols-3 gap-2 rounded-[8px] border border-white/14 bg-white/12 p-3">
+          <span className="rounded-[6px] bg-emerald-300/80" />
+          <span className="rounded-[6px] bg-emerald-300/80" />
+          <span className="rounded-[6px] bg-amber-200/90" />
+          <span className="rounded-[6px] bg-white/45" />
+          <span className="rounded-[6px] bg-red-300/80" />
+          <span className="rounded-[6px] bg-emerald-300/80" />
+        </span>
+      </div>
+    </div>
   );
 }
 

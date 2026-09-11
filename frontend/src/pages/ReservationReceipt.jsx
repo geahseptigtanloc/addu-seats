@@ -177,9 +177,11 @@ export default function ReservationReceipt() {
   if (!reservation) {
     return (
       <Layout>
-        <div className="py-16 text-center">
-          <h1 className="text-xl font-bold text-gray-900">No reservation found</h1>
-          <Link to="/" className="mt-4 inline-block font-semibold text-blue-700 hover:underline">Return to seat maps</Link>
+        <div className="mx-auto max-w-xl py-16">
+          <div className="ui-panel p-8 text-center">
+            <h1 className="text-xl font-bold text-slate-950">No reservation found</h1>
+            <Link to="/" className="ui-button-primary mt-5">Return to seat maps</Link>
+          </div>
         </div>
       </Layout>
     );
@@ -204,30 +206,30 @@ export default function ReservationReceipt() {
   return (
     <Layout>
       <section className="mx-auto max-w-4xl">
-        <div className="flex flex-col justify-between gap-4 border-b border-gray-200 pb-5 sm:flex-row sm:items-end">
+        <div className="ui-surface-band flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-end">
           <div>
-            <p className="text-sm font-semibold text-blue-700">Student reservation</p>
+            <p className="ui-kicker">Student reservation</p>
             <h1 className="mt-1 text-2xl font-bold text-gray-900">
               {status === 'pending_entry' ? 'Front-desk verification needed' : status === 'active' ? 'Study session active' : status === 'on_break' ? 'Break in progress' : 'Reservation update'}
             </h1>
           </div>
-          <Link to={`/map/${seat.building || 'gisbert'}/${seat.floor || 1}`} className="inline-flex self-start items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">
+          <Link to={`/map/${seat.building || 'gisbert'}/${seat.floor || 1}`} className="inline-flex self-start items-center gap-2 text-sm font-semibold text-[#063a64] hover:underline">
             <ArrowLeft size={16} weight="bold" />
             Floor map
           </Link>
         </div>
 
         {isDemo && (
-          <div className="mt-5 border-l-4 border-blue-500 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <div className="ui-alert-info mt-5">
             Sample reservation: this record is saved only in this browser.
           </div>
         )}
 
         {flagged && (
-          <div className="mt-5 border-l-4 border-red-600 bg-red-50 p-4">
+          <div className="ui-alert-danger mt-5">
             <h2 className="font-semibold text-red-900">Your node was reported vacant</h2>
             <p className="mt-1 text-sm text-red-800">{flagMessage}</p>
-            <button type="button" onClick={handleResolveFlag} disabled={busyAction === 'resolve_flag'} className="mt-3 rounded bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+            <button type="button" onClick={handleResolveFlag} disabled={busyAction === 'resolve_flag'} className="mt-3 rounded-[8px] bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
               Confirm presence
             </button>
           </div>
@@ -235,7 +237,7 @@ export default function ReservationReceipt() {
 
         <div className="grid gap-6 py-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-5">
-            <section className="rounded-md border border-gray-200 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
+            <section className="ui-panel p-5">
               <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
                 <Detail label="Reservation node" value={nodeLabel} emphasis />
                 <Detail label="Node type" value={getNodeType(seat.seatType)} />
@@ -247,7 +249,7 @@ export default function ReservationReceipt() {
             </section>
 
             {status === 'pending_entry' && (
-              <section className="rounded-md border border-amber-200 bg-amber-50 p-5">
+              <section className="rounded-[8px] border border-amber-200 bg-amber-50 p-5 shadow-[0_16px_44px_rgba(180,83,9,0.1)]">
                 <p className="text-sm font-semibold text-amber-900">Present your receipt now</p>
                 <p className="mt-2 text-sm text-amber-800">Show this QR code and your university ID at the front desk before the timer reaches zero.</p>
                 <div className="mt-5 flex items-end justify-between gap-4 border-t border-amber-200 pt-4">
@@ -255,7 +257,7 @@ export default function ReservationReceipt() {
                     <p className="text-xs font-semibold uppercase text-amber-800">Time remaining</p>
                     <p className="mt-1 font-mono text-4xl font-bold text-amber-950">{formatTime(entrySeconds)}</p>
                   </div>
-                  <button type="button" onClick={handleCancel} disabled={Boolean(busyAction)} className="rounded px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
+                  <button type="button" onClick={handleCancel} disabled={Boolean(busyAction)} className="rounded-[8px] px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
                     {busyAction === 'cancel' ? 'Cancelling...' : 'Cancel reservation'}
                   </button>
                 </div>
@@ -263,7 +265,7 @@ export default function ReservationReceipt() {
             )}
 
             {status === 'active' && (
-              <section className="overflow-hidden rounded-md border border-green-200 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
+              <section className="overflow-hidden rounded-[8px] border border-green-200 bg-white shadow-[0_18px_48px_rgba(14,35,56,0.08)]">
                 <div className="flex items-start gap-3 border-b border-green-100 bg-green-50 p-5">
                   <CheckCircle size={26} weight="fill" className="shrink-0 text-green-700" />
                   <div>
@@ -286,7 +288,7 @@ export default function ReservationReceipt() {
                 ) : (
                   <div className="p-5">
                     <div className="flex items-start gap-3">
-                      <Coffee size={22} weight="duotone" className="mt-0.5 shrink-0 text-blue-800" />
+                      <Coffee size={22} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
                       <div>
                         <p className="font-semibold text-gray-950">Need to step away?</p>
                         <p className="mt-1 text-sm leading-relaxed text-gray-600">Begin with five minutes. You can add two five-minute extensions, up to 15 minutes total.</p>
@@ -296,7 +298,7 @@ export default function ReservationReceipt() {
                       type="button"
                       onClick={() => setShowBreakDialog(true)}
                       disabled={Boolean(busyAction)}
-                      className="mt-5 inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-md bg-blue-800 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-900 active:translate-y-px disabled:opacity-50 sm:w-auto"
+                      className="ui-button-primary mt-5 w-full py-3 sm:w-auto"
                     >
                       <Coffee size={18} weight="bold" />
                       Start a five-minute break
@@ -314,7 +316,7 @@ export default function ReservationReceipt() {
             )}
 
             {status === 'on_break' && (
-              <section className={`overflow-hidden rounded-md border shadow-[0_18px_45px_rgba(15,23,42,0.12)] ${breakIsUrgent ? 'border-red-300' : 'border-blue-900'}`}>
+              <section className={`overflow-hidden rounded-[8px] border shadow-[0_22px_64px_rgba(14,35,56,0.16)] ${breakIsUrgent ? 'border-red-300' : 'border-blue-900'}`}>
                 <div className={`${breakIsUrgent ? 'bg-red-950' : 'bg-[#082f55]'} p-5 text-white transition-colors`}>
                   <div className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:gap-4">
                     <div>
@@ -345,7 +347,7 @@ export default function ReservationReceipt() {
                       type="button"
                       onClick={() => performAction('extend_break', `/api/reservations/${reservation.reservationId}/extend-break`)}
                       disabled={Boolean(busyAction) || allocatedBreakMinutes >= 15}
-                      className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900 transition hover:bg-blue-100 active:translate-y-px disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                      className="inline-flex items-center gap-2 whitespace-nowrap rounded-[8px] border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900 transition hover:bg-blue-100 active:translate-y-px disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
                     >
                       <Plus size={17} weight="bold" />
                       Add five minutes
@@ -367,21 +369,21 @@ export default function ReservationReceipt() {
             )}
 
             {['expired', 'cancelled', 'completed'].includes(status) && (
-              <section className="rounded-md border border-gray-200 bg-white p-5">
+              <section className="ui-panel p-5">
                 <p className="font-semibold text-gray-900">
                   {status === 'expired' ? 'Reservation expired' : status === 'cancelled' ? 'Reservation cancelled' : 'Session completed'}
                 </p>
                 <p className="mt-2 text-sm text-gray-500">The reservation node is available for another student.</p>
-                <Link to="/" className="mt-4 inline-block rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">Find another node</Link>
+                <Link to="/" className="ui-button-primary mt-4">Find another node</Link>
               </section>
             )}
           </div>
 
-          <aside className="self-start rounded-md border border-gray-200 bg-white p-5 text-center shadow-[0_12px_30px_rgba(15,23,42,0.06)]">
+          <aside className="ui-panel self-start p-5 text-center">
             {status === 'pending_entry' && verificationUrl ? (
               <>
                 <p className="text-sm font-semibold text-gray-900">Front-desk QR receipt</p>
-                <div className="mx-auto mt-4 w-fit border border-gray-200 bg-white p-3">
+                <div className="mx-auto mt-4 w-fit rounded-[8px] border border-gray-200 bg-white p-3 shadow-[0_10px_28px_rgba(14,35,56,0.08)]">
                   <QRCodeSVG value={verificationUrl} size={220} />
                 </div>
                 <p className="mt-3 text-xs text-gray-500">Reference {reservation.reservationId.slice(-8).toUpperCase()}</p>
@@ -392,11 +394,11 @@ export default function ReservationReceipt() {
                   <QrCode size={19} weight="bold" />
                   Sample node QR
                 </div>
-                <div className="mx-auto mt-4 w-fit border border-gray-200 bg-white p-3">
+                <div className="mx-auto mt-4 w-fit rounded-[8px] border border-gray-200 bg-white p-3 shadow-[0_10px_28px_rgba(14,35,56,0.08)]">
                   <QRCodeSVG value={sampleSeatQrUrl} size={220} />
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-gray-500">In the library, this code is attached to {nodeLabel}.</p>
-                <Link to={`/seat-return/${encodeURIComponent(seat.seatId || '')}`} className="mt-4 inline-flex items-center gap-2 rounded-md bg-green-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800 active:translate-y-px">
+                <Link to={`/seat-return/${encodeURIComponent(seat.seatId || '')}`} className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-green-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800 active:translate-y-px">
                   <QrCode size={18} weight="bold" />
                   Open sample scan
                 </Link>
@@ -439,10 +441,10 @@ function BreakStartDialog({ nodeLabel, busy, onClose, onConfirm }) {
     <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/55 p-0 sm:place-items-center sm:p-5" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <div className="w-full rounded-t-md bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] sm:max-w-lg sm:rounded-md" role="dialog" aria-modal="true" aria-labelledby="break-dialog-title">
+      <div className="w-full rounded-t-[8px] bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] sm:max-w-lg sm:rounded-[8px]" role="dialog" aria-modal="true" aria-labelledby="break-dialog-title">
         <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
           <div className="flex items-start gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-blue-100 text-blue-900">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-blue-100 text-blue-900">
               <Coffee size={22} weight="duotone" />
             </div>
             <div>
@@ -450,7 +452,7 @@ function BreakStartDialog({ nodeLabel, busy, onClose, onConfirm }) {
               <p className="mt-1 text-sm text-gray-500">Your reservation at {nodeLabel} stays protected.</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close break confirmation" className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900">
+          <button type="button" onClick={onClose} aria-label="Close break confirmation" className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] text-gray-500 hover:bg-gray-100 hover:text-gray-900">
             <X size={19} weight="bold" />
           </button>
         </div>
@@ -463,8 +465,8 @@ function BreakStartDialog({ nodeLabel, busy, onClose, onConfirm }) {
           </div>
 
           <div className="mt-6 flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} disabled={busy} className="rounded-md px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-50">Stay checked in</button>
-            <button type="button" onClick={onConfirm} disabled={busy} className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-blue-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-900 active:translate-y-px disabled:opacity-50">
+            <button type="button" onClick={onClose} disabled={busy} className="rounded-[8px] px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-100 disabled:opacity-50">Stay checked in</button>
+            <button type="button" onClick={onConfirm} disabled={busy} className="ui-button-primary">
               <Coffee size={18} weight="bold" />
               {busy ? 'Starting break...' : 'Start break now'}
             </button>

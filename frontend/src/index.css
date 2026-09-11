@@ -5,13 +5,19 @@
 @layer base {
   :root {
     color-scheme: light;
-    --canvas: #f2f5f7;
-    --surface: #fcfdff;
-    --ink: #172230;
-    --muted: #667281;
-    --line: #d8dfe7;
-    --brand: #073b66;
-    --brand-strong: #052e50;
+    --canvas: #eef3f7;
+    --surface: #fbfdff;
+    --surface-raised: #ffffff;
+    --ink: #132235;
+    --muted: #647386;
+    --line: #d7e1ea;
+    --brand: #063a64;
+    --brand-strong: #032946;
+    --brand-soft: #e6f0f7;
+    --accent: #c49a22;
+    --accent-soft: #fff7df;
+    --shadow-panel: 0 18px 48px rgb(14 35 56 / 8%);
+    --shadow-lift: 0 22px 70px rgb(6 42 72 / 16%);
   }
 
   * {
@@ -20,14 +26,16 @@
 
   html {
     background: var(--canvas);
+    scroll-behavior: smooth;
   }
 
   body {
     min-width: 320px;
     @apply antialiased;
-    background: var(--canvas);
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.72) 0%, rgb(238 243 247 / 0.9) 36%, var(--canvas) 100%);
     color: var(--ink);
-    font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+    font-family: "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
     letter-spacing: 0;
   }
 
@@ -42,7 +50,7 @@
 
   button:active:not(:disabled),
   a:active {
-    transform: translateY(1px);
+    transform: translateY(1px) scale(0.99);
   }
 
   button:focus-visible,
@@ -50,38 +58,43 @@
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible {
-    outline: 3px solid rgb(37 99 235 / 28%);
+    outline: 3px solid rgb(6 58 100 / 24%);
     outline-offset: 2px;
   }
 }
 
 @layer components {
+  .app-shell {
+    background:
+      linear-gradient(135deg, rgb(255 255 255 / 0.8), rgb(232 241 247 / 0.86) 44%, rgb(238 243 247 / 0.95));
+  }
+
   .ui-panel {
-    @apply rounded-md border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)];
+    @apply rounded-[8px] border border-slate-200/80 bg-white shadow-[0_18px_48px_rgba(14,35,56,0.08)];
   }
 
   .ui-button-primary {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-[#073b66] px-4 py-2 text-sm font-semibold text-white hover:bg-[#052e50] disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[8px] bg-[#063a64] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(6,58,100,0.18)] hover:-translate-y-0.5 hover:bg-[#032946] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0;
   }
 
   .ui-button-secondary {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[8px] border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_8px_18px_rgba(14,35,56,0.06)] hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0;
   }
 
   .ui-button-danger {
-    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[8px] border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:-translate-y-0.5 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0;
   }
 
   .ui-icon-button {
-    @apply grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40;
+    @apply grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-slate-300 bg-white text-slate-700 shadow-[0_8px_18px_rgba(14,35,56,0.06)] hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:translate-y-0;
   }
 
   .ui-page-title {
-    @apply text-2xl font-semibold text-slate-950 sm:text-[28px];
+    @apply text-3xl font-semibold leading-tight text-slate-950 sm:text-[34px];
   }
 
   .ui-section-title {
-    @apply text-base font-semibold text-slate-950;
+    @apply text-lg font-semibold text-slate-950;
   }
 
   .ui-muted {
@@ -92,6 +105,57 @@
     @apply text-xs font-semibold uppercase text-slate-500;
   }
 
+  .ui-kicker {
+    @apply inline-flex items-center gap-2 text-sm font-semibold text-[#8a6b11];
+  }
+
+  .ui-alert-info {
+    @apply rounded-[8px] border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-950 shadow-[0_10px_24px_rgba(37,99,235,0.08)];
+  }
+
+  .ui-alert-warning {
+    @apply rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 shadow-[0_10px_24px_rgba(180,83,9,0.08)];
+  }
+
+  .ui-alert-danger {
+    @apply rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800 shadow-[0_10px_24px_rgba(185,28,28,0.08)];
+  }
+
+  .ui-surface-band {
+    @apply rounded-[8px] border border-slate-200/80 bg-white/90 shadow-[0_18px_48px_rgba(14,35,56,0.08)];
+  }
+
+  .ui-soft-panel {
+    @apply rounded-[8px] border border-slate-200 bg-[#f8fbfd];
+  }
+
+  .ui-nav-item {
+    @apply inline-flex min-h-10 items-center gap-2 rounded-[8px] px-3 text-sm font-semibold text-blue-100/85 hover:bg-white/10 hover:text-white;
+  }
+
+  .ui-nav-item-active {
+    @apply bg-white text-[#063a64] shadow-[0_10px_26px_rgba(3,41,70,0.22)] hover:bg-white hover:text-[#063a64];
+  }
+
+  .floor-card {
+    @apply rounded-[8px] border border-slate-200/90 bg-white text-left shadow-[0_14px_36px_rgba(14,35,56,0.08)] transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-[0_24px_60px_rgba(6,58,100,0.14)];
+  }
+
+  .map-paper {
+    @apply rounded-[8px] border border-slate-300 bg-[#fbfdff] shadow-[0_20px_56px_rgba(14,35,56,0.16)];
+  }
+
+  .loading-skeleton {
+    background: linear-gradient(90deg, #e8eef4 25%, #f6f9fc 38%, #e8eef4 63%);
+    background-size: 400% 100%;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .loading-skeleton {
+      animation: skeleton-shimmer 1.4s ease infinite;
+    }
+  }
+
   .seat-marker .seat-focus-ring {
     opacity: 0;
     transition: opacity 120ms ease;
@@ -100,6 +164,16 @@
   .seat-marker:hover .seat-focus-ring,
   .seat-marker:focus .seat-focus-ring {
     opacity: 1;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: 0 0;
   }
 }
 

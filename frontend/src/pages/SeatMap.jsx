@@ -29,19 +29,30 @@ const STATUS_LABELS = {
   disabled: 'Disabled',
 };
 
+const MAP_THEME = {
+  wall: '#1d3145',
+  text: '#203347',
+  room: '#fbfdff',
+  shelf: '#dae5ed',
+  desk: '#fffaf0',
+  couch: '#edf3f7',
+  curve: '#6f7f90',
+  quiet: '#e8f1f8',
+};
+
 function getSeatColor(status) {
   switch (status) {
     case 'available':
-      return '#059669';
+      return '#047857';
     case 'occupied':
-      return '#dc2626';
+      return '#b42318';
     case 'pending':
     case 'pending_entry':
-      return '#d97706';
+      return '#b7791f';
     case 'on_break':
-      return '#2563eb';
+      return '#256d9c';
     default:
-      return '#9ca3af';
+      return '#8b98a8';
   }
 }
 
@@ -105,7 +116,7 @@ function FeatureText({ x, y, text, fontSize = 13, vertical = false, anchor = 'mi
       transform={vertical ? `rotate(-90 ${x} ${y})` : undefined}
       fontSize={fontSize}
       fontWeight="500"
-      fill="#111827"
+      fill={MAP_THEME.text}
       pointerEvents="none"
     >
       {lines.map((line, index) => (
@@ -129,8 +140,8 @@ function LayoutFeature({ feature, hatchId }) {
             y={feature.y}
             width={feature.width}
             height={feature.height}
-            fill="#ffffff"
-            stroke="#111827"
+            fill={MAP_THEME.room}
+            stroke={MAP_THEME.wall}
             strokeWidth="1.5"
           />
           <FeatureText
@@ -153,8 +164,8 @@ function LayoutFeature({ feature, hatchId }) {
             y={feature.y}
             width={feature.width}
             height={feature.height}
-            fill="#e5e7eb"
-            stroke="#374151"
+            fill={MAP_THEME.shelf}
+            stroke={MAP_THEME.text}
             strokeWidth="1.2"
           />
           <rect
@@ -183,8 +194,8 @@ function LayoutFeature({ feature, hatchId }) {
           width={feature.width}
           height={feature.height}
           rx="3"
-          fill="#f8fafc"
-          stroke="#111827"
+          fill={MAP_THEME.desk}
+          stroke={MAP_THEME.wall}
           strokeWidth="1.5"
         />
       );
@@ -194,8 +205,8 @@ function LayoutFeature({ feature, hatchId }) {
           cx={feature.cx}
           cy={feature.cy}
           r={feature.radius}
-          fill="#f8fafc"
-          stroke="#111827"
+          fill={MAP_THEME.desk}
+          stroke={MAP_THEME.wall}
           strokeWidth="1.5"
         />
       );
@@ -208,8 +219,8 @@ function LayoutFeature({ feature, hatchId }) {
           <g>
             <path
               d={`M${feature.x} ${centerY} C${feature.x + 20} ${feature.y - 8}, ${feature.x + feature.width - 20} ${feature.y - 8}, ${feature.x + feature.width} ${centerY} C${feature.x + feature.width - 20} ${feature.y + feature.height + 8}, ${feature.x + 20} ${feature.y + feature.height + 8}, ${feature.x} ${centerY}`}
-              fill="#f3f4f6"
-              stroke="#111827"
+              fill={MAP_THEME.couch}
+              stroke={MAP_THEME.wall}
               strokeWidth="1.5"
             />
             <FeatureText x={centerX} y={centerY} text={feature.label} fontSize={feature.fontSize} />
@@ -225,8 +236,8 @@ function LayoutFeature({ feature, hatchId }) {
             width={feature.width}
             height={feature.height}
             rx="5"
-            fill="#f3f4f6"
-            stroke="#111827"
+            fill={MAP_THEME.couch}
+            stroke={MAP_THEME.wall}
             strokeWidth="1.5"
           />
           <FeatureText
@@ -244,7 +255,7 @@ function LayoutFeature({ feature, hatchId }) {
         <path
           d={feature.d}
           fill="none"
-          stroke="#6b7280"
+          stroke={MAP_THEME.curve}
           strokeWidth={feature.strokeWidth || 2}
           strokeLinecap="round"
         />
@@ -258,7 +269,7 @@ function LayoutFeature({ feature, hatchId }) {
             width={feature.width}
             height={feature.height}
             fill={`url(#${hatchId})`}
-            opacity="0.4"
+            opacity="0.32"
           />
           <FeatureText
             x={feature.x + feature.width / 2}
@@ -311,7 +322,7 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
     >
       <title>{`${nodeLabel} - ${statusLabel}`}</title>
       <rect x="-8" y="-8" width="16" height="16" fill="transparent" />
-      <circle className="seat-focus-ring" cx="0" cy="0" r="8" fill="none" stroke="#1d4ed8" strokeWidth="1.25" />
+      <circle className="seat-focus-ring" cx="0" cy="0" r="8.8" fill="none" stroke="#063a64" strokeWidth="1.5" />
       {seat.seatType === 'table_node' ? (
         <g pointerEvents="none">
           <circle cx="0" cy="0" r="7" fill="#ffffff" />
@@ -511,13 +522,13 @@ export default function SeatMap() {
 
   return (
     <Layout>
-      <section className="mb-5 flex flex-col justify-between gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end">
+      <section className="ui-surface-band mb-5 flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-end">
         <div>
-          <button type="button" onClick={() => navigate('/')} className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#073b66] hover:text-[#052e50]">
+          <button type="button" onClick={() => navigate('/')} className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#063a64] hover:text-[#032946]">
             <ArrowLeft size={17} weight="bold" />
             All floors
           </button>
-          <h1 className="ui-page-title">{buildingName} · Floor {floor}</h1>
+          <h1 className="ui-page-title">{buildingName} - Floor {floor}</h1>
           <p className="ui-muted mt-2">Select an available node to begin a reservation.</p>
         </div>
         {activeReservation && (
@@ -529,23 +540,23 @@ export default function SeatMap() {
       </section>
 
       <section className="ui-panel overflow-hidden">
-        <div className="flex flex-col gap-4 border-b border-slate-200 bg-white px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-4 border-b border-slate-200 bg-white/95 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 lg:pb-0" aria-label="Choose floor">
-            <span className="mr-1 shrink-0 text-xs font-semibold text-slate-500">FLOOR</span>
+            <span className="mr-1 shrink-0 text-xs font-semibold uppercase text-slate-500">Floor</span>
             {[1, 2, 3, 4].map((floorNumber) => (
               <button
                 key={floorNumber}
                 type="button"
                 onClick={() => navigate(`/map/${building}/${floorNumber}`)}
                 aria-current={Number(floor) === floorNumber ? 'page' : undefined}
-                className={`grid h-10 w-10 shrink-0 place-items-center rounded-md border text-sm font-semibold ${Number(floor) === floorNumber ? 'border-[#073b66] bg-[#073b66] text-white' : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'}`}
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border text-sm font-semibold ${Number(floor) === floorNumber ? 'border-[#063a64] bg-[#063a64] text-white shadow-[0_10px_24px_rgba(6,58,100,0.18)]' : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'}`}
               >
                 {floorNumber}
               </button>
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-600">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-600">
             <StatusKey color="bg-emerald-600" label="Available" value={availableCount} />
             <StatusKey color="bg-amber-600" label="Pending" value={pendingCount} />
             <StatusKey color="bg-red-600" label="Occupied" value={occupiedCount} />
@@ -560,7 +571,7 @@ export default function SeatMap() {
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-[#f7f9fb] px-4 py-3">
+        <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-[#f5f9fc] px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">{layout.name}</p>
             <p className="mt-0.5 text-xs text-slate-500">{availableCount} of {sortedSeats.length} nodes available</p>
@@ -573,19 +584,33 @@ export default function SeatMap() {
         </div>
 
         {loading ? (
-          <div className="grid min-h-[480px] place-items-center bg-slate-100 text-sm font-medium text-slate-500">Loading floor map...</div>
+          <div className="min-h-[480px] bg-[#e2ebf2] p-5">
+            <div className="mx-auto max-w-5xl rounded-[8px] border border-slate-300 bg-white p-4 shadow-[0_20px_56px_rgba(14,35,56,0.12)]">
+              <div className="loading-skeleton h-8 w-52 rounded-[6px]" />
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="loading-skeleton h-44 rounded-[8px]" />
+                <div className="loading-skeleton h-44 rounded-[8px] sm:col-span-2" />
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                <div className="loading-skeleton h-24 rounded-[8px]" />
+                <div className="loading-skeleton h-24 rounded-[8px]" />
+                <div className="loading-skeleton h-24 rounded-[8px]" />
+                <div className="loading-skeleton h-24 rounded-[8px]" />
+              </div>
+            </div>
+          </div>
         ) : error ? (
-          <div className="m-4 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+          <div className="ui-alert-danger m-4">{error}</div>
         ) : (
-          <div className="max-h-[72vh] min-h-[440px] overflow-auto bg-slate-200 p-3 sm:p-5">
+          <div className="max-h-[72vh] min-h-[440px] overflow-auto bg-[#dfe8ef] p-3 sm:p-5">
             <div className="mx-auto origin-top" style={{ width: `${zoom * 100}%`, minWidth: zoom >= 1 ? '680px' : '560px' }}>
-              <svg viewBox={`0 0 ${layout.width} ${layout.height}`} className="block h-auto w-full bg-white shadow-[0_2px_8px_rgba(15,23,42,0.12)]" role="img" aria-label={layout.name}>
+              <svg viewBox={`0 0 ${layout.width} ${layout.height}`} className="map-paper block h-auto w-full" role="img" aria-label={layout.name}>
                 <defs>
                   <pattern id={hatchId} width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                     <line x1="0" y1="0" x2="0" y2="12" stroke="#9ca3af" strokeWidth="2" />
                   </pattern>
                 </defs>
-                <rect x="10" y="10" width={layout.width - 20} height={layout.height - 20} fill="#ffffff" stroke="#111827" strokeWidth="1.5" />
+                <rect x="10" y="10" width={layout.width - 20} height={layout.height - 20} fill="#fbfdff" stroke="#1d3145" strokeWidth="1.5" />
                 {layout.features.map((feature, index) => <LayoutFeature key={`${feature.type}-${index}`} feature={feature} hatchId={hatchId} />)}
                 {sortedSeats.map((seat, index) => (
                   <SeatMarker
@@ -601,7 +626,7 @@ export default function SeatMap() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-200 bg-white px-4 py-3 text-xs font-medium text-slate-600">
           <StatusKey color="bg-emerald-600" label="Available" />
           <StatusKey color="bg-amber-600" label="Pending" />
           <StatusKey color="bg-red-600" label="Occupied" />
@@ -612,15 +637,15 @@ export default function SeatMap() {
 
       {selectedSeat && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedSeat(null); }}>
-          <div className="w-full max-w-md rounded-t-md bg-white shadow-2xl sm:rounded-md" role="dialog" aria-modal="true" aria-labelledby="seat-dialog-title">
+          <div className="w-full max-w-md rounded-t-[8px] bg-white shadow-[0_28px_90px_rgba(15,23,42,0.34)] sm:rounded-[8px]" role="dialog" aria-modal="true" aria-labelledby="seat-dialog-title">
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-5">
               <div>
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: getSeatColor(selectedSeat.status) }} />
+                  <span className="h-2.5 w-2.5 rounded-[3px]" style={{ backgroundColor: getSeatColor(selectedSeat.status) }} />
                   <span className="text-xs font-semibold uppercase text-slate-500">{getSeatTypeLabel(selectedSeat.seatType)}</span>
                 </div>
                 <h2 id="seat-dialog-title" className="text-xl font-semibold text-slate-950">{selectedSeatLabel}</h2>
-                <p className="mt-1 text-sm text-slate-500">{buildingName} Library · Floor {floor}</p>
+                <p className="mt-1 text-sm text-slate-500">{buildingName} Library - Floor {floor}</p>
               </div>
               <button type="button" onClick={() => setSelectedSeat(null)} className="ui-icon-button border-transparent" aria-label="Close seat details"><X size={20} weight="bold" /></button>
             </div>
@@ -628,9 +653,9 @@ export default function SeatMap() {
             <div className="p-5">
               {canReserve ? (
                 <>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+                  <div className="ui-soft-panel p-4">
                     <div className="flex gap-3">
-                      <Clock size={22} weight="duotone" className="mt-0.5 shrink-0 text-[#073b66]" />
+                      <Clock size={22} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
                       <div>
                         <h3 className="text-sm font-semibold text-slate-950">Five-minute entry window</h3>
                         <p className="mt-1 text-sm leading-6 text-slate-600">After reserving, present the QR receipt and your university ID at the front desk.</p>
@@ -680,7 +705,7 @@ export default function SeatMap() {
 function StatusKey({ color, label, value }) {
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <span className={`h-2.5 w-2.5 rounded-sm ${color}`} />
+      <span className={`h-2.5 w-2.5 rounded-[3px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.38)] ${color}`} />
       <span>{label}{value !== undefined ? ` ${value}` : ''}</span>
     </span>
   );
