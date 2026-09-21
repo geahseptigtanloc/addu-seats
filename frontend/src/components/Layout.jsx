@@ -4,6 +4,7 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { ChartBar, MapTrifold, Monitor, ShieldCheck, SignOut, Ticket, UserCircle } from '@phosphor-icons/react';
 import { apiClient } from '../api/client.js';
+import { normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getDemoReservation } from '../data/demoReservationStore.js';
 
@@ -30,10 +31,11 @@ export default function Layout({ children }) {
 
     try {
       const data = await apiClient('/api/reservations/me/current');
+      const reservation = normalizeReservation(data, { user });
       navigate('/receipt', {
         state: {
-          reservation: data.reservation,
-          qrToken: data.qrToken
+          reservation,
+          qrToken: data.qrToken || reservation?.reservationId,
         }
       });
     } catch (err) {
@@ -119,7 +121,7 @@ export default function Layout({ children }) {
       <footer className="border-t border-slate-200/80 bg-white/70 px-4 py-4 text-xs text-slate-500">
         <div className="mx-auto flex max-w-[1440px] flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <span>Ateneo de Davao University Library Services</span>
-          <span className="font-medium text-slate-600">Gisbert capacity: 591 mapped nodes</span>
+          <span className="font-medium text-slate-600">Mapped plans: Gisbert and Miguel Pro</span>
         </div>
       </footer>
     </div>

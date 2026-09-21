@@ -7,7 +7,6 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
 import SeatMap from './pages/SeatMap.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
-import { useSocket } from './hooks/useSocket.js';
 
 import BuildingFloorSelector from './pages/BuildingFloorSelector.jsx';
 import ReservationReceipt from './pages/ReservationReceipt.jsx';
@@ -16,11 +15,10 @@ import VerifyPage from './pages/VerifyPage.jsx';
 import SeatReturn from './pages/SeatReturn.jsx';
 
 function AppRoutes() {
-  useSocket();
-
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/auth/callback" element={<Login />} />
 
       <Route path="/" element={<BuildingFloorSelector />} />
 

@@ -1,9 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout.jsx';
-import { apiClient, API_URL } from '../api/client.js';
-import { getFloorLayout } from '../data/gisbertFloorLayouts.js';
+import { apiClient, API_URL, getToken } from '../api/client.js';
+import {
+  normalizeReservation,
+  normalizeSeat,
+  normalizeSeatStatus,
+  seatLabelFromQrToken,
+} from '../api/normalizers.js';
+import { getAvailableFloors, getFloorLayout } from '../data/gisbertFloorLayouts.js';
 import { getGisbertPreviewSeats } from '../data/gisbertPreviewSeats.js';
+import {
+  getMiguelProAreaLayout,
+  getMiguelProPreviewSeats,
+  MIGUEL_PRO_AREAS,
+} from '../data/miguelProMap.js';
 import {
   createDemoReservation,
   getDemoReservation,
@@ -11,7 +22,7 @@ import {
 } from '../data/demoReservationStore.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { io } from 'socket.io-client';
-import { ArrowLeft, Check, Clock, Minus, Plus, Ticket, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowSquareOut, Check, Clock, Minus, Plus, Ticket, X } from '@phosphor-icons/react';
 
 const DEFAULT_LAYOUT = {
   name: 'Floor Map',
@@ -88,16 +99,21 @@ function getSeatRotation(seat, features) {
   return outsideX > outsideY ? 90 : 0;
 }
 
-function applyCanonicalPositions(seats, building, floor) {
-  if (building !== 'gisbert') return seats;
-  const canonicalByLabel = new Map(
-    getGisbertPreviewSeats(floor).map((seat) => [seat.label, seat]),
+function getPreviewSeats(building, floor, area) {
+  if (building === 'gisbert') return getGisbertPreviewSeats(floor);
+  if (building === 'miguel_pro') return getMiguelProPreviewSeats(floor, area);
+  return [];
+}
+
+function applyCanonicalPositions(seats, building, floor, area) {
+  const canonicalSeats = getPreviewSeats(building, floor, area);
+  const liveByLabel = new Map(
+    seats.map((seat) => [seat.label || seatLabelFromQrToken(seat.currentQrToken), seat]),
   );
 
-  return seats.map((seat) => {
-    const canonical = canonicalByLabel.get(seat.label);
-    if (!canonical) return seat;
-    return { ...seat, posX: canonical.posX, posY: canonical.posY };
+  return canonicalSeats.map((canonical) => {
+    const live = liveByLabel.get(canonical.label);
+    return live ? normalizeSeat(live, canonical) : canonical;
   });
 }
 
@@ -128,7 +144,7 @@ function FeatureText({ x, y, text, fontSize = 13, vertical = false, anchor = 'mi
   );
 }
 
-function LayoutFeature({ feature, hatchId }) {
+function LayoutFeature({ feature, hatchId, onHubClick, seatStatusByLabel }) {
   switch (feature.type) {
     case 'room': {
       const centerX = feature.x + feature.width / 2;
@@ -198,6 +214,65 @@ function LayoutFeature({ feature, hatchId }) {
           stroke={MAP_THEME.wall}
           strokeWidth="1.5"
         />
+      );
+    case 'chair': {
+      const chairStatus = feature.seatLabel ? seatStatusByLabel?.get(feature.seatLabel) : null;
+      const chairFill = chairStatus ? getSeatColor(chairStatus) : MAP_THEME.room;
+      const inset = chairStatus ? 1.25 : 0;
+      return (
+        <g pointerEvents="none">
+          <rect
+            x={feature.x}
+            y={feature.y}
+            width={feature.width}
+            height={feature.height}
+            rx="1.5"
+            fill="#ffffff"
+            stroke={MAP_THEME.curve}
+            strokeWidth="1.2"
+          />
+          <rect
+            x={feature.x + inset}
+            y={feature.y + inset}
+            width={Math.max(feature.width - inset * 2, 0)}
+            height={Math.max(feature.height - inset * 2, 0)}
+            rx="1"
+            fill={chairFill}
+          />
+        </g>
+      );
+    }
+    case 'collabHub':
+      return (
+        <g
+          role="button"
+          tabIndex={0}
+          aria-label={`${feature.label}. Open booking information.`}
+          className="cursor-pointer outline-none"
+          onClick={() => onHubClick?.(feature)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onHubClick?.(feature);
+            }
+          }}
+        >
+          <rect
+            x={feature.x}
+            y={feature.y}
+            width={feature.width}
+            height={feature.height}
+            rx="4"
+            className="fill-[#eef5fa] stroke-[#063a64] transition-colors hover:fill-[#dbeafe]"
+            strokeWidth="2"
+          />
+          <FeatureText
+            x={feature.x + feature.width / 2}
+            y={feature.y + feature.height / 2}
+            text={feature.label}
+            fontSize={9}
+          />
+        </g>
       );
     case 'roundTable':
       return (
@@ -300,9 +375,13 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
   const nodeLabel = seat.label || `Seat ${index + 1}`;
   const fill = getSeatColor(seat.status);
   const isDisabled = seat.status === 'disabled';
+  const isOnBreak = seat.status === 'on_break';
   const markerClass = isDisabled
     ? 'seat-marker cursor-not-allowed opacity-65'
     : 'seat-marker cursor-pointer';
+  const isTableNode = seat.seatType === 'table_node';
+  const hitWidth = isTableNode ? seat.hitWidth || 38 : 16;
+  const hitHeight = isTableNode ? seat.hitHeight || 38 : 16;
 
   return (
     <g
@@ -321,18 +400,40 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
       className={markerClass}
     >
       <title>{`${nodeLabel} - ${statusLabel}`}</title>
-      <rect x="-8" y="-8" width="16" height="16" fill="transparent" />
-      <circle className="seat-focus-ring" cx="0" cy="0" r="8.8" fill="none" stroke="#063a64" strokeWidth="1.5" />
-      {seat.seatType === 'table_node' ? (
-        <g pointerEvents="none">
-          <circle cx="0" cy="0" r="7" fill="#ffffff" />
-          <circle cx="0" cy="0" r="5.25" fill={fill} />
-          <circle cx="0" cy="0" r="2" fill="#ffffff" opacity="0.32" />
-        </g>
+      <rect x={-hitWidth / 2} y={-hitHeight / 2} width={hitWidth} height={hitHeight} fill="transparent" />
+      {isOnBreak && !isTableNode && (
+        <circle
+          cx="0"
+          cy="0"
+          r="10"
+          fill="#dbeafe"
+          stroke="#256d9c"
+          strokeWidth="1.5"
+          strokeDasharray="2.5 2"
+          pointerEvents="none"
+        />
+      )}
+      {isTableNode ? (
+        <rect
+          className="seat-focus-ring"
+          x={-hitWidth / 2}
+          y={-hitHeight / 2}
+          width={hitWidth}
+          height={hitHeight}
+          rx="4"
+          fill="none"
+          stroke="#063a64"
+          strokeWidth="1.5"
+          strokeDasharray="3 2"
+          pointerEvents="none"
+        />
       ) : (
-        <g transform={`rotate(${rotation})`}>
-          {selectedSeatShape(seat.seatType, fill)}
-        </g>
+        <>
+          <circle className="seat-focus-ring" cx="0" cy="0" r="8.8" fill="none" stroke="#063a64" strokeWidth="1.5" />
+          <g transform={`rotate(${rotation})`}>
+            {selectedSeatShape(seat.seatType, fill)}
+          </g>
+        </>
       )}
     </g>
   );
@@ -361,15 +462,21 @@ function selectedSeatShape(seatType, fill) {
 export default function SeatMap() {
   const { building, floor } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, canUseProtectedApi } = useAuth();
   const [seats, setSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedSeat, setSelectedSeat] = useState(null);
+  const [selectedHub, setSelectedHub] = useState(null);
   const [reserving, setReserving] = useState(false);
   const [activeReservation, setActiveReservation] = useState(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const requestedArea = searchParams.get('area');
+  const miguelProArea = MIGUEL_PRO_AREAS.some((area) => area.id === requestedArea)
+    ? requestedArea
+    : 'main_area';
 
   useEffect(() => {
     const refreshDemoReservation = () => {
@@ -396,7 +503,7 @@ export default function SeatMap() {
 
       try {
         const data = await apiClient('/api/reservations/me/current');
-        setActiveReservation(data.reservation);
+        setActiveReservation(normalizeReservation(data, { user }));
       } catch {
         setActiveReservation(null);
       }
@@ -408,10 +515,12 @@ export default function SeatMap() {
       setLoading(true);
       setError('');
       try {
-        const data = await apiClient(`/api/floors/${building}/${floor}/seats`);
-        setSeats(applyCanonicalPositions(data, building, floor));
+        const query = new URLSearchParams({ building, floor: String(floor) });
+        const data = await apiClient(`/api/seats?${query}`);
+        const hydratedSeats = applyCanonicalPositions(data, building, floor, miguelProArea);
+        setSeats(hydratedSeats.length ? hydratedSeats : getPreviewSeats(building, floor, miguelProArea));
       } catch (err) {
-        const previewSeats = building === 'gisbert' ? getGisbertPreviewSeats(floor) : [];
+        const previewSeats = getPreviewSeats(building, floor, miguelProArea);
         setSeats(previewSeats);
         setError(previewSeats.length ? '' : err.message);
       } finally {
@@ -421,19 +530,22 @@ export default function SeatMap() {
 
     fetchSeats();
 
-    const socketUrl = API_URL.replace('http://', 'ws://').replace('https://', 'wss://');
-    const socket = io(`${socketUrl}/floor/${building}-${floor}`);
+    const token = getToken();
+    const socket = token ? io(API_URL, { auth: { token } }) : null;
 
-    socket.on('seat_status_update', (update) => {
+    socket?.emit('join_floor', { building, floor: Number(floor) });
+    socket?.on('seat_status_update', (update) => {
       setSeats((prev) =>
-        prev.map((s) => s.seatId === update.seatId ? { ...s, status: update.status } : s)
+        prev.map((s) => s.seatId === update.seatId
+          ? { ...s, status: normalizeSeatStatus(update.status) }
+          : s)
       );
     });
 
     return () => {
-      socket.disconnect();
+      socket?.disconnect();
     };
-  }, [building, floor, user, canUseProtectedApi]);
+  }, [building, floor, user, canUseProtectedApi, miguelProArea]);
 
   const handleSeatClick = (seat) => {
     if (seat.status === 'disabled') return;
@@ -448,17 +560,21 @@ export default function SeatMap() {
       const response = canUseProtectedApi
         ? await apiClient('/api/reservations', {
           method: 'POST',
-          body: JSON.stringify({ seatId: selectedSeat.seatId })
+          body: JSON.stringify({ qrToken: selectedSeat.currentQrToken })
         })
         : (() => {
           const reservation = createDemoReservation({ seat: selectedSeat, user });
           return { reservation, qrToken: reservation.qrToken };
         })();
 
+      const reservation = canUseProtectedApi
+        ? normalizeReservation(response, { seat: selectedSeat, user })
+        : response.reservation;
+
       navigate('/receipt', {
         state: {
-          reservation: response.reservation,
-          qrToken: response.qrToken,
+          reservation,
+          qrToken: response.qrToken || reservation.qrToken || reservation.reservationId,
           isDemo: !canUseProtectedApi,
         }
       });
@@ -482,17 +598,20 @@ export default function SeatMap() {
   };
 
   const handleFlagSeat = async (seatId) => {
-    if (!confirm('Are you sure this seat is vacant? This will notify the reservation holder.')) return;
+    if (!confirm('Report this occupied chair as a possible ghost seat? The reservation holder and administrator will be notified.')) return;
     try {
       await apiClient(`/api/seats/${seatId}/flag`, { method: 'POST' });
-      alert('Seat flagged. The holder has been notified.');
+      alert('Ghost seat reported. The holder must re-verify at the physical QR.');
       setSelectedSeat(null);
     } catch (err) {
       alert(`Flag failed: ${err.message}`);
     }
   };
 
-  const layout = getFloorLayout(building, floor) || DEFAULT_LAYOUT;
+  const layout = building === 'miguel_pro'
+    ? getMiguelProAreaLayout(miguelProArea)
+    : getFloorLayout(building, floor) || DEFAULT_LAYOUT;
+  const availableFloors = getAvailableFloors(building);
   const hatchId = `map-hatch-${building}-${floor}`;
   const demoReservation = !canUseProtectedApi ? activeReservation : null;
   const visibleSeats = seats.map((seat) => {
@@ -504,11 +623,13 @@ export default function SeatMap() {
         : demoReservation.status;
     return { ...seat, status };
   });
+  const seatStatusByLabel = new Map(visibleSeats.map((seat) => [seat.label, seat.status]));
   const sortedSeats = [...visibleSeats].sort((a, b) => (a.posY - b.posY) || (a.posX - b.posX));
   const selectedSeatNumber = selectedSeat
     ? sortedSeats.findIndex((seat) => seat.seatId === selectedSeat.seatId) + 1
     : 0;
-  const selectedSeatLabel = selectedSeat?.label || `G${floor}-S${String(selectedSeatNumber).padStart(3, '0')}`;
+  const buildingCode = building === 'miguel_pro' ? 'M' : 'G';
+  const selectedSeatLabel = selectedSeat?.label || `${buildingCode}${floor}-S${String(selectedSeatNumber).padStart(3, '0')}`;
   const availableCount = sortedSeats.filter((seat) => seat.status === 'available').length;
   const pendingCount = sortedSeats.filter((seat) => ['pending', 'pending_entry'].includes(seat.status)).length;
   const occupiedCount = sortedSeats.filter((seat) => seat.status === 'occupied').length;
@@ -517,6 +638,10 @@ export default function SeatMap() {
     && user?.role === 'student'
     && !activeReservation;
   const buildingName = building.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const activeAreaLabel = MIGUEL_PRO_AREAS.find((area) => area.id === miguelProArea)?.label;
+  const locationLabel = building === 'miguel_pro'
+    ? `${buildingName} - ${activeAreaLabel}`
+    : `${buildingName} Library - Floor ${floor}`;
 
   const setMapZoom = (nextZoom) => setZoom(Math.min(1.8, Math.max(0.8, nextZoom)));
 
@@ -526,9 +651,9 @@ export default function SeatMap() {
         <div>
           <button type="button" onClick={() => navigate('/')} className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#063a64] hover:text-[#032946]">
             <ArrowLeft size={17} weight="bold" />
-            All floors
+            All locations
           </button>
-          <h1 className="ui-page-title">{buildingName} - Floor {floor}</h1>
+          <h1 className="ui-page-title">{locationLabel}</h1>
           <p className="ui-muted mt-2">Select an available node to begin a reservation.</p>
         </div>
         {activeReservation && (
@@ -541,9 +666,24 @@ export default function SeatMap() {
 
       <section className="ui-panel overflow-hidden">
         <div className="flex flex-col gap-4 border-b border-slate-200 bg-white/95 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 lg:pb-0" aria-label="Choose floor">
-            <span className="mr-1 shrink-0 text-xs font-semibold uppercase text-slate-500">Floor</span>
-            {[1, 2, 3, 4].map((floorNumber) => (
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto pb-1 lg:pb-0" aria-label={building === 'miguel_pro' ? 'Choose room' : 'Choose floor'}>
+            <span className="mr-1 shrink-0 text-xs font-semibold uppercase text-slate-500">{building === 'miguel_pro' ? 'Room' : 'Floor'}</span>
+            {building === 'miguel_pro' ? MIGUEL_PRO_AREAS.map((area) => (
+              <button
+                key={area.id}
+                type="button"
+                onClick={() => {
+                  setSearchParams({ area: area.id });
+                  setSelectedSeat(null);
+                  setSelectedHub(null);
+                  setZoom(1);
+                }}
+                aria-current={miguelProArea === area.id ? 'page' : undefined}
+                className={`min-h-10 shrink-0 rounded-[8px] border px-4 text-sm font-semibold ${miguelProArea === area.id ? 'border-[#063a64] bg-[#063a64] text-white shadow-[0_10px_24px_rgba(6,58,100,0.18)]' : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50'}`}
+              >
+                {area.label}
+              </button>
+            )) : availableFloors.map((floorNumber) => (
               <button
                 key={floorNumber}
                 type="button"
@@ -604,14 +744,22 @@ export default function SeatMap() {
         ) : (
           <div className="max-h-[72vh] min-h-[440px] overflow-auto bg-[#dfe8ef] p-3 sm:p-5">
             <div className="mx-auto origin-top" style={{ width: `${zoom * 100}%`, minWidth: zoom >= 1 ? '680px' : '560px' }}>
-              <svg viewBox={`0 0 ${layout.width} ${layout.height}`} className="map-paper block h-auto w-full" role="img" aria-label={layout.name}>
+              <svg viewBox={`0 0 ${layout.width} ${layout.height}`} className="map-paper block h-auto w-full" role="group" aria-label={`${layout.name} interactive map`}>
                 <defs>
                   <pattern id={hatchId} width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
                     <line x1="0" y1="0" x2="0" y2="12" stroke="#9ca3af" strokeWidth="2" />
                   </pattern>
                 </defs>
                 <rect x="10" y="10" width={layout.width - 20} height={layout.height - 20} fill="#fbfdff" stroke="#1d3145" strokeWidth="1.5" />
-                {layout.features.map((feature, index) => <LayoutFeature key={`${feature.type}-${index}`} feature={feature} hatchId={hatchId} />)}
+                {layout.features.map((feature, index) => (
+                  <LayoutFeature
+                    key={`${feature.type}-${index}`}
+                    feature={feature}
+                    hatchId={hatchId}
+                    onHubClick={setSelectedHub}
+                    seatStatusByLabel={seatStatusByLabel}
+                  />
+                ))}
                 {sortedSeats.map((seat, index) => (
                   <SeatMarker
                     key={seat.seatId}
@@ -635,6 +783,30 @@ export default function SeatMap() {
         </div>
       </section>
 
+      {selectedHub && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedHub(null); }}>
+          <div className="w-full max-w-md rounded-t-[8px] bg-white shadow-[0_28px_90px_rgba(15,23,42,0.34)] sm:rounded-[8px]" role="dialog" aria-modal="true" aria-labelledby="hub-dialog-title">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#063a64]">Miguel Pro collaboration room</p>
+                <h2 id="hub-dialog-title" className="mt-1 text-xl font-semibold text-slate-950">{selectedHub.label}</h2>
+              </div>
+              <button type="button" onClick={() => setSelectedHub(null)} className="ui-icon-button border-transparent" aria-label="Close collaboration hub details"><X size={20} weight="bold" /></button>
+            </div>
+            <div className="p-5">
+              <p className="text-sm leading-6 text-slate-600">Collab Hub schedules and reservations are managed through the official AdDU Library booking page.</p>
+              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setSelectedHub(null)} className="ui-button-secondary">Close</button>
+                <a href="https://library.addu.edu.ph/hub/" target="_blank" rel="noreferrer" className="ui-button-primary">
+                  Book this hub
+                  <ArrowSquareOut size={18} weight="bold" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedSeat && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedSeat(null); }}>
           <div className="w-full max-w-md rounded-t-[8px] bg-white shadow-[0_28px_90px_rgba(15,23,42,0.34)] sm:rounded-[8px]" role="dialog" aria-modal="true" aria-labelledby="seat-dialog-title">
@@ -645,7 +817,7 @@ export default function SeatMap() {
                   <span className="text-xs font-semibold uppercase text-slate-500">{getSeatTypeLabel(selectedSeat.seatType)}</span>
                 </div>
                 <h2 id="seat-dialog-title" className="text-xl font-semibold text-slate-950">{selectedSeatLabel}</h2>
-                <p className="mt-1 text-sm text-slate-500">{buildingName} Library - Floor {floor}</p>
+                <p className="mt-1 text-sm text-slate-500">{locationLabel}</p>
               </div>
               <button type="button" onClick={() => setSelectedSeat(null)} className="ui-icon-button border-transparent" aria-label="Close seat details"><X size={20} weight="bold" /></button>
             </div>
@@ -690,7 +862,7 @@ export default function SeatMap() {
                   <p className="mt-2 text-sm leading-6 text-slate-600">{user?.role === 'student' && canUseProtectedApi && selectedSeat.status === 'occupied' ? 'If this node appears vacant in person, report it so the reservation holder can respond.' : 'This reservation node cannot be selected right now.'}</p>
                   <div className="mt-6 flex justify-end gap-2">
                     <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary">Close</button>
-                    {user?.role === 'student' && canUseProtectedApi && selectedSeat.status === 'occupied' && <button type="button" onClick={() => handleFlagSeat(selectedSeat.seatId)} className="ui-button-danger">Report vacant node</button>}
+                    {user?.role === 'student' && canUseProtectedApi && selectedSeat.status === 'occupied' && <button type="button" onClick={() => handleFlagSeat(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}
                   </div>
                 </>
               )}

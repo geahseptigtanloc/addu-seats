@@ -19,8 +19,26 @@ interface ClientToServerEvents {
 interface ServerToClientEvents {
   joined_floor: (payload: { room: string }) => void;
   seat_status_update: (payload: { seatId: string; status: SeatStatus }) => void;
-  seat_flagged: (payload: { seatId: string; windowSeconds: number }) => void;
-  seat_flagged_admin_notice: (payload: { seatId: string; reservationId: string }) => void;
+  seat_flagged: (payload: {
+    seatId: string;
+    reservationId: string;
+    windowSeconds: number;
+    expiresAt: string;
+    message: string;
+  }) => void;
+  seat_flagged_admin_notice: (payload: {
+    seatId: string;
+    reservationId: string;
+    building: string;
+    floor: number;
+    windowSeconds: number;
+    expiresAt: string;
+    reportedAt: string;
+  }) => void;
+  seat_flag_resolved_admin_notice: (payload: {
+    reservationId: string;
+    resolution: 'reverified' | 'evicted';
+  }) => void;
   socket_error: (payload: { message: string }) => void;
 }
 
@@ -154,14 +172,35 @@ export function broadcastSeatStatusUpdate(
 // they aren't currently connected (Socket.IO just finds an empty room).
 export function notifySeatFlagged(
   userId: string,
-  payload: { seatId: string; windowSeconds: number },
+  payload: {
+    seatId: string;
+    reservationId: string;
+    windowSeconds: number;
+    expiresAt: string;
+    message: string;
+  },
 ): void {
   getIO().to(getUserRoom(userId)).emit('seat_flagged', payload);
 }
 
 // Passive, every connected admin sees it, nobody is required to act.
-export function notifyAdminsSeatFlagged(payload: { seatId: string; reservationId: string }): void {
+export function notifyAdminsSeatFlagged(payload: {
+  seatId: string;
+  reservationId: string;
+  building: string;
+  floor: number;
+  windowSeconds: number;
+  expiresAt: string;
+  reportedAt: string;
+}): void {
   getIO().to(ADMIN_ROOM).emit('seat_flagged_admin_notice', payload);
+}
+
+export function notifyAdminsSeatFlagResolved(payload: {
+  reservationId: string;
+  resolution: 'reverified' | 'evicted';
+}): void {
+  getIO().to(ADMIN_ROOM).emit('seat_flag_resolved_admin_notice', payload);
 }
 
 export function getIO(): AppSocketServer {

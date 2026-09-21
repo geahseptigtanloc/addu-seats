@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const prisma = new PrismaClient();
 
@@ -28,25 +30,24 @@ async function main(): Promise<void> {
     },
   });
 
-  // Placeholder layout — replace with the real building/floor list once
-  // known. QR tokens are fixed strings, not the random default, so
-  // they're easy to hardcode when manually testing scan endpoints.
-  const seatData = [
-    { building: 'Gisbert', floor: 1, currentQrToken: 'seat-1' },
-    { building: 'Gisbert', floor: 2, currentQrToken: 'seat-2' },
-    { building: 'Gisbert', floor: 3, currentQrToken: 'seat-3' },
-    { building: 'Migbro', floor: 1, currentQrToken: 'seat-4' },
-  ];
+  const seatData = JSON.parse(readFileSync(join(__dirname, 'seat-map.json'), 'utf8')) as Array<{
+    building: string;
+    floor: number;
+    currentQrToken: string;
+  }>;
 
-  for (const seat of seatData) {
-    await prisma.seat.upsert({
-      where: { currentQrToken: seat.currentQrToken },
-      update: {},
-      create: seat,
-    });
-  }
+  // Remove only the four placeholder records from the original guide seed.
+  // Existing real mapped seats and their reservation history are preserved.
+  await prisma.seat.deleteMany({
+    where: {
+      currentQrToken: { in: ['seat-1', 'seat-2', 'seat-3', 'seat-4'] },
+      reservations: { none: {} },
+    },
+  });
 
-  console.log(`Seeded: ${admin.email}, ${student.email}, ${seatData.length} seats`);
+  await prisma.seat.createMany({ data: seatData, skipDuplicates: true });
+
+  console.log(`Seeded: ${admin.email}, ${student.email}, ${seatData.length} mapped seats`);
 }
 
 main()

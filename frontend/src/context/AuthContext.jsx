@@ -4,6 +4,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { apiClient, clearToken, getToken, setToken } from '../api/client.js';
 import { getDemoUser } from '../data/demoUsers.js';
+import { normalizeUser } from '../api/normalizers.js';
 
 const AuthContext = createContext(null);
 const DEMO_ROLE_KEY = 'addu_seats_demo_role';
@@ -24,7 +25,7 @@ export function AuthProvider({ children }) {
 
     try {
       const data = await apiClient('/api/auth/me');
-      setUser(data.user);
+      setUser(normalizeUser(data.user));
       setCanUseProtectedApi(true);
     } catch {
       clearToken();
@@ -63,7 +64,7 @@ export function AuthProvider({ children }) {
       });
       localStorage.removeItem(DEMO_ROLE_KEY);
       setToken(data.token);
-      setUser(data.user);
+      setUser(normalizeUser(data.user));
       setCanUseProtectedApi(true);
       return true;
     } catch {

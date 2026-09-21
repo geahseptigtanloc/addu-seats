@@ -37,6 +37,27 @@ export function findActiveByUser(userId: string): Promise<Reservation | null> {
   });
 }
 
+export function findActiveDetailsByUser(userId: string) {
+  return prisma.reservation.findFirst({
+    where: { userId, status: { in: ACTIVE_STATUSES } },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      user: { select: { name: true, studentIdLast4: true } },
+      seat: true,
+    },
+  });
+}
+
+export function findDetailsById(id: string) {
+  return prisma.reservation.findUnique({
+    where: { id },
+    include: {
+      user: { select: { name: true, studentIdLast4: true } },
+      seat: true,
+    },
+  });
+}
+
 export interface UpdateReservationInput {
   status?: ReservationStatus;
   confirmedAt?: Date | null;
@@ -54,7 +75,7 @@ export function findPending() {
     orderBy: { createdAt: 'asc' },
     include: {
       user: { select: { name: true, studentIdLast4: true } },
-      seat: { select: { id: true, building: true, floor: true } },
+      seat: { select: { id: true, building: true, floor: true, currentQrToken: true } },
     },
   });
 }

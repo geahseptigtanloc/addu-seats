@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, IdentificationCard, QrCode, WarningCircle } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
 import { apiClient } from '../api/client.js';
+import { normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getDemoReservation, updateDemoReservation } from '../data/demoReservationStore.js';
 
@@ -34,7 +35,9 @@ export default function VerifyPage() {
           setReservation({ ...demoReservation, alreadyVerified: demoReservation.status === 'active' });
           return;
         }
-        setReservation(await apiClient(`/api/frontdesk/lookup/${encodeURIComponent(token)}`));
+        const data = await apiClient(`/api/reservations/${encodeURIComponent(token)}`);
+        const normalized = normalizeReservation(data);
+        setReservation({ ...normalized, alreadyVerified: normalized.status === 'active' });
       } catch (requestError) {
         setError(requestError.message);
       } finally {
@@ -47,7 +50,7 @@ export default function VerifyPage() {
   const handleApprove = async () => {
     try {
       if (canUseProtectedApi) {
-        await apiClient(`/api/frontdesk/verify/${reservation.reservationId}`, { method: 'POST', body: JSON.stringify({ approved: true }) });
+        await apiClient(`/api/reservations/${reservation.reservationId}/approve`, { method: 'POST' });
       } else {
         updateDemoReservation(reservation.reservationId, 'approve');
       }
@@ -61,7 +64,7 @@ export default function VerifyPage() {
     if (!reason.trim()) return;
     try {
       if (canUseProtectedApi) {
-        await apiClient(`/api/frontdesk/verify/${reservation.reservationId}`, { method: 'POST', body: JSON.stringify({ approved: false, rejectionReason: reason }) });
+        await apiClient(`/api/reservations/${reservation.reservationId}/void`, { method: 'POST' });
       } else {
         updateDemoReservation(reservation.reservationId, 'reject', { reason });
       }

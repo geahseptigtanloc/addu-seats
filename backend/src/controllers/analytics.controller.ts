@@ -115,7 +115,11 @@ export async function getAverageSessionLength(
   }
 }
 
-export async function getBreakStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getBreakStats(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   const parsed = analyticsQuerySchema.safeParse(req.query);
 
   if (!parsed.success) {

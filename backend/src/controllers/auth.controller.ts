@@ -3,6 +3,7 @@ import type { User } from '@prisma/client';
 import { z } from 'zod';
 import { env } from '../config/env';
 import { createExchangeCode, redeemExchangeCode } from '../services/auth.service';
+import { UnauthorizedError } from '../utils/AppError';
 
 export async function googleCallbackSuccess(
   user: User,
@@ -43,4 +44,13 @@ export async function exchangeCode(req: Request, res: Response, next: NextFuncti
   } catch (err) {
     next(err);
   }
+}
+
+export function getCurrentUser(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  res.json({ user: req.user });
 }

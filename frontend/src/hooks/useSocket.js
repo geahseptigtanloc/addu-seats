@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
+import { getToken } from '../api/client.js';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -12,7 +13,10 @@ export function useSocket() {
   const socketRef = useRef(null);
 
   useEffect(() => {
-    socketRef.current = io(SOCKET_URL, { autoConnect: true });
+    const token = getToken();
+    if (!token) return undefined;
+
+    socketRef.current = io(SOCKET_URL, { auth: { token }, autoConnect: true });
 
     socketRef.current.on('connect', () => {
       console.log('[Socket.IO] Connected:', socketRef.current.id);

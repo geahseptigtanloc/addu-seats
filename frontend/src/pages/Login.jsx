@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Buildings, MapTrifold, ShieldCheck, Student } from '@phosphor-icons/react';
-import { getGoogleAuthUrl } from '../api/client.js';
+import { apiClient, getGoogleAuthUrl } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Login() {
@@ -12,9 +12,19 @@ export default function Login() {
 
   useEffect(() => {
     const token = searchParams.get('token');
+    const code = searchParams.get('code');
     const error = searchParams.get('error');
     if (error) return;
     if (token) loginWithToken(token).then(() => navigate('/', { replace: true }));
+    if (code) {
+      apiClient('/api/auth/exchange', {
+        method: 'POST',
+        body: JSON.stringify({ code }),
+      })
+        .then((data) => loginWithToken(data.token))
+        .then(() => navigate('/', { replace: true }))
+        .catch(() => navigate('/login?error=exchange_failed', { replace: true }));
+    }
   }, [searchParams, loginWithToken, navigate]);
 
   useEffect(() => {

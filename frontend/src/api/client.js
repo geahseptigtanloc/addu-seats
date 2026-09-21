@@ -39,10 +39,15 @@ export async function apiClient(path, options = {}) {
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed (${response.status})`);
+    const message = typeof body.error === 'string'
+      ? body.error
+      : body.error?.message || body.message || `Request failed (${response.status})`;
+    throw new Error(message);
   }
 
-  return response.json();
+  if (response.status === 204) return null;
+  const contentType = response.headers.get('content-type') || '';
+  return contentType.includes('application/json') ? response.json() : response.text();
 }
 
 /** URL to start the Google OAuth flow (full-page redirect). */

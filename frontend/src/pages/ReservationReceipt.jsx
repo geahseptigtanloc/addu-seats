@@ -15,6 +15,7 @@ import {
 } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
 import { apiClient, getToken } from '../api/client.js';
+import { normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import {
   getDemoReservation,
@@ -68,8 +69,9 @@ export default function ReservationReceipt() {
 
       try {
         const data = await apiClient('/api/reservations/me/current');
-        setReservation(data.reservation);
-        setQrToken(data.qrToken);
+        const normalized = normalizeReservation(data, { user });
+        setReservation(normalized);
+        setQrToken(data.qrToken || normalized?.reservationId);
       } catch {
         // Keep the current receipt visible if the server has just moved it to a terminal state.
       }
@@ -99,7 +101,7 @@ export default function ReservationReceipt() {
     const token = getToken();
     if (!token || !reservation || isDemo) return undefined;
 
-    const socket = io(`${SOCKET_URL}/user`, { auth: { token } });
+    const socket = io(SOCKET_URL, { auth: { token } });
     socket.on('seat_flagged', (data) => {
       if (data.reservationId === reservation.reservationId) {
         setFlagged(true);
@@ -123,9 +125,18 @@ export default function ReservationReceipt() {
   async function performAction(action, apiPath, options = {}) {
     setBusyAction(action);
     try {
-      const updated = isDemo
-        ? updateDemoReservation(reservation.reservationId, action, options)
-        : await apiClient(apiPath, { method: 'POST' });
+      let updated;
+      if (isDemo) {
+        updated = updateDemoReservation(reservation.reservationId, action, options);
+      } else {
+        const response = await apiClient(apiPath, { method: 'POST' });
+        if (action === 'checkout') {
+          updated = normalizeReservation(response, { seat: reservation.seat, user });
+        } else {
+          const current = await apiClient('/api/reservations/me/current');
+          updated = normalizeReservation(current, { seat: reservation.seat, user });
+        }
+      }
       setReservation(updated);
       return updated;
     } catch (err) {
@@ -143,7 +154,7 @@ export default function ReservationReceipt() {
       if (isDemo) {
         updateDemoReservation(reservation.reservationId, 'cancel');
       } else {
-        await apiClient(`/api/reservations/${reservation.reservationId}`, { method: 'DELETE' });
+        await apiClient(`/api/reservations/${reservation.reservationId}/cancel`, { method: 'POST' });
       }
       navigate(`/map/${reservation.seat.building}/${reservation.seat.floor}`);
     } catch (err) {
@@ -159,19 +170,6 @@ export default function ReservationReceipt() {
       `/api/reservations/${reservation.reservationId}/checkout`,
     );
     if (updated) navigate('/');
-  }
-
-  async function handleResolveFlag() {
-    setBusyAction('resolve_flag');
-    try {
-      await apiClient(`/api/reservations/${reservation.reservationId}/resolve-flag`, { method: 'POST' });
-      setFlagged(false);
-      setFlagMessage('');
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setBusyAction('');
-    }
   }
 
   if (!reservation) {
@@ -229,9 +227,9 @@ export default function ReservationReceipt() {
           <div className="ui-alert-danger mt-5">
             <h2 className="font-semibold text-red-900">Your node was reported vacant</h2>
             <p className="mt-1 text-sm text-red-800">{flagMessage}</p>
-            <button type="button" onClick={handleResolveFlag} disabled={busyAction === 'resolve_flag'} className="mt-3 rounded-[8px] bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50">
-              Confirm presence
-            </button>
+            <p className="mt-3 rounded-[8px] border border-red-200 bg-white/70 px-4 py-3 text-sm font-semibold text-red-900">
+              Return to your assigned node and scan its physical QR. An in-app confirmation cannot clear this report.
+            </p>
           </div>
         )}
 
@@ -241,7 +239,12 @@ export default function ReservationReceipt() {
               <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
                 <Detail label="Reservation node" value={nodeLabel} emphasis />
                 <Detail label="Node type" value={getNodeType(seat.seatType)} />
-                <Detail label="Location" value={`${buildingName}, Floor ${seat.floor || '-'}`} />
+                <Detail
+                  label="Location"
+                  value={seat.building === 'miguel_pro'
+                    ? `${buildingName}, ${seat.area === 'workspace_room' ? 'Workspace Room' : seat.area === 'research_nook' ? 'Research Nook' : 'Main Area'}`
+                    : `${buildingName}, Floor ${seat.floor || '-'}`}
+                />
                 <Detail label="Student" value={user?.name || reservation.user?.name || 'Student'} />
                 <Detail label="ID verification" value={`Ending in ${user?.adduIdLast4 || reservation.user?.adduIdLast4 || 'N/A'}`} />
                 <Detail label="Reference" value={reservation.reservationId.slice(-8).toUpperCase()} mono />
@@ -345,7 +348,7 @@ export default function ReservationReceipt() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => performAction('extend_break', `/api/reservations/${reservation.reservationId}/extend-break`)}
+                      onClick={() => performAction('extend_break', `/api/reservations/${reservation.reservationId}/break/extend`)}
                       disabled={Boolean(busyAction) || allocatedBreakMinutes >= 15}
                       className="inline-flex items-center gap-2 whitespace-nowrap rounded-[8px] border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900 transition hover:bg-blue-100 active:translate-y-px disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
                     >
@@ -418,7 +421,7 @@ export default function ReservationReceipt() {
             busy={busyAction === 'start_break'}
             onClose={() => setShowBreakDialog(false)}
             onConfirm={async () => {
-              const updated = await performAction('start_break', `/api/reservations/${reservation.reservationId}/start-break`);
+              const updated = await performAction('start_break', `/api/reservations/${reservation.reservationId}/break/start`);
               if (updated) setShowBreakDialog(false);
             }}
           />

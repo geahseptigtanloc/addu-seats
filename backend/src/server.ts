@@ -8,6 +8,8 @@ import { prisma } from './config/prisma';
 import { initSocket, getIO } from './config/socket';
 import { scheduleJob, stopAllJobs } from './jobs/scheduler';
 import { entryTimerExpiryJob } from './jobs/entryTimerExpiry.job';
+import { breakTimerExpiryJob } from './jobs/breakTimerExpiry.job';
+import { flagEvictionJob } from './jobs/flagEviction.job';
 
 let shuttingDown = false;
 
@@ -49,6 +51,8 @@ async function main(): Promise<void> {
   });
 
   scheduleJob(entryTimerExpiryJob);
+  scheduleJob(breakTimerExpiryJob);
+  scheduleJob(flagEvictionJob);
 
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));

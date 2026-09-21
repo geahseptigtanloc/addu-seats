@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Buildings, Clock, MapPin, Ticket } from '@phosphor-icons/react';
 import { apiClient } from '../api/client.js';
+import { normalizeReservation } from '../api/normalizers.js';
 import Layout from '../components/Layout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getGisbertPreviewSeats } from '../data/gisbertPreviewSeats.js';
+import { getMiguelProPreviewSeats } from '../data/miguelProMap.js';
 import { getDemoReservation, subscribeToDemoReservation } from '../data/demoReservationStore.js';
 
 const GISBERT_FLOORS = [
@@ -14,18 +16,40 @@ const GISBERT_FLOORS = [
   { floor: 4, name: 'Quiet study' },
 ];
 
+const LIBRARIES = {
+  gisbert: {
+    name: 'Gisbert Library',
+    shortName: 'Gisbert',
+    unitLabel: 'floors',
+    statLabel: 'Mapped floors',
+    statValue: 4,
+    floors: GISBERT_FLOORS,
+    getSeats: getGisbertPreviewSeats,
+  },
+  miguel_pro: {
+    name: 'Miguel Pro Learning Commons',
+    shortName: 'Miguel Pro',
+    unitLabel: 'rooms',
+    statLabel: 'Mapped rooms',
+    statValue: 3,
+    floors: [{ floor: 1, name: 'Main Area, Research Nook, and Workspace Room' }],
+    getSeats: getMiguelProPreviewSeats,
+  },
+};
+
 export default function BuildingFloorSelector() {
   const [building, setBuilding] = useState('gisbert');
   const [activeReservation, setActiveReservation] = useState(null);
   const navigate = useNavigate();
   const { user, canUseProtectedApi } = useAuth();
 
+  const selectedLibrary = LIBRARIES[building];
   const floorOptions = useMemo(
-    () => GISBERT_FLOORS.map((option) => ({
+    () => selectedLibrary.floors.map((option) => ({
       ...option,
-      capacity: getGisbertPreviewSeats(option.floor).length,
+      capacity: selectedLibrary.getSeats(option.floor).length,
     })),
-    [],
+    [selectedLibrary],
   );
 
   const totalSeats = floorOptions.reduce((sum, option) => sum + option.capacity, 0);
@@ -43,7 +67,7 @@ export default function BuildingFloorSelector() {
     }
 
     apiClient('/api/reservations/me/current')
-      .then((data) => setActiveReservation(data.reservation))
+      .then((data) => setActiveReservation(normalizeReservation(data, { user })))
       .catch(() => setActiveReservation(null));
     return undefined;
   }, [user, canUseProtectedApi]);
@@ -62,7 +86,7 @@ export default function BuildingFloorSelector() {
   const firstName = user?.name?.split(' ')[0];
   const libraryStats = [
     { label: 'Mapped nodes', value: totalSeats },
-    { label: 'Gisbert floors', value: floorOptions.length },
+    { label: selectedLibrary.statLabel, value: selectedLibrary.statValue },
     { label: 'Guest browsing', value: 'Open' },
   ];
 
@@ -73,15 +97,15 @@ export default function BuildingFloorSelector() {
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-[8px] bg-white/10 px-3 py-2 text-sm font-semibold text-amber-100">
               <MapPin size={18} weight="fill" />
-              Gisbert Library
+              {selectedLibrary.name}
             </div>
             <h1 className="max-w-2xl text-3xl font-semibold leading-tight sm:text-5xl">
               Find the right study node before you walk in.
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-blue-100/82 sm:text-base">
               {user?.role === 'student'
-                ? `${firstName ? `${firstName}, ` : ''}select a floor and reserve from the live map.`
-                : 'Browse formal seating across Gisbert Library without signing in.'}
+                ? `${firstName ? `${firstName}, ` : ''}select a ${building === 'gisbert' ? 'floor' : 'room'} and reserve from the live map.`
+                : `Browse formal seating across ${selectedLibrary.name} without signing in.`}
             </p>
           </div>
 
@@ -130,54 +154,41 @@ export default function BuildingFloorSelector() {
         </div>
       )}
 
-      {building === 'gisbert' ? (
-        <section className="pt-8">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="ui-section-title">Gisbert floors</h2>
-              <p className="mt-1 text-sm text-slate-500">{totalSeats} mapped reservation nodes</p>
-            </div>
-            <Buildings size={30} weight="duotone" className="text-[#063a64]" />
+      <section className="pt-8">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="ui-section-title">{selectedLibrary.shortName} {selectedLibrary.unitLabel}</h2>
+            <p className="mt-1 text-sm text-slate-500">{totalSeats} mapped reservation nodes</p>
           </div>
+          <Buildings size={30} weight="duotone" className="text-[#063a64]" />
+        </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {floorOptions.map(({ floor, name, capacity }) => (
-              <button key={floor} type="button" onClick={() => navigate(`/map/gisbert/${floor}`)} className="floor-card group min-h-56 overflow-hidden">
-                <span className="flex h-full flex-col p-5">
-                  <span className="flex items-start justify-between gap-4">
-                    <span className="grid h-12 w-12 place-items-center rounded-[8px] bg-[#063a64] text-lg font-semibold text-white shadow-[0_12px_28px_rgba(6,58,100,0.2)]">{floor}</span>
-                    <ArrowRight size={20} weight="bold" className="mt-1 text-slate-400 group-hover:translate-x-1 group-hover:text-[#063a64]" />
-                  </span>
-                  <span className="mt-5 block overflow-hidden rounded-[8px] border border-slate-200 bg-[#f4f8fb] p-3">
-                    <span className="block h-2 rounded-sm bg-[#dce8f0]">
-                      <span className="block h-full rounded-sm bg-[#063a64]" style={{ width: `${Math.max(42, Math.round(capacity / totalSeats * 100 * 2.2))}%` }} />
-                    </span>
-                    <span className="mt-3 grid grid-cols-3 gap-2">
-                      <span className="h-9 rounded-[6px] bg-white shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]" />
-                      <span className="h-9 rounded-[6px] bg-white shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]" />
-                      <span className="h-9 rounded-[6px] bg-[#fff7df] shadow-[inset_0_0_0_1px_rgba(196,154,34,0.32)]" />
-                    </span>
-                  </span>
-                  <span className="mt-5 block text-base font-semibold text-slate-950">Floor {floor}</span>
-                  <span className="mt-1 block text-sm text-slate-600">{name}</span>
-                  <span className="mt-auto block pt-4 text-xs font-semibold text-slate-500">{capacity} mapped nodes</span>
+        <div className={building === 'gisbert' ? 'grid gap-4 sm:grid-cols-2 xl:grid-cols-4' : 'grid max-w-2xl gap-4'}>
+          {floorOptions.map(({ floor, name, capacity }) => (
+            <button key={floor} type="button" onClick={() => navigate(building === 'miguel_pro' ? `/map/${building}/${floor}?area=main_area` : `/map/${building}/${floor}`)} className="floor-card group min-h-56 overflow-hidden">
+              <span className="flex h-full flex-col p-5">
+                <span className="flex items-start justify-between gap-4">
+                  <span className="grid h-12 w-12 place-items-center rounded-[8px] bg-[#063a64] text-lg font-semibold text-white shadow-[0_12px_28px_rgba(6,58,100,0.2)]">{floor}</span>
+                  <ArrowRight size={20} weight="bold" className="mt-1 text-slate-400 group-hover:translate-x-1 group-hover:text-[#063a64]" />
                 </span>
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : (
-        <section className="py-10">
-          <div className="ui-panel flex max-w-2xl items-start gap-4 p-6">
-            <Buildings size={30} weight="duotone" className="shrink-0 text-[#063a64]" />
-            <div>
-              <h2 className="ui-section-title">Miguel Pro Learning Commons</h2>
-              <p className="ui-muted mt-2">Floor plans are being prepared. Gisbert Library remains available for reservations.</p>
-              <button type="button" onClick={() => setBuilding('gisbert')} className="ui-button-secondary mt-5">Return to Gisbert</button>
-            </div>
-          </div>
-        </section>
-      )}
+                <span className="mt-5 block overflow-hidden rounded-[8px] border border-slate-200 bg-[#f4f8fb] p-3">
+                  <span className="block h-2 rounded-sm bg-[#dce8f0]">
+                    <span className="block h-full rounded-sm bg-[#063a64]" style={{ width: `${Math.max(42, Math.min(100, Math.round(capacity / totalSeats * 100 * 2.2)))}%` }} />
+                  </span>
+                  <span className="mt-3 grid grid-cols-3 gap-2">
+                    <span className="h-9 rounded-[6px] bg-white shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]" />
+                    <span className="h-9 rounded-[6px] bg-white shadow-[inset_0_0_0_1px_rgba(148,163,184,0.35)]" />
+                    <span className="h-9 rounded-[6px] bg-[#fff7df] shadow-[inset_0_0_0_1px_rgba(196,154,34,0.32)]" />
+                  </span>
+                </span>
+                <span className="mt-5 block text-base font-semibold text-slate-950">{building === 'gisbert' ? `Floor ${floor}` : 'Room maps'}</span>
+                <span className="mt-1 block text-sm text-slate-600">{name}</span>
+                <span className="mt-auto block pt-4 text-xs font-semibold text-slate-500">{capacity} mapped nodes</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
     </Layout>
   );
 }

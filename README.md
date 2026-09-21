@@ -4,7 +4,7 @@ Real-time library seat reservation and occupancy management for Ateneo de Davao 
 
 The maintained product scope and non-regression checklist live in [`docs/FEATURES.md`](docs/FEATURES.md).
 
-**Phase 1** provides the project foundation: monorepo structure, database schema, Google OAuth login, health checks, Redis connectivity, and Socket.IO initialization. Seat maps, reservations, QR flows, and dashboards are built in later phases.
+The current application includes public floor maps, Google OAuth/JWT authentication, live reservations, front-desk verification, break timers, ghost-seat reporting, Socket.IO updates, and administrative analytics.
 
 ## Tech Stack
 
@@ -21,7 +21,7 @@ The maintained product scope and non-regression checklist live in [`docs/FEATURE
 
 Install and run locally before starting the app:
 
-1. **Node.js** 18+ and npm
+1. **Node.js** 22+ and npm
 2. **PostgreSQL** — create a database, e.g. `addu_seats`
 3. **Redis** — default local instance on port 6379
 4. **Google Cloud OAuth credentials** — see [Google OAuth setup](#google-oauth-setup) below
@@ -56,9 +56,9 @@ Copy from `backend/.env.example` and fill in:
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `GOOGLE_CALLBACK_URL` | OAuth callback (default: `http://localhost:3001/api/auth/google/callback`) |
 | `JWT_SECRET` | Random string for signing session tokens |
-| `SESSION_SECRET` | Random string (reserved for future cookie sessions) |
+| `SESSION_SECRET` | Random string used for the temporary OAuth redirect session |
 | `PORT` | Backend port (default: 3001) |
-| `FRONTEND_URL` | Frontend origin for CORS and OAuth redirect (default: `http://localhost:5173`) |
+| `CORS_ORIGIN` | Frontend origin for CORS and OAuth redirect (default: `http://localhost:5173`) |
 
 ### Frontend (`frontend/.env`)
 
@@ -126,14 +126,33 @@ Open `/login` and use either one-click account. No password is required because 
 
 The frontend opens the selected role in local preview mode without enabling protected API actions. The seeded backend users remain available for API-level development and testing.
 
-## API Endpoints (Phase 1)
+When the map geometry changes, regenerate the checked-in backend seat list before seeding:
+
+```bash
+cd backend
+npm run sync:seats
+npm run seed
+```
+
+## Main API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Health check (Postgres + Redis) |
 | GET | `/api/auth/google` | Start Google OAuth flow |
-| GET | `/api/auth/google/callback` | OAuth callback (redirects to frontend with token) |
+| GET | `/api/auth/google/callback` | OAuth callback (redirects with a one-time exchange code) |
+| POST | `/api/auth/exchange` | Exchange the one-time OAuth code for a JWT |
 | GET | `/api/auth/me` | Current user profile (requires Bearer token) |
+| GET | `/api/seats` | Public live seat list, optionally filtered by building and floor |
+| POST | `/api/seats/:id/flag` | Report an apparently vacant occupied seat |
+| POST | `/api/reservations` | Create a reservation from a physical-node QR token |
+| GET | `/api/reservations/me/current` | Current authenticated student's reservation |
+| GET | `/api/reservations/pending` | Admin front-desk queue |
+| POST | `/api/reservations/:id/approve` | Approve pending entry |
+| POST | `/api/reservations/:id/break/start` | Start the five-minute break timer |
+| POST | `/api/reservations/:id/break/extend` | Extend a break up to 15 minutes |
+| POST | `/api/reservations/break/return` | Return by scanning the physical QR |
+| POST | `/api/reservations/reverify` | Clear a ghost-seat report by physical QR scan |
 
 ## Verification Checklist
 
@@ -146,7 +165,7 @@ Run through this list to confirm Phase 1 works:
 - [ ] `cd backend && npm run seed` inserts the current development seats and two demo accounts
 - [ ] `cd backend && npm run dev` starts on port 3001
 - [ ] `cd frontend && npm run dev` starts on port 5173
-- [ ] `curl http://localhost:3001/api/health` returns `{ "status": "ok", "postgres": "connected", "redis": "connected" }`
+- [ ] `curl http://localhost:3001/api/health` returns `{ "status": "ok", "timestamp": "..." }`
 - [ ] Open `http://localhost:5173`, click **Sign in with Google**, complete login, and land on the Seat Map page with your name shown
 - [ ] Browser devtools → Application → Local Storage shows an `addu_seats_token` entry
 

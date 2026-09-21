@@ -96,6 +96,67 @@ export async function getPendingQueue(
   }
 }
 
+export async function getCurrentReservation(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  try {
+    const reservation = await reservationService.getCurrentReservation(req.user.id);
+    res.json({ reservation, qrToken: reservation.reservationId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getReservationDetails(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const { id } = req.params;
+  if (typeof id !== 'string') {
+    res.status(400).json({ error: { message: 'Invalid reservation id' } });
+    return;
+  }
+
+  try {
+    const reservation = await reservationService.getReservationDetails(id);
+    res.json(reservation);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function checkoutReservation(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  const { id } = req.params;
+  if (typeof id !== 'string') {
+    res.status(400).json({ error: { message: 'Invalid reservation id' } });
+    return;
+  }
+
+  try {
+    const reservation = await reservationService.checkoutReservation(req.user.id, id);
+    res.json(reservation);
+  } catch (err) {
+    next(err);
+  }
+}
+
 // Admin-only, enforced at the route level.
 export async function voidReservation(
   req: Request,

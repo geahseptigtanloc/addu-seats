@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CheckCircle, QrCode, WarningCircle } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getDemoReservation, updateDemoReservation } from '../data/demoReservationStore.js';
+import { apiClient } from '../api/client.js';
+import { normalizeReservation } from '../api/normalizers.js';
 
 export default function SeatReturn() {
   const { seatId } = useParams();
+  const [searchParams] = useSearchParams();
+  const qrToken = searchParams.get('token');
   const { canUseProtectedApi } = useAuth();
   const handledScan = useRef(false);
   const [result, setResult] = useState({ state: 'checking', message: 'Checking reservation...' });
@@ -16,10 +20,44 @@ export default function SeatReturn() {
     handledScan.current = true;
 
     if (canUseProtectedApi) {
-      setResult({
-        state: 'unavailable',
-        message: 'This sample QR cannot complete a live-library return.',
-      });
+      if (!qrToken) {
+        setResult({
+          state: 'unavailable',
+          message: 'This link does not contain the physical node QR token.',
+        });
+        return;
+      }
+
+      void (async () => {
+        try {
+          const current = normalizeReservation(await apiClient('/api/reservations/me/current'));
+          if (!current || current.seat?.seatId !== seatId) {
+            throw new Error('This QR belongs to a different reservation node.');
+          }
+
+          if (current.status === 'on_break') {
+            await apiClient('/api/reservations/break/return', {
+              method: 'POST',
+              body: JSON.stringify({ qrToken }),
+            });
+          } else {
+            await apiClient('/api/reservations/reverify', {
+              method: 'POST',
+              body: JSON.stringify({ qrToken }),
+            });
+          }
+
+          setResult({
+            state: 'success',
+            message: current.status === 'on_break'
+              ? 'Return confirmed. Your study session is active again.'
+              : 'Presence confirmed. The ghost-seat report has been cleared.',
+            nodeLabel: current.seat?.label,
+          });
+        } catch (error) {
+          setResult({ state: 'error', message: error.message });
+        }
+      })();
       return;
     }
 
@@ -41,7 +79,7 @@ export default function SeatReturn() {
     } catch (error) {
       setResult({ state: 'error', message: error.message });
     }
-  }, [seatId, canUseProtectedApi]);
+  }, [seatId, canUseProtectedApi, qrToken]);
 
   return (
     <Layout>

@@ -7,6 +7,7 @@ import {
 } from 'express';
 import { passport } from '../config/passport';
 import { authSession } from '../middlewares/session';
+import { requireAuth } from '../middlewares/requireAuth';
 import * as authController from '../controllers/auth.controller';
 
 const router = Router();
@@ -42,5 +43,6 @@ router.get('/google/callback', (req: Request, res: Response, next: NextFunction)
 });
 
 router.post('/exchange', authController.exchangeCode);
+router.get('/me', requireAuth, authController.getCurrentUser);
 
 export default router;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Layout from '../components/Layout.jsx';
 import { apiClient, getToken } from '../api/client.js';
+import { normalizePendingReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import {
   getDemoPendingReservations,
@@ -48,8 +49,8 @@ export default function FrontDeskView() {
     }
 
     try {
-      const data = await apiClient('/api/frontdesk/pending');
-      setQueue(data);
+      const data = await apiClient('/api/reservations/pending');
+      setQueue(data.map(normalizePendingReservation));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -73,8 +74,8 @@ export default function FrontDeskView() {
     const token = getToken();
     if (!token) return undefined;
 
-    const socket = io(`${SOCKET_URL}/user`, { auth: { token } });
-    socket.on('flag_raised', (data) => {
+    const socket = io(SOCKET_URL, { auth: { token } });
+    socket.on('seat_flagged_admin_notice', (data) => {
       alert(`Seat reported vacant on Floor ${data.floor} in ${data.building.replace('_', ' ')}.`);
     });
     return () => socket.disconnect();
@@ -100,10 +101,7 @@ export default function FrontDeskView() {
     if (!identityConfirmed || !receiptConfirmed) return;
     try {
       if (canUseProtectedApi) {
-        await apiClient(`/api/frontdesk/verify/${reservationId}`, {
-          method: 'POST',
-          body: JSON.stringify({ approved: true }),
-        });
+        await apiClient(`/api/reservations/${reservationId}/approve`, { method: 'POST' });
       } else {
         updateDemoReservation(reservationId, 'approve');
       }
@@ -118,10 +116,7 @@ export default function FrontDeskView() {
     if (!reason.trim()) return;
     try {
       if (canUseProtectedApi) {
-        await apiClient(`/api/frontdesk/verify/${reservationId}`, {
-          method: 'POST',
-          body: JSON.stringify({ approved: false, rejectionReason: reason.trim() }),
-        });
+        await apiClient(`/api/reservations/${reservationId}/void`, { method: 'POST' });
       } else {
         updateDemoReservation(reservationId, 'reject', { reason: reason.trim() });
       }

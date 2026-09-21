@@ -11,6 +11,8 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "seed": "prisma db seed",
+    "sync:seats": "node scripts/sync-seat-map.mjs",
     "typecheck": "tsc --noEmit"
   },
   "prisma": {

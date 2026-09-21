@@ -6,6 +6,8 @@ import { env } from './config/env';
 import { passport } from './config/passport';
 import authRoutes from './routes/auth.routes';
 import seatRoutes from './routes/seat.routes';
+import reservationRoutes from './routes/reservation.routes';
+import analyticsRoutes from './routes/analytics.routes';
 
 export function createApp(): Application {
   const app = express();
@@ -26,9 +28,17 @@ export function createApp(): Application {
   // transient OAuth redirect round-trip
   app.use(passport.initialize());
 
-  // Route mounts go here as feature slices are built (Phase 6):
+  app.use('/api/seats', seatRoutes);
+  app.use('/api/reservations', reservationRoutes);
+  app.use('/api/analytics', analyticsRoutes);
+  app.use('/api/auth', authRoutes);
+  app.use('/api', healthRoutes);
+
+  // Keep the unprefixed paths documented by the backend guide available
+  // while the browser client continues to use the explicit /api prefix.
   app.use('/seats', seatRoutes);
-  // app.use('/reservations', reservationRoutes);
+  app.use('/reservations', reservationRoutes);
+  app.use('/analytics', analyticsRoutes);
   app.use('/auth', authRoutes);
   app.use(healthRoutes);
 

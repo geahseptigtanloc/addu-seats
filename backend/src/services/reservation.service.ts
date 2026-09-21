@@ -15,6 +15,7 @@ import { logger } from '../config/logger';
 import {
   broadcastSeatStatusUpdate,
   notifySeatFlagged,
+  notifyAdminsSeatFlagResolved,
   notifyAdminsSeatFlagged,
 } from '../config/socket';
 import { NotFoundError, ConflictError } from '../utils/AppError';
@@ -230,6 +231,7 @@ export interface PendingQueueItem {
   seatId: string;
   building: string;
   floor: number;
+  currentQrToken: string;
   remainingSeconds: number;
 }
 
@@ -244,9 +246,123 @@ export async function getPendingQueue(): Promise<PendingQueueItem[]> {
       seatId: r.seat.id,
       building: r.seat.building,
       floor: r.seat.floor,
+      currentQrToken: r.seat.currentQrToken,
       remainingSeconds: await getRemainingSeconds(r.id, r.createdAt),
     })),
   );
+}
+
+export interface ReservationDetails {
+  reservationId: string;
+  status: ReservationStatus;
+  createdAt: Date;
+  confirmedAt: Date | null;
+  endedAt: Date | null;
+  remainingSeconds?: number;
+  breakRemainingSeconds?: number;
+  breakMinutesUsed?: number;
+  seat: Seat;
+  user: { name: string; studentIdLast4: string | null };
+}
+
+async function toReservationDetails(
+  reservation: Awaited<ReturnType<typeof reservationRepository.findDetailsById>>,
+): Promise<ReservationDetails> {
+  if (!reservation) {
+    throw new NotFoundError('Reservation not found');
+  }
+
+  const details: ReservationDetails = {
+    reservationId: reservation.id,
+    status: reservation.status,
+    createdAt: reservation.createdAt,
+    confirmedAt: reservation.confirmedAt,
+    endedAt: reservation.endedAt,
+    seat: reservation.seat,
+    user: reservation.user,
+  };
+
+  if (reservation.status === ReservationStatus.PENDING) {
+    details.remainingSeconds = await getRemainingSeconds(reservation.id, reservation.createdAt);
+  }
+
+  if (reservation.seat.status === SeatStatus.OCCUPIED_ON_BREAK) {
+    try {
+      const [rawState, ttl] = await Promise.all([
+        redisClient.get(breakTimerKey(reservation.id)),
+        redisClient.ttl(breakTimerKey(reservation.id)),
+      ]);
+      if (rawState) {
+        const state = JSON.parse(rawState) as BreakTimerState;
+        details.breakMinutesUsed = Math.min(15, (state.extensionsUsed + 1) * 5);
+      }
+      details.breakRemainingSeconds = Math.max(0, ttl);
+    } catch (err) {
+      logger.warn({ err, reservationId: reservation.id }, 'Failed to read break details');
+    }
+  }
+
+  return details;
+}
+
+export async function getCurrentReservation(userId: string): Promise<ReservationDetails> {
+  const reservation = await reservationRepository.findActiveDetailsByUser(userId);
+  return toReservationDetails(reservation);
+}
+
+export async function getReservationDetails(reservationId: string): Promise<ReservationDetails> {
+  const reservation = await reservationRepository.findDetailsById(reservationId);
+  return toReservationDetails(reservation);
+}
+
+export async function checkoutReservation(
+  userId: string,
+  reservationId: string,
+): Promise<Reservation> {
+  const reservation = await reservationRepository.findById(reservationId);
+
+  if (!reservation || reservation.userId !== userId) {
+    throw new NotFoundError('Reservation not found');
+  }
+
+  if (reservation.status !== ReservationStatus.CONFIRMED) {
+    throw new ConflictError('Only a confirmed reservation can be checked out');
+  }
+
+  const [updatedReservation, updatedSeat] = await prisma.$transaction(async (tx) => {
+    const res = await tx.reservation.update({
+      where: { id: reservationId },
+      data: { status: ReservationStatus.COMPLETED, endedAt: new Date() },
+    });
+    const seat = await tx.seat.update({
+      where: { id: reservation.seatId },
+      data: { status: SeatStatus.AVAILABLE },
+    });
+    await tx.occupancyLog.create({
+      data: { reservationId, eventType: OccupancyEventType.VACATED },
+    });
+    return [res, seat] as const;
+  });
+
+  try {
+    await Promise.all([
+      redisClient.del(breakTimerKey(reservationId)),
+      redisClient.del(seatFlagKey(reservation.seatId)),
+    ]);
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to clear checkout timers');
+  }
+
+  try {
+    broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
+      seatId: updatedSeat.id,
+      status: updatedSeat.status,
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to broadcast checkout');
+  }
+
+  return updatedReservation;
 }
 
 // Admin-only forced end of an active reservation.
@@ -551,7 +667,14 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
   }
 
   try {
-    notifySeatFlagged(reservation.userId, { seatId, windowSeconds: FLAG_WINDOW_SECONDS });
+    notifySeatFlagged(reservation.userId, {
+      seatId,
+      reservationId: reservation.id,
+      windowSeconds: FLAG_WINDOW_SECONDS,
+      expiresAt: state.expiresAt,
+      message:
+        'Another student reported this seat as physically vacant. Scan the physical node QR within 10 minutes to keep your reservation.',
+    });
   } catch (err) {
     logger.warn(
       { err, seatId, reservationId: reservation.id },
@@ -560,7 +683,15 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
   }
 
   try {
-    notifyAdminsSeatFlagged({ seatId, reservationId: reservation.id });
+    notifyAdminsSeatFlagged({
+      seatId,
+      reservationId: reservation.id,
+      building: seat.building,
+      floor: seat.floor,
+      windowSeconds: FLAG_WINDOW_SECONDS,
+      expiresAt: state.expiresAt,
+      reportedAt: new Date().toISOString(),
+    });
   } catch (err) {
     logger.warn({ err, seatId, reservationId: reservation.id }, 'Failed to notify admins of flag');
   }
@@ -596,6 +727,15 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
     reservationId: reservation.id,
     eventType: ValidationEventType.FLAG_REVERIFICATION,
   });
+
+  try {
+    notifyAdminsSeatFlagResolved({ reservationId: reservation.id, resolution: 'reverified' });
+  } catch (err) {
+    logger.warn(
+      { err, reservationId: reservation.id },
+      'Failed to notify admins of flag re-verification',
+    );
+  }
 }
 
 // Called by the entry-timer-expiry background job. Same
@@ -721,6 +861,15 @@ export async function evictExpiredFlags(): Promise<void> {
 
       await redisClient.del(key);
       evictedCount++;
+
+      try {
+        notifyAdminsSeatFlagResolved({ reservationId: reservation.id, resolution: 'evicted' });
+      } catch (err) {
+        logger.warn(
+          { err, reservationId: reservation.id },
+          'Failed to notify admins of flag eviction',
+        );
+      }
 
       try {
         broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {

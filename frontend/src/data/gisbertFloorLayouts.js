@@ -1,3 +1,5 @@
+import { MIGUEL_PRO_LAYOUT } from './miguelProMap.js';
+
 const rectTable = (cx, cy, width = 56, height = 36) => ({
   type: 'desk',
   x: cx - width / 2,
@@ -173,8 +175,15 @@ export const FLOOR_LAYOUTS = {
       ],
     },
   },
+  miguel_pro: {
+    1: MIGUEL_PRO_LAYOUT,
+  },
 };
 
 export function getFloorLayout(building, floor) {
   return FLOOR_LAYOUTS[building]?.[Number(floor)] ?? null;
+}
+
+export function getAvailableFloors(building) {
+  return Object.keys(FLOOR_LAYOUTS[building] || {}).map(Number).sort((a, b) => a - b);
 }
