@@ -116,6 +116,7 @@ model ValidationEvent {
   id            String              @id @default(uuid(7))
   reservationId String              @map("reservation_id")
   eventType     ValidationEventType @map("event_type")
+  extensionsUsed Int? @map("extensions_used")
 
   // Cascade here, an event has no standalone meaning without its reservation, so it
   // should go with it if the reservation is ever hard-deleted.

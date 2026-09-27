@@ -187,6 +187,9 @@ export async function approveReservation(reservationId: string): Promise<Reserva
       where: { id: reservation.seatId },
       data: { status: SeatStatus.OCCUPIED },
     });
+    await tx.occupancyLog.create({
+      data: { reservationId, eventType: OccupancyEventType.OCCUPIED },
+    });
     return [res, seat] as const;
   });
 
@@ -386,6 +389,15 @@ export async function voidReservation(reservationId: string): Promise<Reservatio
   if (wasConfirmed) {
     // Seat is OCCUPIED in this case. Reservation, seat, and the
     // occupancy log entry must all change together.
+    // A CONFIRMED reservation's seat is either OCCUPIED or, if a break is
+    // in progress, OCCUPIED_ON_BREAK (checked here rather than assumed)
+    // since only the former case actually needs a new VACATED entry. A
+    // seat already on break is already logically vacated (from
+    // startBreak); logging a second VACATED there would be a false,
+    // unpaired entry with nothing to pair it with.
+    const currentSeat = await seatRepository.findById(reservation.seatId);
+    const seatWasOnBreak = currentSeat?.status === SeatStatus.OCCUPIED_ON_BREAK;
+
     const [res, seat] = await prisma.$transaction(async (tx) => {
       const r = await tx.reservation.update({
         where: { id: reservationId },
@@ -395,9 +407,11 @@ export async function voidReservation(reservationId: string): Promise<Reservatio
         where: { id: reservation.seatId },
         data: { status: SeatStatus.AVAILABLE },
       });
-      await tx.occupancyLog.create({
-        data: { reservationId, eventType: OccupancyEventType.VACATED },
-      });
+      if (!seatWasOnBreak) {
+        await tx.occupancyLog.create({
+          data: { reservationId, eventType: OccupancyEventType.VACATED },
+        });
+      }
       return [r, s] as const;
     });
 
@@ -412,7 +426,7 @@ export async function voidReservation(reservationId: string): Promise<Reservatio
       logger.warn({ err, reservationId }, 'Failed to broadcast seat status update');
     }
   } else {
-    // PENDING, seat.status was never changed on creation, nothing to revert.
+    // PENDING
     updatedReservation = await reservationRepository.update(reservationId, {
       status: ReservationStatus.VOIDED,
       endedAt: new Date(),
@@ -430,7 +444,7 @@ export async function voidReservation(reservationId: string): Promise<Reservatio
 
 const BREAK_BASE_SECONDS = 5 * 60;
 const BREAK_EXTENSION_SECONDS = 5 * 60;
-const BREAK_MAX_EXTENSIONS = 2;
+export const BREAK_MAX_EXTENSIONS = 2;
 const BREAK_MAX_SECONDS = BREAK_BASE_SECONDS + BREAK_MAX_EXTENSIONS * BREAK_EXTENSION_SECONDS; // 15 min
 
 function breakTimerKey(reservationId: string): string {
@@ -580,7 +594,11 @@ export async function returnFromBreak(userId: string, qrToken: string): Promise<
       data: { status: SeatStatus.OCCUPIED },
     });
     await tx.validationEvent.create({
-      data: { reservationId: reservation.id, eventType: ValidationEventType.BREAK_RETURN },
+      data: {
+        reservationId: reservation.id,
+        eventType: ValidationEventType.BREAK_RETURN,
+        extensionsUsed,
+      },
     });
     await tx.occupancyLog.create({
       data: { reservationId: reservation.id, eventType: OccupancyEventType.OCCUPIED },

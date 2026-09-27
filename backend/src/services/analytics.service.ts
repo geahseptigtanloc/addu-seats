@@ -2,11 +2,13 @@ import { OccupancyEventType, ReservationStatus } from '@prisma/client';
 import * as seatRepository from '../repositories/seat.repository';
 import * as occupancyLogRepository from '../repositories/occupancyLog.repository';
 import * as reservationRepository from '../repositories/reservation.repository';
+import * as validationEventRepository from '../repositories/validationEvent.repository';
 import type {
   SeatOccupancyEvent,
   ReservationOccupancyEvent,
 } from '../repositories/occupancyLog.repository';
 import { BadRequestError } from '../utils/AppError';
+import { BREAK_MAX_EXTENSIONS } from './reservation.service';
 
 export interface UtilizationFilters {
   building?: string;
@@ -379,23 +381,41 @@ export interface BreakStatsReport {
   to: Date;
   breakCount: number;
   averageBreakMinutes: number;
+  returnedBreakCount: number;
+  capHitCount: number;
+  capHitPercent: number;
 }
 
-// Covers only breaks with a return scan (VACATED->OCCUPIED pair).
-// Excludes "% hit 15-min cap", extensionsUsed lives only in Redis,
-// never persisted to Postgres.
+// breakCount/averageBreakMinutes cover all breaks, including forfeited
+// ones. capHitPercent covers only returned breaks, extensionsUsed for
+// a forfeited break is unknowable, since its Redis key is already gone
+// by the time the expiry job checks it.
 export async function getBreakStats(filters: BreakStatsFilters): Promise<BreakStatsReport> {
   const { from, to } = resolveDateRange(filters);
 
   const seats = await seatRepository.findMany({ building: filters.building, floor: filters.floor });
 
   if (seats.length === 0) {
-    return { from, to, breakCount: 0, averageBreakMinutes: 0 };
+    return {
+      from,
+      to,
+      breakCount: 0,
+      averageBreakMinutes: 0,
+      returnedBreakCount: 0,
+      capHitCount: 0,
+      capHitPercent: 0,
+    };
   }
 
-  const events = await occupancyLogRepository.findEventsForReservationsInSeats(
-    seats.map((seat) => seat.id),
-  );
+  const seatIds = seats.map((seat) => seat.id);
+
+  const [events, reservations, breakReturns] = await Promise.all([
+    occupancyLogRepository.findEventsForReservationsInSeats(seatIds),
+    reservationRepository.findBySeatIds(seatIds),
+    validationEventRepository.findBreakReturnsInRange(seatIds, from, to),
+  ]);
+
+  const reservationById = new Map(reservations.map((r) => [r.id, r]));
 
   const eventsByReservation = new Map<string, ReservationOccupancyEvent[]>();
   for (const event of events) {
@@ -408,33 +428,47 @@ export async function getBreakStats(filters: BreakStatsFilters): Promise<BreakSt
   }
 
   const breaksInRange: TimeInterval[] = [];
-  for (const reservationEvents of eventsByReservation.values()) {
-    for (const breakInterval of extractBreakIntervals(reservationEvents)) {
+  for (const [reservationId, reservationEvents] of eventsByReservation) {
+    const reservation = reservationById.get(reservationId);
+    const forfeitedEndedAt =
+      reservation?.status === ReservationStatus.FORFEITED ? reservation.endedAt : null;
+
+    for (const breakInterval of extractBreakIntervals(reservationEvents, forfeitedEndedAt)) {
       if (breakInterval.end >= from && breakInterval.end < to) {
         breaksInRange.push(breakInterval);
       }
     }
   }
 
-  if (breaksInRange.length === 0) {
-    return { from, to, breakCount: 0, averageBreakMinutes: 0 };
-  }
+  const capHitCount = breakReturns.filter(
+    (e) => (e.extensionsUsed ?? 0) >= BREAK_MAX_EXTENSIONS,
+  ).length;
+  const capHitPercent =
+    breakReturns.length > 0 ? roundToOneDecimal((capHitCount / breakReturns.length) * 100) : 0;
 
   return {
     from,
     to,
     breakCount: breaksInRange.length,
-    averageBreakMinutes: roundToOneDecimal(
-      sumIntervalMs(breaksInRange) / breaksInRange.length / 60_000,
-    ),
+    averageBreakMinutes:
+      breaksInRange.length > 0
+        ? roundToOneDecimal(sumIntervalMs(breaksInRange) / breaksInRange.length / 60_000)
+        : 0,
+    returnedBreakCount: breakReturns.length,
+    capHitCount,
+    capHitPercent,
   };
 }
 
 // Pairs each VACATED with the next OCCUPIED (break start -> return).
 // An OCCUPIED with no prior VACATED is the initial approval, skipped.
-// A trailing, unpaired VACATED (no return yet) is also skipped.
+// A trailing, unpaired VACATED closes at the reservation's own endedAt if
+// it was FORFEITED (break-timer expiry still ended the break, just not
+// via a return scan), otherwise it's skipped (still open, or ended via
+// void).
 function extractBreakIntervals(
   events: { eventType: OccupancyEventType; createdAt: Date }[],
+  forfeitedEndedAt: Date | null,
 ): TimeInterval[] {
   const intervals: TimeInterval[] = [];
   let vacatedAt: Date | null = null;
@@ -446,6 +480,10 @@ function extractBreakIntervals(
       intervals.push({ start: vacatedAt, end: event.createdAt });
       vacatedAt = null;
     }
+  }
+
+  if (vacatedAt !== null && forfeitedEndedAt !== null) {
+    intervals.push({ start: vacatedAt, end: forfeitedEndedAt });
   }
 
   return intervals;

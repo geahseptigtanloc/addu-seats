@@ -194,3 +194,19 @@ export async function findCompletedSessions(filters: SessionFilters): Promise<Se
     (r): r is { confirmedAt: Date; endedAt: Date } => r.confirmedAt !== null && r.endedAt !== null,
   );
 }
+
+export interface ReservationOutcomeInfo {
+  id: string;
+  status: ReservationStatus;
+  endedAt: Date | null;
+}
+
+// Used by break-stats to check whether a reservation with a dangling,
+// unpaired VACATED was FORFEITED (break-timer expiry) if so, its
+// endedAt closes that break even though no return scan ever happened.
+export function findBySeatIds(seatIds: string[]): Promise<ReservationOutcomeInfo[]> {
+  return prisma.reservation.findMany({
+    where: { seatId: { in: seatIds } },
+    select: { id: true, status: true, endedAt: true },
+  });
+}
