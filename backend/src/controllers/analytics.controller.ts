@@ -136,3 +136,31 @@ export async function getBreakStats(
     next(err);
   }
 }
+
+const locationComparisonQuerySchema = z.object({
+  building: z.string().min(1).optional(),
+  from: z.coerce.date(),
+  to: z.coerce.date(),
+});
+
+export async function getLocationComparison(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const parsed = locationComparisonQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: { message: 'Invalid query parameters — from and to are required dates' } });
+    return;
+  }
+
+  try {
+    const report = await analyticsService.getLocationComparison(parsed.data);
+    res.json(report);
+  } catch (err) {
+    next(err);
+  }
+}

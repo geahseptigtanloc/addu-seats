@@ -16,5 +16,11 @@ router.get(
   analyticsController.getAverageSessionLength,
 );
 router.get('/break-stats', requireAuth, requireRole('ADMIN'), analyticsController.getBreakStats);
+router.get(
+  '/location-comparison',
+  requireAuth,
+  requireRole('ADMIN'),
+  analyticsController.getLocationComparison,
+);
 
 export default router;

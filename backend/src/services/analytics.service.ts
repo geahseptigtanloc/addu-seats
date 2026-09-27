@@ -488,3 +488,78 @@ function extractBreakIntervals(
 
   return intervals;
 }
+
+export interface LocationComparisonFilters {
+  building?: string;
+  from: Date;
+  to: Date;
+}
+
+export interface LocationDemand {
+  building: string;
+  floor: number;
+  seatCount: number;
+  utilizationPercent: number;
+}
+
+export interface LocationComparisonReport {
+  from: Date;
+  to: Date;
+  locations: LocationDemand[];
+}
+
+interface LocationAccumulator {
+  building: string;
+  floor: number;
+  seatCount: number;
+  occupiedMs: number;
+}
+
+// Same occupied intervals as getUtilization, grouped by (building, floor)
+// instead of per-seat. Answers "which location is busiest" rather than
+// scoping down to one. Sorted busiest-first, since that's the report's
+// whole purpose. No floor filter here,
+// narrowing to one floor would defeat a comparison across locations.
+export async function getLocationComparison(
+  filters: LocationComparisonFilters,
+): Promise<LocationComparisonReport> {
+  const { from, to, seats, eventsBySeat } = await loadOccupancyData({
+    building: filters.building,
+    from: filters.from,
+    to: filters.to,
+  });
+
+  const rangeMs = to.getTime() - from.getTime();
+  const groups = new Map<string, LocationAccumulator>();
+
+  for (const seat of seats) {
+    const groupKey = `${seat.building}::${seat.floor}`;
+    const occupiedMs = sumIntervalMs(
+      extractOccupiedIntervals(eventsBySeat.get(seat.id) ?? [], from, to),
+    );
+
+    const group = groups.get(groupKey);
+    if (group) {
+      group.seatCount += 1;
+      group.occupiedMs += occupiedMs;
+    } else {
+      groups.set(groupKey, {
+        building: seat.building,
+        floor: seat.floor,
+        seatCount: 1,
+        occupiedMs,
+      });
+    }
+  }
+
+  const locations: LocationDemand[] = Array.from(groups.values())
+    .map((group) => ({
+      building: group.building,
+      floor: group.floor,
+      seatCount: group.seatCount,
+      utilizationPercent: roundToOneDecimal((group.occupiedMs / (rangeMs * group.seatCount)) * 100),
+    }))
+    .sort((a, b) => b.utilizationPercent - a.utilizationPercent);
+
+  return { from, to, locations };
+}
