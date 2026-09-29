@@ -116,7 +116,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 | Front-desk entry verification, break timer, cooldown, and flagging | Sample workflow is complete and live entry verification exists; production physical-QR token provisioning still remains |
 | First-login terms acceptance | Not implemented |
 | Admin seat disabling and exceptional release override | Not implemented |
-| Occupancy logging and admin analytics | Partial: schema and demo dashboard exist; live logging and complete analytics API are pending |
+| Occupancy logging and admin analytics | Implemented: live occupancy logs and seven admin-only reports cover utilization, peak hours, outcomes, no-shows, session length, break behavior, and location comparison; Miguel Pro area-level grouping remains a frontend sample because the backend groups by building and floor |
 | SARIMA and GBDT/XGBoost forecasting | Not implemented |
 | Formal functional, concurrency, and SUS evaluation | Pending |
 
