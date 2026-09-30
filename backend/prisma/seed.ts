@@ -1,60 +1,47 @@
 import { PrismaClient } from '@prisma/client';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const prisma = new PrismaClient();
 
-// Fake seed.local emails/googleIds — never real accounts, so they can't
-// collide with a real STAFF_EMAILS entry or an actual student's data.
+interface SeatMapEntry {
+  building: string;
+  floor: number;
+  currentQrToken: string;
+}
+
+// Real seat layout, provided by the frontend team. Upserted by
+// currentQrToken (unique) so re-running this script is safe — an
+// existing seat's building/floor gets updated in place rather than
+// duplicated.
+async function seedSeats(): Promise<void> {
+  const seatMapPath = join(__dirname, 'seat-map.json');
+  const seatMap = JSON.parse(readFileSync(seatMapPath, 'utf-8')) as SeatMapEntry[];
+
+  for (const seat of seatMap) {
+    await prisma.seat.upsert({
+      where: { currentQrToken: seat.currentQrToken },
+      update: { building: seat.building, floor: seat.floor },
+      create: {
+        building: seat.building,
+        floor: seat.floor,
+        currentQrToken: seat.currentQrToken,
+      },
+    });
+  }
+
+  console.log(`Seeded ${seatMap.length} seats from seat-map.json`);
+}
+
 async function main(): Promise<void> {
-  const admin = await prisma.user.upsert({
-    where: { googleId: 'seed-admin-google-id' },
-    update: {},
-    create: {
-      googleId: 'seed-admin-google-id',
-      email: 'admin@seed.local',
-      name: 'Seed Admin',
-      role: 'ADMIN',
-    },
-  });
-
-  const student = await prisma.user.upsert({
-    where: { googleId: 'seed-student-google-id' },
-    update: {},
-    create: {
-      googleId: 'seed-student-google-id',
-      email: 'student@seed.local',
-      name: 'Seed Student',
-      role: 'STUDENT',
-      studentIdLast4: '1234',
-    },
-  });
-
-  const seatData = JSON.parse(readFileSync(join(__dirname, 'seat-map.json'), 'utf8')) as Array<{
-    building: string;
-    floor: number;
-    currentQrToken: string;
-  }>;
-
-  // Remove only the four placeholder records from the original guide seed.
-  // Existing real mapped seats and their reservation history are preserved.
-  await prisma.seat.deleteMany({
-    where: {
-      currentQrToken: { in: ['seat-1', 'seat-2', 'seat-3', 'seat-4'] },
-      reservations: { none: {} },
-    },
-  });
-
-  await prisma.seat.createMany({ data: seatData, skipDuplicates: true });
-
-  console.log(`Seeded: ${admin.email}, ${student.email}, ${seatData.length} mapped seats`);
+  await seedSeats();
 }
 
 main()
-  .catch((err: unknown) => {
+  .catch((err) => {
     console.error(err);
     process.exit(1);
   })
-  .finally(() => {
-    void prisma.$disconnect();
+  .finally(async () => {
+    await prisma.$disconnect();
   });
