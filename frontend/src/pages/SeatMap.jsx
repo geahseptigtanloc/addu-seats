@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout.jsx';
+import AppDialog from '../components/AppDialog.jsx';
 import { apiClient, API_URL, getToken } from '../api/client.js';
 import {
   normalizeReservation,
@@ -465,6 +466,9 @@ export default function SeatMap() {
   const [selectedSeat, setSelectedSeat] = useState(null);
   const [selectedHub, setSelectedHub] = useState(null);
   const [activeReservation, setActiveReservation] = useState(null);
+  const [flagSeatId, setFlagSeatId] = useState(null);
+  const [flagging, setFlagging] = useState(false);
+  const [notice, setNotice] = useState(null);
   const [zoom, setZoom] = useState(1);
   const requestedArea = searchParams.get('area');
   const miguelProArea = MIGUEL_PRO_AREAS.some((area) => area.id === requestedArea)
@@ -540,13 +544,21 @@ export default function SeatMap() {
   };
 
   const handleFlagSeat = async (seatId) => {
-    if (!confirm('Report this occupied chair as a possible ghost seat? The reservation holder and administrator will be notified.')) return;
+    setFlagging(true);
     try {
       await apiClient(`/api/seats/${seatId}/flag`, { method: 'POST' });
-      alert('Ghost seat reported. The holder must re-verify at the physical QR.');
+      setFlagSeatId(null);
       setSelectedSeat(null);
+      setNotice({
+        tone: 'success',
+        title: 'Ghost seat reported',
+        description: 'The reservation holder and front desk were notified. The holder must re-verify at the physical QR.',
+      });
     } catch (err) {
-      alert(`Flag failed: ${err.message}`);
+      setFlagSeatId(null);
+      setNotice({ tone: 'danger', title: 'Report failed', description: err.message });
+    } finally {
+      setFlagging(false);
     }
   };
 
@@ -781,7 +793,7 @@ export default function SeatMap() {
                   <p className="mt-2 text-sm leading-6 text-slate-600">{user?.role === 'student' && selectedSeat.status === 'occupied' ? 'If this node appears vacant in person, report it so the reservation holder can respond.' : 'This reservation node cannot be selected right now.'}</p>
                   <div className="mt-6 flex justify-end gap-2">
                     <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary">Close</button>
-                    {user?.role === 'student' && selectedSeat.status === 'occupied' && <button type="button" onClick={() => handleFlagSeat(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}
+                    {user?.role === 'student' && selectedSeat.status === 'occupied' && <button type="button" onClick={() => setFlagSeatId(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}
                   </div>
                 </>
               )}
@@ -789,6 +801,25 @@ export default function SeatMap() {
           </div>
         </div>
       )}
+      <AppDialog
+        open={Boolean(flagSeatId)}
+        tone="warning"
+        title="Report a possible ghost seat?"
+        description={`Report ${selectedSeatLabel} as vacant? The reservation holder and front desk will be notified and asked to verify the physical QR.`}
+        confirmLabel="Submit report"
+        cancelLabel="Go back"
+        busy={flagging}
+        onConfirm={() => handleFlagSeat(flagSeatId)}
+        onClose={() => setFlagSeatId(null)}
+      />
+      <AppDialog
+        open={Boolean(notice)}
+        tone={notice?.tone}
+        title={notice?.title}
+        description={notice?.description}
+        confirmLabel="Close"
+        onClose={() => setNotice(null)}
+      />
     </Layout>
   );
 }

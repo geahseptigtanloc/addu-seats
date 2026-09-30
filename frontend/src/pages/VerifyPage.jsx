@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, IdentificationCard, WarningCircle } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
+import AppDialog from '../components/AppDialog.jsx';
 import { apiClient } from '../api/client.js';
 import { getReceiptCode, normalizeReservation } from '../api/normalizers.js';
 
@@ -16,6 +17,7 @@ export default function VerifyPage() {
   const [reason, setReason] = useState('');
   const [receiptConfirmed, setReceiptConfirmed] = useState(false);
   const [nameConfirmed, setNameConfirmed] = useState(false);
+  const [notice, setNotice] = useState(null);
   const receiptCode = reservation ? getReceiptCode(reservation.reservationId) : '';
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export default function VerifyPage() {
       await apiClient(`/api/reservations/${reservation.reservationId}/approve`, { method: 'POST' });
       navigate('/frontdesk');
     } catch (requestError) {
-      alert(`Approval failed: ${requestError.message}`);
+      setNotice({ title: 'Approval failed', description: requestError.message });
     }
   };
 
@@ -54,7 +56,7 @@ export default function VerifyPage() {
       await apiClient(`/api/reservations/${reservation.reservationId}/void`, { method: 'POST' });
       navigate('/frontdesk');
     } catch (requestError) {
-      alert(`Rejection failed: ${requestError.message}`);
+      setNotice({ title: 'Rejection failed', description: requestError.message });
     }
   };
 
@@ -125,6 +127,14 @@ export default function VerifyPage() {
           )}
         </div>
       </section>
+      <AppDialog
+        open={Boolean(notice)}
+        tone="danger"
+        title={notice?.title}
+        description={notice?.description}
+        confirmLabel="Close"
+        onClose={() => setNotice(null)}
+      />
     </Layout>
   );
 }

@@ -13,6 +13,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
+import AppDialog from '../components/AppDialog.jsx';
 import { apiClient, getToken } from '../api/client.js';
 import { getReceiptCode, normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -45,6 +46,8 @@ export default function ReservationReceipt() {
   const [flagged, setFlagged] = useState(false);
   const [flagMessage, setFlagMessage] = useState('');
   const [showBreakDialog, setShowBreakDialog] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
+  const [notice, setNotice] = useState(null);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -111,7 +114,7 @@ export default function ReservationReceipt() {
       setReservation(updated);
       return updated;
     } catch (err) {
-      alert(err.message);
+      setNotice({ title: 'Action could not be completed', description: err.message });
       return null;
     } finally {
       setBusyAction('');
@@ -119,23 +122,24 @@ export default function ReservationReceipt() {
   }
 
   async function handleCancel() {
-    if (!confirm('Cancel this pending reservation?')) return;
     setBusyAction('cancel');
     try {
       await apiClient(`/api/reservations/${reservation.reservationId}/cancel`, { method: 'POST' });
       navigate(`/map/${reservation.seat.building}/${reservation.seat.floor}`);
     } catch (err) {
-      alert(err.message);
+      setNotice({ title: 'Cancellation failed', description: err.message });
+    } finally {
       setBusyAction('');
+      setConfirmation(null);
     }
   }
 
   async function handleCheckout() {
-    if (!confirm('Check out and release this reservation node?')) return;
     const updated = await performAction(
       'checkout',
       `/api/reservations/${reservation.reservationId}/checkout`,
     );
+    setConfirmation(null);
     if (updated) navigate('/');
   }
 
@@ -218,7 +222,7 @@ export default function ReservationReceipt() {
                     <p className="text-xs font-semibold uppercase text-amber-800">Time remaining</p>
                     <p className="mt-1 font-mono text-4xl font-bold text-amber-950">{formatTime(entrySeconds)}</p>
                   </div>
-                  <button type="button" onClick={handleCancel} disabled={Boolean(busyAction)} className="rounded-[8px] px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
+                  <button type="button" onClick={() => setConfirmation('cancel')} disabled={Boolean(busyAction)} className="rounded-[8px] px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
                     {busyAction === 'cancel' ? 'Cancelling...' : 'Cancel reservation'}
                   </button>
                 </div>
@@ -268,7 +272,7 @@ export default function ReservationReceipt() {
                 )}
 
                 <div className="border-t border-gray-100 px-5 py-4">
-                  <button type="button" onClick={handleCheckout} disabled={Boolean(busyAction)} className="inline-flex items-center gap-2 text-sm font-semibold text-red-700 hover:text-red-900 disabled:opacity-50">
+                  <button type="button" onClick={() => setConfirmation('checkout')} disabled={Boolean(busyAction)} className="inline-flex items-center gap-2 text-sm font-semibold text-red-700 hover:text-red-900 disabled:opacity-50">
                     <SignOut size={18} weight="bold" />
                     Check out and release node
                   </button>
@@ -369,6 +373,27 @@ export default function ReservationReceipt() {
             }}
           />
         )}
+        <AppDialog
+          open={Boolean(confirmation)}
+          tone="danger"
+          title={confirmation === 'cancel' ? 'Cancel this reservation?' : 'Check out and release this node?'}
+          description={confirmation === 'cancel'
+            ? 'Your pending reservation will be cancelled and the node will become available again.'
+            : `Your study session at ${nodeLabel} will end and the node will become available to other students.`}
+          confirmLabel={confirmation === 'cancel' ? 'Cancel reservation' : 'Check out'}
+          cancelLabel="Keep reservation"
+          busy={Boolean(busyAction)}
+          onConfirm={confirmation === 'cancel' ? handleCancel : handleCheckout}
+          onClose={() => setConfirmation(null)}
+        />
+        <AppDialog
+          open={Boolean(notice)}
+          tone="danger"
+          title={notice?.title}
+          description={notice?.description}
+          confirmLabel="Close"
+          onClose={() => setNotice(null)}
+        />
       </section>
     </Layout>
   );

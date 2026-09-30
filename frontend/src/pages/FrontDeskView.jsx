@@ -4,6 +4,7 @@ import { apiClient, getToken } from '../api/client.js';
 import { getReceiptCode, normalizePendingReservation } from '../api/normalizers.js';
 import { io } from 'socket.io-client';
 import { CheckCircle, ClockCountdown, IdentificationCard, X } from '@phosphor-icons/react';
+import AppDialog from '../components/AppDialog.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -31,6 +32,7 @@ export default function FrontDeskView() {
   const [receiptConfirmed, setReceiptConfirmed] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
+  const [notice, setNotice] = useState(null);
   const [, setTick] = useState(0);
 
   const fetchQueue = useCallback(async () => {
@@ -61,7 +63,11 @@ export default function FrontDeskView() {
 
     const socket = io(SOCKET_URL, { auth: { token } });
     socket.on('seat_flagged_admin_notice', (data) => {
-      alert(`Seat reported vacant on Floor ${data.floor} in ${data.building.replace('_', ' ')}.`);
+      setNotice({
+        tone: 'warning',
+        title: 'Possible ghost seat reported',
+        description: `A student reported a vacant seat on Floor ${data.floor} in ${data.building.replace('_', ' ')}.`,
+      });
     });
     return () => socket.disconnect();
   }, []);
@@ -89,7 +95,7 @@ export default function FrontDeskView() {
       closeReview();
       fetchQueue();
     } catch (err) {
-      alert(`Approval failed: ${err.message}`);
+      setNotice({ tone: 'danger', title: 'Approval failed', description: err.message });
     }
   }
 
@@ -100,7 +106,7 @@ export default function FrontDeskView() {
       closeReview();
       fetchQueue();
     } catch (err) {
-      alert(`Rejection failed: ${err.message}`);
+      setNotice({ tone: 'danger', title: 'Rejection failed', description: err.message });
     }
   }
 
@@ -236,6 +242,14 @@ export default function FrontDeskView() {
           </div>
         )}
       </section>
+      <AppDialog
+        open={Boolean(notice)}
+        tone={notice?.tone}
+        title={notice?.title}
+        description={notice?.description}
+        confirmLabel="Close"
+        onClose={() => setNotice(null)}
+      />
     </Layout>
   );
 }

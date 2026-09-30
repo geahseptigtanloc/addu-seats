@@ -1,15 +1,18 @@
 /**
  * Shared page layout with header navigation.
  */
+import { useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { ChartBar, MapTrifold, Monitor, ShieldCheck, SignOut, Ticket } from '@phosphor-icons/react';
 import { apiClient } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import AppDialog from './AppDialog.jsx';
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [notice, setNotice] = useState(null);
 
   async function handleOpenMyReservation() {
     try {
@@ -22,7 +25,10 @@ export default function Layout({ children }) {
         }
       });
     } catch (err) {
-      alert('You do not have an active reservation to view right now.');
+      setNotice({
+        title: 'No active reservation',
+        description: 'You do not have an active reservation to view right now.',
+      });
     }
   }
 
@@ -102,6 +108,13 @@ export default function Layout({ children }) {
           <span className="font-medium text-slate-600">Mapped plans: Gisbert and Miguel Pro</span>
         </div>
       </footer>
+      <AppDialog
+        open={Boolean(notice)}
+        title={notice?.title}
+        description={notice?.description}
+        confirmLabel="Got it"
+        onClose={() => setNotice(null)}
+      />
     </div>
   );
 }
