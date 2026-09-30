@@ -1,24 +1,21 @@
 /**
- * Auth context for Google sessions and local demo-account previews.
+ * Auth context for real Google OAuth sessions.
  */
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { apiClient, clearToken, getToken, setToken } from '../api/client.js';
-import { getDemoUser } from '../data/demoUsers.js';
 import { normalizeUser } from '../api/normalizers.js';
 
 const AuthContext = createContext(null);
-const DEMO_ROLE_KEY = 'addu_seats_demo_role';
+const LEGACY_DEMO_KEYS = ['addu_seats_demo_role', 'addu_seats_demo_reservation'];
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [canUseProtectedApi, setCanUseProtectedApi] = useState(false);
 
   const fetchUser = useCallback(async () => {
     const token = getToken();
     if (!token) {
-      setUser(getDemoUser(localStorage.getItem(DEMO_ROLE_KEY)));
-      setCanUseProtectedApi(false);
+      setUser(null);
       setLoading(false);
       return;
     }
@@ -26,23 +23,21 @@ export function AuthProvider({ children }) {
     try {
       const data = await apiClient('/api/auth/me');
       setUser(normalizeUser(data.user));
-      setCanUseProtectedApi(true);
     } catch {
       clearToken();
-      setUser(getDemoUser(localStorage.getItem(DEMO_ROLE_KEY)));
-      setCanUseProtectedApi(false);
+      setUser(null);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    LEGACY_DEMO_KEYS.forEach((key) => localStorage.removeItem(key));
     fetchUser();
   }, [fetchUser]);
 
   const loginWithToken = useCallback(
     async (token) => {
-      localStorage.removeItem(DEMO_ROLE_KEY);
       setToken(token);
       setLoading(true);
       await fetchUser();
@@ -50,38 +45,10 @@ export function AuthProvider({ children }) {
     [fetchUser],
   );
 
-  const loginAsDemo = useCallback(async (role) => {
-    const fallbackUser = getDemoUser(role);
-    if (!fallbackUser) throw new Error('Unknown demo role');
-
-    clearToken();
-    setLoading(true);
-
-    try {
-      const data = await apiClient('/api/auth/demo', {
-        method: 'POST',
-        body: JSON.stringify({ role }),
-      });
-      localStorage.removeItem(DEMO_ROLE_KEY);
-      setToken(data.token);
-      setUser(normalizeUser(data.user));
-      setCanUseProtectedApi(true);
-      return true;
-    } catch {
-      localStorage.setItem(DEMO_ROLE_KEY, role);
-      setUser(fallbackUser);
-      setCanUseProtectedApi(false);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   const logout = useCallback(() => {
     clearToken();
-    localStorage.removeItem(DEMO_ROLE_KEY);
+    LEGACY_DEMO_KEYS.forEach((key) => localStorage.removeItem(key));
     setUser(null);
-    setCanUseProtectedApi(false);
   }, []);
 
   return (
@@ -89,9 +56,7 @@ export function AuthProvider({ children }) {
       value={{
         user,
         loading,
-        canUseProtectedApi,
         loginWithToken,
-        loginAsDemo,
         logout,
         refreshUser: fetchUser,
       }}

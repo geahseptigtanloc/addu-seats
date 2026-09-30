@@ -32,14 +32,15 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 
 ### Student
 
-- Sign in with Google OAuth or use the one-click student demo account.
+- Sign in with Google OAuth. Production restricts access to the configured university domain; local testing can explicitly allow any Google email through `ALLOW_ANY_GOOGLE_EMAIL=true`.
 - Browse floor maps and live seat states.
-- Select a labeled reservation node, acknowledge the entry rule, reserve it, and receive a five-minute entry deadline.
-- View the reservation receipt and QR verification URL.
+- Inspect availability on the map, then physically scan the QR attached to the desired seat or table and confirm the reservation from the scan page.
+- Receive a five-minute entry deadline only after the physical QR reservation is created.
+- View a short receipt code that is also shown in the front-desk queue.
 - Cancel a pending reservation or check out an active reservation.
 - Start a five-minute break and extend it twice up to 15 minutes.
 - Review the break rules before starting, then track the live countdown, allocated-time segments, final-minute urgency, and extension availability.
-- Return from a sample break through the mapped node's sample QR route. A production physical-QR token and printing workflow remain pending.
+- Return from a break by scanning the mapped node's QR route. Production physical-QR token provisioning and printing remain pending.
 - Receive a 30-minute break cooldown only after consuming the full 15-minute allowance; shorter breaks must not trigger it.
 - See the remaining cooldown as a live countdown before another break becomes available.
 - Receive an immediate warning when another student reports their occupied node as a possible ghost seat. The report can be cleared only through physical-node QR re-verification; there is no in-app confirmation shortcut.
@@ -58,8 +59,8 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 ### Admin
 
 - Use all staff/front-desk capabilities.
-- Use the one-click admin demo account for UI testing.
-- Review sample reservations saved in the browser and approve entry only after confirming both the QR receipt and ID suffix.
+- Sign in through Google OAuth from an address configured in `STAFF_EMAILS`.
+- Review live reservations and approve entry only after matching the receipt code and checking the student's name and university ID.
 - View the responsive occupancy dashboard and open individual floor maps.
 - Switch dashboard analytics between Gisbert Library and Miguel Pro Learning Commons and receive live ghost-seat report notices.
 - Access role-protected admin routes.
@@ -84,6 +85,8 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 ## Reservation Integrity Rules
 
 - Reservation creation is bound to the authenticated JWT user.
+- Clicking a node on the public map never creates a reservation and never reveals its physical QR token.
+- A reservation can be created only by submitting the token obtained from the physical seat or table QR through the scan-first reservation page.
 - Live seat claims use an atomic status update and reject a second in-progress reservation for the same student.
 - A selected seat changes from available to pending during the entry window.
 - Pending-entry reservations expire automatically after five minutes.
@@ -91,7 +94,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Front-desk rejection releases the seat.
 - Physical-node QR values are matched against `Seat.currentQrToken`. Development tokens are deterministic so the supplied maps and seed stay synchronized; secure production token generation and printing remain pending.
 - Breaks begin at five minutes and can be extended by five minutes twice.
-- The paper requires the student to scan the designated physical QR code before the break deadline to return; the current in-app return action is not yet compliant.
+- Returning from a break requires the designated physical QR token; production QR provisioning and printing remain pending.
 - Missing the break deadline before that scan forfeits the reservation and releases the seat.
 - The 30-minute cooldown applies only after a student consumes the full 15-minute break and returns on time. A shorter break does not trigger cooldown.
 - An occupied seat can be flagged as apparently vacant.
@@ -112,19 +115,21 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 | Capability | Current status |
 |---|---|---|
 | Foundation, schema, auth, environment, and frontend API wiring | Implemented |
-| Public map browsing and reservation lifecycle | Implemented; production physical QR provisioning remains pending |
-| Front-desk entry verification, break timer, cooldown, and flagging | Sample workflow is complete and live entry verification exists; production physical-QR token provisioning still remains |
+| Public map browsing and reservation lifecycle | QR-first reservation flow implemented; production physical QR provisioning and printing remain pending |
+| Front-desk entry verification, break timer, cooldown, and flagging | Live authenticated workflow is implemented; production physical-QR token provisioning still remains |
 | First-login terms acceptance | Not implemented |
 | Admin seat disabling and exceptional release override | Not implemented |
-| Occupancy logging and admin analytics | Implemented: live occupancy logs and seven admin-only reports cover utilization, peak hours, outcomes, no-shows, session length, break behavior, and location comparison; Miguel Pro area-level grouping remains a frontend sample because the backend groups by building and floor |
+| Occupancy logging and admin analytics | Implemented: live occupancy logs and seven admin-only reports cover utilization, peak hours, outcomes, no-shows, session length, break behavior, and location comparison; Miguel Pro area-level grouping remains unavailable because the backend groups by building and floor |
 | SARIMA and GBDT/XGBoost forecasting | Not implemented |
 | Formal functional, concurrency, and SUS evaluation | Pending |
 
 ## Non-Regression Checklist
 
 - Public browsing must continue to work without OAuth.
-- Protected mutations must never trust a frontend-only demo identity.
-- Demo mode must clearly distinguish preview data from live backend data.
+- Protected mutations must require a real backend-issued Google OAuth JWT.
+- Public map responses must never expose `Seat.currentQrToken`, and map clicks must never create reservations.
+- Production must keep `ALLOW_ANY_GOOGLE_EMAIL` disabled so `SCHOOL_EMAIL_DOMAIN` remains enforced.
+- Production and pilot builds must not expose sample identities, browser-local reservation simulations, or fabricated analytics.
 - Student, staff, and admin route permissions must remain separate.
 - Releasing or expiring a reservation must also release its seat and emit a live update.
 - Break and flag timers must be enforced server-side, not only in the browser.

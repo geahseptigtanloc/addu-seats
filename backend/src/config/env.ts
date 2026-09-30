@@ -18,6 +18,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET cannot be blank'),
   GOOGLE_CALLBACK_URL: z.string().url(),
   CORS_ORIGIN: z.string().url(),
+  ALLOW_ANY_GOOGLE_EMAIL: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   // No default
   // see src/config/passport.ts's security note
   SCHOOL_EMAIL_DOMAIN: z.string().min(1, 'SCHOOL_EMAIL_DOMAIN cannot be blank'),

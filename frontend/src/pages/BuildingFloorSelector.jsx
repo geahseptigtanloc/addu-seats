@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Buildings, Clock, MapPin, Ticket } from '@phosphor-icons/react';
+import { ArrowRight, Buildings, MapPin, Ticket } from '@phosphor-icons/react';
 import { apiClient } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
 import Layout from '../components/Layout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { getGisbertPreviewSeats } from '../data/gisbertPreviewSeats.js';
 import { getMiguelProPreviewSeats } from '../data/miguelProMap.js';
-import { getDemoReservation, subscribeToDemoReservation } from '../data/demoReservationStore.js';
 
 const GISBERT_FLOORS = [
   { floor: 1, name: 'Commons and services' },
@@ -41,7 +40,7 @@ export default function BuildingFloorSelector() {
   const [building, setBuilding] = useState('gisbert');
   const [activeReservation, setActiveReservation] = useState(null);
   const navigate = useNavigate();
-  const { user, canUseProtectedApi } = useAuth();
+  const { user } = useAuth();
 
   const selectedLibrary = LIBRARIES[building];
   const floorOptions = useMemo(
@@ -60,17 +59,11 @@ export default function BuildingFloorSelector() {
       return undefined;
     }
 
-    if (!canUseProtectedApi) {
-      const refreshDemoReservation = () => setActiveReservation(getDemoReservation());
-      refreshDemoReservation();
-      return subscribeToDemoReservation(refreshDemoReservation);
-    }
-
     apiClient('/api/reservations/me/current')
       .then((data) => setActiveReservation(normalizeReservation(data, { user })))
       .catch(() => setActiveReservation(null));
     return undefined;
-  }, [user, canUseProtectedApi]);
+  }, [user]);
 
   const openActiveReservation = () => {
     if (!activeReservation) return;
@@ -78,7 +71,6 @@ export default function BuildingFloorSelector() {
       state: {
         reservation: activeReservation,
         qrToken: activeReservation.qrToken || activeReservation.seat?.currentQrToken || null,
-        isDemo: !canUseProtectedApi,
       },
     });
   };
@@ -145,13 +137,6 @@ export default function BuildingFloorSelector() {
             <ArrowRight size={17} weight="bold" />
           </button>
         </section>
-      )}
-
-      {user && !canUseProtectedApi && !activeReservation && (
-        <div className="ui-alert-info mt-6 flex items-center gap-3">
-          <Clock size={19} weight="duotone" className="shrink-0" />
-          Sample mode is active. Reservations remain in this browser.
-        </div>
       )}
 
       <section className="pt-8">

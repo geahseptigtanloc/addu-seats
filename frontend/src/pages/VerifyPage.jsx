@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, IdentificationCard, QrCode, WarningCircle } from '@phosphor-icons/react';
+import { ArrowLeft, CheckCircle, IdentificationCard, WarningCircle } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
 import { apiClient } from '../api/client.js';
-import { normalizeReservation } from '../api/normalizers.js';
-import { useAuth } from '../context/AuthContext.jsx';
-import { getDemoReservation, updateDemoReservation } from '../data/demoReservationStore.js';
+import { getReceiptCode, normalizeReservation } from '../api/normalizers.js';
 
 export default function VerifyPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
   const navigate = useNavigate();
-  const { canUseProtectedApi } = useAuth();
   const [reservation, setReservation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [receiptConfirmed, setReceiptConfirmed] = useState(false);
-  const [identityConfirmed, setIdentityConfirmed] = useState(false);
+  const [nameConfirmed, setNameConfirmed] = useState(false);
+  const receiptCode = reservation ? getReceiptCode(reservation.reservationId) : '';
 
   useEffect(() => {
     if (!token) {
@@ -29,12 +27,6 @@ export default function VerifyPage() {
 
     const verifyToken = async () => {
       try {
-        if (!canUseProtectedApi) {
-          const demoReservation = getDemoReservation({ includeTerminal: true });
-          if (!demoReservation || demoReservation.qrToken !== token) throw new Error('Matching sample reservation not found');
-          setReservation({ ...demoReservation, alreadyVerified: demoReservation.status === 'active' });
-          return;
-        }
         const data = await apiClient(`/api/reservations/${encodeURIComponent(token)}`);
         const normalized = normalizeReservation(data);
         setReservation({ ...normalized, alreadyVerified: normalized.status === 'active' });
@@ -45,15 +37,11 @@ export default function VerifyPage() {
       }
     };
     verifyToken();
-  }, [token, canUseProtectedApi]);
+  }, [token]);
 
   const handleApprove = async () => {
     try {
-      if (canUseProtectedApi) {
-        await apiClient(`/api/reservations/${reservation.reservationId}/approve`, { method: 'POST' });
-      } else {
-        updateDemoReservation(reservation.reservationId, 'approve');
-      }
+      await apiClient(`/api/reservations/${reservation.reservationId}/approve`, { method: 'POST' });
       navigate('/frontdesk');
     } catch (requestError) {
       alert(`Approval failed: ${requestError.message}`);
@@ -63,11 +51,7 @@ export default function VerifyPage() {
   const handleReject = async () => {
     if (!reason.trim()) return;
     try {
-      if (canUseProtectedApi) {
-        await apiClient(`/api/reservations/${reservation.reservationId}/void`, { method: 'POST' });
-      } else {
-        updateDemoReservation(reservation.reservationId, 'reject', { reason });
-      }
+      await apiClient(`/api/reservations/${reservation.reservationId}/void`, { method: 'POST' });
       navigate('/frontdesk');
     } catch (requestError) {
       alert(`Rejection failed: ${requestError.message}`);
@@ -106,11 +90,11 @@ export default function VerifyPage() {
 
               <div className="grid gap-x-6 gap-y-5 sm:grid-cols-3">
                 <Detail label="Student" value={reservation.user.name} />
-                <Detail label="AdDU ID" value={`Ending in ${reservation.user.adduIdLast4 || 'N/A'}`} mono />
+                <Detail label="Student ID" value={reservation.user.adduIdLast4 ? `Ending in ${reservation.user.adduIdLast4}` : 'Check physical university ID'} />
                 <Detail label="Reservation node" value={reservation.seat.label || 'Reservation node'} accent />
                 <Detail label="Location" value={`${reservation.seat.building.replace('_', ' ')} - Floor ${reservation.seat.floor}`} />
                 <Detail label="Status" value={reservation.alreadyVerified ? 'Active' : 'Pending entry'} />
-                <Detail label="Reference" value={reservation.reservationId.slice(-8).toUpperCase()} mono />
+                <Detail label="Receipt code" value={receiptCode} mono />
               </div>
 
               {!reservation.alreadyVerified && (
@@ -118,8 +102,8 @@ export default function VerifyPage() {
                   <div className="mt-7 border-t border-slate-200 pt-5">
                     <h2 className="text-sm font-semibold text-slate-950">Required checks</h2>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <CheckItem icon={QrCode} checked={receiptConfirmed} onChange={setReceiptConfirmed}>QR receipt matches this reservation.</CheckItem>
-                      <CheckItem icon={IdentificationCard} checked={identityConfirmed} onChange={setIdentityConfirmed}>Name and ID ending in {reservation.user.adduIdLast4 || 'N/A'} match.</CheckItem>
+                      <CheckItem icon={CheckCircle} checked={receiptConfirmed} onChange={setReceiptConfirmed}>Receipt code {receiptCode} matches the student's receipt.</CheckItem>
+                      <CheckItem icon={IdentificationCard} checked={nameConfirmed} onChange={setNameConfirmed}>Student name and university ID match the person presenting the receipt.</CheckItem>
                     </div>
                   </div>
 
@@ -132,7 +116,7 @@ export default function VerifyPage() {
                   ) : (
                     <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
                       <button type="button" onClick={() => setRejecting(true)} className="ui-button-danger">Reject</button>
-                      <button type="button" onClick={handleApprove} disabled={!receiptConfirmed || !identityConfirmed} className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[8px] bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(4,120,87,0.18)] hover:-translate-y-0.5 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0"><CheckCircle size={18} weight="bold" />Approve entry</button>
+                      <button type="button" onClick={handleApprove} disabled={!receiptConfirmed || !nameConfirmed} className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[8px] bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(4,120,87,0.18)] hover:-translate-y-0.5 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0"><CheckCircle size={18} weight="bold" />Approve entry</button>
                     </div>
                   )}
                 </>

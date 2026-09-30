@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
 import { io } from 'socket.io-client';
 import {
   ArrowLeft,
@@ -15,13 +14,8 @@ import {
 } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
 import { apiClient, getToken } from '../api/client.js';
-import { normalizeReservation } from '../api/normalizers.js';
+import { getReceiptCode, normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import {
-  getDemoReservation,
-  subscribeToDemoReservation,
-  updateDemoReservation,
-} from '../data/demoReservationStore.js';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -45,61 +39,42 @@ function getNodeType(seatType) {
 export default function ReservationReceipt() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, canUseProtectedApi } = useAuth();
+  const { user } = useAuth();
   const [reservation, setReservation] = useState(location.state?.reservation || null);
-  const [qrToken, setQrToken] = useState(location.state?.qrToken || null);
   const [busyAction, setBusyAction] = useState('');
   const [flagged, setFlagged] = useState(false);
   const [flagMessage, setFlagMessage] = useState('');
   const [showBreakDialog, setShowBreakDialog] = useState(false);
   const [, setTick] = useState(0);
 
-  const isDemo = Boolean(location.state?.isDemo || reservation?.demo || !canUseProtectedApi);
-
   useEffect(() => {
     async function refreshReservation() {
-      if (isDemo) {
-        const current = getDemoReservation({ includeTerminal: true });
-        if (current) {
-          setReservation(current);
-          setQrToken(current.qrToken);
-        }
-        return;
-      }
-
       try {
         const data = await apiClient('/api/reservations/me/current');
         const normalized = normalizeReservation(data, { user });
         setReservation(normalized);
-        setQrToken(data.qrToken || normalized?.reservationId);
       } catch {
         // Keep the current receipt visible if the server has just moved it to a terminal state.
       }
     }
 
     refreshReservation();
-    const unsubscribe = subscribeToDemoReservation(refreshReservation);
-    const pollInterval = !isDemo ? setInterval(refreshReservation, 3000) : null;
+    const pollInterval = setInterval(refreshReservation, 3000);
     return () => {
-      unsubscribe();
-      if (pollInterval) clearInterval(pollInterval);
+      clearInterval(pollInterval);
     };
-  }, [isDemo]);
+  }, [user]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setTick((tick) => tick + 1);
-      if (isDemo) {
-        const current = getDemoReservation({ includeTerminal: true });
-        if (current) setReservation(current);
-      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isDemo]);
+  }, []);
 
   useEffect(() => {
     const token = getToken();
-    if (!token || !reservation || isDemo) return undefined;
+    if (!token || !reservation) return undefined;
 
     const socket = io(SOCKET_URL, { auth: { token } });
     socket.on('seat_flagged', (data) => {
@@ -120,22 +95,18 @@ export default function ReservationReceipt() {
       setReservation((current) => ({ ...current, status: 'expired' }));
     });
     return () => socket.disconnect();
-  }, [reservation?.reservationId, isDemo]);
+  }, [reservation?.reservationId]);
 
-  async function performAction(action, apiPath, options = {}) {
+  async function performAction(action, apiPath) {
     setBusyAction(action);
     try {
       let updated;
-      if (isDemo) {
-        updated = updateDemoReservation(reservation.reservationId, action, options);
+      const response = await apiClient(apiPath, { method: 'POST' });
+      if (action === 'checkout') {
+        updated = normalizeReservation(response, { seat: reservation.seat, user });
       } else {
-        const response = await apiClient(apiPath, { method: 'POST' });
-        if (action === 'checkout') {
-          updated = normalizeReservation(response, { seat: reservation.seat, user });
-        } else {
-          const current = await apiClient('/api/reservations/me/current');
-          updated = normalizeReservation(current, { seat: reservation.seat, user });
-        }
+        const current = await apiClient('/api/reservations/me/current');
+        updated = normalizeReservation(current, { seat: reservation.seat, user });
       }
       setReservation(updated);
       return updated;
@@ -151,11 +122,7 @@ export default function ReservationReceipt() {
     if (!confirm('Cancel this pending reservation?')) return;
     setBusyAction('cancel');
     try {
-      if (isDemo) {
-        updateDemoReservation(reservation.reservationId, 'cancel');
-      } else {
-        await apiClient(`/api/reservations/${reservation.reservationId}/cancel`, { method: 'POST' });
-      }
+      await apiClient(`/api/reservations/${reservation.reservationId}/cancel`, { method: 'POST' });
       navigate(`/map/${reservation.seat.building}/${reservation.seat.floor}`);
     } catch (err) {
       alert(err.message);
@@ -193,10 +160,7 @@ export default function ReservationReceipt() {
   const seat = reservation.seat || {};
   const nodeLabel = seat.label || 'Reserved node';
   const buildingName = (seat.building || 'gisbert').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-  const verificationUrl = qrToken
-    ? `${window.location.origin}/verify?token=${encodeURIComponent(qrToken)}`
-    : '';
-  const sampleSeatQrUrl = `${window.location.origin}/seat-return/${encodeURIComponent(seat.seatId || '')}`;
+  const receiptCode = getReceiptCode(reservation.reservationId);
   const allocatedBreakMinutes = reservation.breakMinutesUsed || 5;
   const breakProgress = Math.min(100, Math.max(0, (breakSeconds / (allocatedBreakMinutes * 60)) * 100));
   const breakIsUrgent = status === 'on_break' && breakSeconds <= 60;
@@ -216,12 +180,6 @@ export default function ReservationReceipt() {
             Floor map
           </Link>
         </div>
-
-        {isDemo && (
-          <div className="ui-alert-info mt-5">
-            Sample reservation: this record is saved only in this browser.
-          </div>
-        )}
 
         {flagged && (
           <div className="ui-alert-danger mt-5">
@@ -246,15 +204,15 @@ export default function ReservationReceipt() {
                     : `${buildingName}, Floor ${seat.floor || '-'}`}
                 />
                 <Detail label="Student" value={user?.name || reservation.user?.name || 'Student'} />
-                <Detail label="ID verification" value={`Ending in ${user?.adduIdLast4 || reservation.user?.adduIdLast4 || 'N/A'}`} />
-                <Detail label="Reference" value={reservation.reservationId.slice(-8).toUpperCase()} mono />
+                <Detail label="Student ID" value={user?.adduIdLast4 || reservation.user?.adduIdLast4 ? `Ending in ${user?.adduIdLast4 || reservation.user?.adduIdLast4}` : 'Present physical ID'} />
+                <Detail label="Receipt code" value={receiptCode} mono />
               </div>
             </section>
 
             {status === 'pending_entry' && (
               <section className="rounded-[8px] border border-amber-200 bg-amber-50 p-5 shadow-[0_16px_44px_rgba(180,83,9,0.1)]">
                 <p className="text-sm font-semibold text-amber-900">Present your receipt now</p>
-                <p className="mt-2 text-sm text-amber-800">Show this QR code and your university ID at the front desk before the timer reaches zero.</p>
+                <p className="mt-2 text-sm text-amber-800">Show your receipt code and university ID at the front desk before the timer reaches zero.</p>
                 <div className="mt-5 flex items-end justify-between gap-4 border-t border-amber-200 pt-4">
                   <div>
                     <p className="text-xs font-semibold uppercase text-amber-800">Time remaining</p>
@@ -383,28 +341,13 @@ export default function ReservationReceipt() {
           </div>
 
           <aside className="ui-panel self-start p-5 text-center">
-            {status === 'pending_entry' && verificationUrl ? (
+            {status === 'pending_entry' ? (
               <>
-                <p className="text-sm font-semibold text-gray-900">Front-desk QR receipt</p>
-                <div className="mx-auto mt-4 w-fit rounded-[8px] border border-gray-200 bg-white p-3 shadow-[0_10px_28px_rgba(14,35,56,0.08)]">
-                  <QRCodeSVG value={verificationUrl} size={220} />
+                <p className="text-sm font-semibold text-gray-900">Front-desk receipt code</p>
+                <div className="mt-4 rounded-[8px] border border-blue-200 bg-[#f5f9fc] px-4 py-7 shadow-[0_10px_28px_rgba(14,35,56,0.08)]">
+                  <p className="font-mono text-3xl font-bold tracking-[0.16em] text-[#063a64] sm:text-4xl">{receiptCode}</p>
                 </div>
-                <p className="mt-3 text-xs text-gray-500">Reference {reservation.reservationId.slice(-8).toUpperCase()}</p>
-              </>
-            ) : status === 'on_break' && isDemo ? (
-              <>
-                <div className="flex items-center justify-center gap-2 text-sm font-semibold text-gray-900">
-                  <QrCode size={19} weight="bold" />
-                  Sample node QR
-                </div>
-                <div className="mx-auto mt-4 w-fit rounded-[8px] border border-gray-200 bg-white p-3 shadow-[0_10px_28px_rgba(14,35,56,0.08)]">
-                  <QRCodeSVG value={sampleSeatQrUrl} size={220} />
-                </div>
-                <p className="mt-3 text-xs leading-relaxed text-gray-500">In the library, this code is attached to {nodeLabel}.</p>
-                <Link to={`/seat-return/${encodeURIComponent(seat.seatId || '')}`} className="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-green-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800 active:translate-y-px">
-                  <QrCode size={18} weight="bold" />
-                  Open sample scan
-                </Link>
+                <p className="mt-3 text-xs leading-5 text-gray-500">Show this code together with your university ID.</p>
               </>
             ) : (
               <>

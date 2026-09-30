@@ -1,41 +1,49 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Buildings, MapTrifold, ShieldCheck, Student } from '@phosphor-icons/react';
+import { ArrowLeft, Buildings, MapTrifold } from '@phosphor-icons/react';
 import { apiClient, getGoogleAuthUrl } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 
+const AUTH_RETURN_TO_KEY = 'addu_seats_auth_return_to';
+
+function getSafeReturnTo(value) {
+  return typeof value === 'string' && value.startsWith('/reserve?token=') ? value : null;
+}
+
 export default function Login() {
-  const { user, loading, loginWithToken, loginAsDemo } = useAuth();
+  const { user, loading, loginWithToken } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [demoLoading, setDemoLoading] = useState('');
 
   useEffect(() => {
+    const returnTo = getSafeReturnTo(searchParams.get('returnTo'));
+    if (returnTo) sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
+
     const token = searchParams.get('token');
     const code = searchParams.get('code');
     const error = searchParams.get('error');
+    if (!returnTo && !token && !code && !error) {
+      sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+    }
     if (error) return;
-    if (token) loginWithToken(token).then(() => navigate('/', { replace: true }));
+    if (token) loginWithToken(token).catch(() => navigate('/login?error=token_failed', { replace: true }));
     if (code) {
       apiClient('/api/auth/exchange', {
         method: 'POST',
         body: JSON.stringify({ code }),
       })
         .then((data) => loginWithToken(data.token))
-        .then(() => navigate('/', { replace: true }))
         .catch(() => navigate('/login?error=exchange_failed', { replace: true }));
     }
   }, [searchParams, loginWithToken, navigate]);
 
   useEffect(() => {
-    if (!loading && user && !demoLoading) navigate(user.role === 'admin' ? '/admin' : '/', { replace: true });
-  }, [user, loading, demoLoading, navigate]);
-
-  async function handleDemoSignIn(role) {
-    setDemoLoading(role);
-    await loginAsDemo(role);
-    navigate(role === 'admin' ? '/admin' : '/', { replace: true });
-  }
+    if (!loading && user) {
+      const returnTo = getSafeReturnTo(sessionStorage.getItem(AUTH_RETURN_TO_KEY));
+      sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+      navigate(returnTo || (user.role === 'admin' ? '/admin' : '/'), { replace: true });
+    }
+  }, [user, loading, navigate]);
 
   const authError = searchParams.get('error');
 
@@ -51,7 +59,7 @@ export default function Login() {
             <div className="mt-12 hidden lg:block">
               <Buildings size={34} weight="duotone" className="text-amber-200" />
               <h1 className="mt-5 max-w-sm text-4xl font-semibold leading-tight">Library access with a clear front-desk handoff.</h1>
-              <p className="mt-4 max-w-sm text-sm leading-7 text-blue-100/78">Reserve a mapped node, present your QR receipt, and manage the session from one workspace.</p>
+              <p className="mt-4 max-w-sm text-sm leading-7 text-blue-100/78">Reserve a mapped node, present your receipt code and university ID, and manage the session from one workspace.</p>
               <LibraryPreview />
             </div>
           </div>
@@ -64,36 +72,20 @@ export default function Login() {
         <div className="flex items-center p-6 sm:p-10 lg:p-12">
           <div className="w-full">
             <p className="ui-kicker"><MapTrifold size={18} weight="duotone" />Access workspace</p>
-            <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950">Choose an account</h2>
-            <p className="ui-muted mt-2">Use a sample role now or continue with your university Google account.</p>
+            <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950">Sign in to AdDU Seats</h2>
+            <p className="ui-muted mt-2">Continue with Google to reserve a study node.</p>
 
             {authError && <p className="ui-alert-danger mt-5">Sign-in failed. Please try again.</p>}
 
-            <div className="mt-7 space-y-3">
-              <DemoButton role="student" label="Student workspace" description="Reserve seats and manage study sessions" icon={Student} loading={demoLoading} onClick={handleDemoSignIn} />
-              <DemoButton role="admin" label="Administrator workspace" description="Monitor floors and verify student entry" icon={ShieldCheck} loading={demoLoading} onClick={handleDemoSignIn} />
-            </div>
-
-            <div className="my-7 flex items-center gap-3 text-xs font-semibold uppercase text-slate-400"><span className="h-px flex-1 bg-slate-200" /><span>University account</span><span className="h-px flex-1 bg-slate-200" /></div>
-
-            <button type="button" onClick={() => { window.location.href = getGoogleAuthUrl(); }} className="ui-button-secondary w-full">
+            <button type="button" onClick={() => { window.location.href = getGoogleAuthUrl(); }} className="ui-button-secondary mt-7 w-full">
               <GoogleIcon />
               Continue with Google
             </button>
+            <p className="mt-4 text-center text-xs leading-5 text-slate-500">Local testing accepts any Google account. Production access remains restricted to authorized university accounts.</p>
           </div>
         </div>
       </section>
     </main>
-  );
-}
-
-function DemoButton({ role, label, description, icon: Icon, loading, onClick }) {
-  return (
-    <button type="button" onClick={() => onClick(role)} disabled={Boolean(loading)} className="group flex min-h-20 w-full items-center gap-4 rounded-[8px] border border-slate-200 bg-white p-4 text-left shadow-[0_12px_30px_rgba(14,35,56,0.06)] hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/50 disabled:opacity-50 disabled:hover:translate-y-0">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] bg-[#e6f0f7] text-[#063a64] group-hover:bg-blue-100"><Icon size={23} weight="duotone" /></span>
-      <span className="min-w-0 flex-1"><span className="block font-semibold text-slate-950">{loading === role ? 'Opening workspace...' : label}</span><span className="mt-1 block text-xs text-slate-500">{description}</span></span>
-      <ArrowRight size={19} weight="bold" className="shrink-0 text-slate-400 group-hover:translate-x-1 group-hover:text-[#063a64]" />
-    </button>
   );
 }
 

@@ -15,14 +15,9 @@ import {
   getMiguelProPreviewSeats,
   MIGUEL_PRO_AREAS,
 } from '../data/miguelProMap.js';
-import {
-  createDemoReservation,
-  getDemoReservation,
-  subscribeToDemoReservation,
-} from '../data/demoReservationStore.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { io } from 'socket.io-client';
-import { ArrowLeft, ArrowSquareOut, Check, Clock, Minus, Plus, Ticket, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowSquareOut, Clock, Minus, Plus, QrCode, Ticket, X } from '@phosphor-icons/react';
 
 const DEFAULT_LAYOUT = {
   name: 'Floor Map',
@@ -463,15 +458,13 @@ export default function SeatMap() {
   const { building, floor } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, canUseProtectedApi } = useAuth();
+  const { user } = useAuth();
   const [seats, setSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedSeat, setSelectedSeat] = useState(null);
   const [selectedHub, setSelectedHub] = useState(null);
-  const [reserving, setReserving] = useState(false);
   const [activeReservation, setActiveReservation] = useState(null);
-  const [acknowledged, setAcknowledged] = useState(false);
   const [zoom, setZoom] = useState(1);
   const requestedArea = searchParams.get('area');
   const miguelProArea = MIGUEL_PRO_AREAS.some((area) => area.id === requestedArea)
@@ -479,25 +472,9 @@ export default function SeatMap() {
     : 'main_area';
 
   useEffect(() => {
-    const refreshDemoReservation = () => {
-      if (user && !canUseProtectedApi) {
-        setActiveReservation(getDemoReservation());
-      }
-    };
-
-    refreshDemoReservation();
-    return subscribeToDemoReservation(refreshDemoReservation);
-  }, [user, canUseProtectedApi]);
-
-  useEffect(() => {
     const fetchActiveReservation = async () => {
       if (!user) {
         setActiveReservation(null);
-        return;
-      }
-
-      if (!canUseProtectedApi) {
-        setActiveReservation(getDemoReservation());
         return;
       }
 
@@ -545,45 +522,11 @@ export default function SeatMap() {
     return () => {
       socket?.disconnect();
     };
-  }, [building, floor, user, canUseProtectedApi, miguelProArea]);
+  }, [building, floor, user, miguelProArea]);
 
   const handleSeatClick = (seat) => {
     if (seat.status === 'disabled') return;
-    setAcknowledged(false);
     setSelectedSeat(seat);
-  };
-
-  const handleReserve = async () => {
-    if (!selectedSeat || user?.role !== 'student' || !acknowledged) return;
-    setReserving(true);
-    try {
-      const response = canUseProtectedApi
-        ? await apiClient('/api/reservations', {
-          method: 'POST',
-          body: JSON.stringify({ qrToken: selectedSeat.currentQrToken })
-        })
-        : (() => {
-          const reservation = createDemoReservation({ seat: selectedSeat, user });
-          return { reservation, qrToken: reservation.qrToken };
-        })();
-
-      const reservation = canUseProtectedApi
-        ? normalizeReservation(response, { seat: selectedSeat, user })
-        : response.reservation;
-
-      navigate('/receipt', {
-        state: {
-          reservation,
-          qrToken: response.qrToken || reservation.qrToken || reservation.reservationId,
-          isDemo: !canUseProtectedApi,
-        }
-      });
-    } catch (err) {
-      alert(`Failed to reserve: ${err.message}`);
-    } finally {
-      setReserving(false);
-      setSelectedSeat(null);
-    }
   };
 
   const handleOpenActiveReservation = () => {
@@ -592,7 +535,6 @@ export default function SeatMap() {
       state: {
         reservation: activeReservation,
         qrToken: activeReservation.qrToken || activeReservation.seat?.currentQrToken || null,
-        isDemo: !canUseProtectedApi,
       }
     });
   };
@@ -613,16 +555,7 @@ export default function SeatMap() {
     : getFloorLayout(building, floor) || DEFAULT_LAYOUT;
   const availableFloors = getAvailableFloors(building);
   const hatchId = `map-hatch-${building}-${floor}`;
-  const demoReservation = !canUseProtectedApi ? activeReservation : null;
-  const visibleSeats = seats.map((seat) => {
-    if (demoReservation?.seat?.seatId !== seat.seatId) return seat;
-    const status = demoReservation.status === 'pending_entry'
-      ? 'pending'
-      : demoReservation.status === 'active'
-        ? 'occupied'
-        : demoReservation.status;
-    return { ...seat, status };
-  });
+  const visibleSeats = seats;
   const seatStatusByLabel = new Map(visibleSeats.map((seat) => [seat.label, seat.status]));
   const sortedSeats = [...visibleSeats].sort((a, b) => (a.posY - b.posY) || (a.posX - b.posX));
   const selectedSeatNumber = selectedSeat
@@ -634,9 +567,6 @@ export default function SeatMap() {
   const pendingCount = sortedSeats.filter((seat) => ['pending', 'pending_entry'].includes(seat.status)).length;
   const occupiedCount = sortedSeats.filter((seat) => seat.status === 'occupied').length;
   const breakCount = sortedSeats.filter((seat) => seat.status === 'on_break').length;
-  const canReserve = selectedSeat?.status === 'available'
-    && user?.role === 'student'
-    && !activeReservation;
   const buildingName = building.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const activeAreaLabel = MIGUEL_PRO_AREAS.find((area) => area.id === miguelProArea)?.label;
   const locationLabel = building === 'miguel_pro'
@@ -704,9 +634,9 @@ export default function SeatMap() {
           </div>
         </div>
 
-        {(user && !canUseProtectedApi) || activeReservation ? (
-          <div className={`flex flex-col justify-between gap-3 border-b px-4 py-3 text-sm sm:flex-row sm:items-center ${activeReservation ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-blue-200 bg-blue-50 text-blue-950'}`}>
-            <span>{activeReservation ? 'A reservation is already in progress. Finish or cancel it before choosing another node.' : 'Sample mode is active. Changes remain in this browser.'}</span>
+        {activeReservation ? (
+          <div className="flex flex-col justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center">
+            <span>A reservation is already in progress. Finish or cancel it before choosing another node.</span>
             {activeReservation && <button type="button" onClick={handleOpenActiveReservation} className="self-start font-semibold underline decoration-2 underline-offset-4">View details</button>}
           </div>
         ) : null}
@@ -823,46 +753,35 @@ export default function SeatMap() {
             </div>
 
             <div className="p-5">
-              {canReserve ? (
+              {selectedSeat.status === 'available' ? (
                 <>
                   <div className="ui-soft-panel p-4">
                     <div className="flex gap-3">
-                      <Clock size={22} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
+                      <QrCode size={24} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
                       <div>
-                        <h3 className="text-sm font-semibold text-slate-950">Five-minute entry window</h3>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">After reserving, present the QR receipt and your university ID at the front desk.</p>
+                        <h3 className="text-sm font-semibold text-slate-950">Scan the physical QR to reserve</h3>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">Please scan the QR code attached to {selectedSeatLabel} at {locationLabel}. Selecting a node on this map only shows its availability.</p>
                       </div>
                     </div>
                   </div>
-                  <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm leading-6 text-slate-700">
-                    <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-[#073b66]" />
-                    <span>I understand this node is released if verification is not completed in five minutes.</span>
-                  </label>
-                  <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary" disabled={reserving}>Cancel</button>
-                    <button type="button" onClick={handleReserve} className="ui-button-primary" disabled={reserving || !acknowledged}>
-                      <Check size={18} weight="bold" />
-                      {reserving ? 'Reserving...' : `Reserve ${selectedSeatLabel}`}
-                    </button>
+                  <div className="mt-4 flex gap-3 rounded-[8px] border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+                    <Clock size={21} weight="duotone" className="mt-0.5 shrink-0" />
+                    <span>After the physical scan and reservation, you have five minutes to present the digital receipt and your name at the front desk.</span>
                   </div>
-                </>
-              ) : selectedSeat.status === 'available' ? (
-                <>
-                  <p className="text-sm leading-6 text-slate-600">
-                    {!user ? 'Sign in as a student to reserve this node.' : activeReservation ? 'Finish your current reservation before choosing another node.' : 'Administrator accounts can inspect nodes but cannot make student reservations.'}
-                  </p>
-                  <div className="mt-6 flex justify-end gap-2">
+                  {activeReservation && (
+                    <p className="mt-4 text-sm font-semibold text-red-700">Finish or cancel your current reservation before scanning another node.</p>
+                  )}
+                  <div className="mt-6 flex justify-end">
                     <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary">Close</button>
-                    {!user && <button type="button" onClick={() => navigate('/login')} className="ui-button-primary">Student sign in</button>}
                   </div>
                 </>
               ) : (
                 <>
                   <p className="text-sm font-semibold capitalize text-slate-950">Currently {selectedSeat.status.replace('_', ' ')}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{user?.role === 'student' && canUseProtectedApi && selectedSeat.status === 'occupied' ? 'If this node appears vacant in person, report it so the reservation holder can respond.' : 'This reservation node cannot be selected right now.'}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{user?.role === 'student' && selectedSeat.status === 'occupied' ? 'If this node appears vacant in person, report it so the reservation holder can respond.' : 'This reservation node cannot be selected right now.'}</p>
                   <div className="mt-6 flex justify-end gap-2">
                     <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary">Close</button>
-                    {user?.role === 'student' && canUseProtectedApi && selectedSeat.status === 'occupied' && <button type="button" onClick={() => handleFlagSeat(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}
+                    {user?.role === 'student' && selectedSeat.status === 'occupied' && <button type="button" onClick={() => handleFlagSeat(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}
                   </div>
                 </>
               )}

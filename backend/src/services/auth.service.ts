@@ -30,7 +30,7 @@ function isStaffEmail(email: string): boolean {
  * takes effect next time they sign in, without a manual DB update.
  */
 export async function findOrCreateFromGoogleProfile(profile: GoogleProfile): Promise<User> {
-  if (!isSchoolEmail(profile.email)) {
+  if (!env.ALLOW_ANY_GOOGLE_EMAIL && !isSchoolEmail(profile.email)) {
     throw new UnauthorizedError(`Only @${env.SCHOOL_EMAIL_DOMAIN} accounts may sign in`);
   }
 

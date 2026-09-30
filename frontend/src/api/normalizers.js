@@ -19,6 +19,11 @@ export function normalizeRole(role) {
   return typeof role === 'string' ? role.toLowerCase() : role;
 }
 
+export function getReceiptCode(reservationId) {
+  if (typeof reservationId !== 'string' || !reservationId) return '--------';
+  return reservationId.replace(/-/g, '').slice(-8).toUpperCase();
+}
+
 export function normalizeUser(user) {
   if (!user) return user;
   return {

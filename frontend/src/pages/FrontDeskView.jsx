@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Layout from '../components/Layout.jsx';
 import { apiClient, getToken } from '../api/client.js';
-import { normalizePendingReservation } from '../api/normalizers.js';
-import { useAuth } from '../context/AuthContext.jsx';
-import {
-  getDemoPendingReservations,
-  subscribeToDemoReservation,
-  updateDemoReservation,
-} from '../data/demoReservationStore.js';
+import { getReceiptCode, normalizePendingReservation } from '../api/normalizers.js';
 import { io } from 'socket.io-client';
-import { CheckCircle, ClockCountdown, IdentificationCard, QrCode, X } from '@phosphor-icons/react';
+import { CheckCircle, ClockCountdown, IdentificationCard, X } from '@phosphor-icons/react';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -29,12 +23,11 @@ function getNodeType(seatType) {
 }
 
 export default function FrontDeskView() {
-  const { canUseProtectedApi } = useAuth();
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reviewingId, setReviewingId] = useState(null);
-  const [identityConfirmed, setIdentityConfirmed] = useState(false);
+  const [nameConfirmed, setNameConfirmed] = useState(false);
   const [receiptConfirmed, setReceiptConfirmed] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
@@ -42,12 +35,6 @@ export default function FrontDeskView() {
 
   const fetchQueue = useCallback(async () => {
     setError('');
-    if (!canUseProtectedApi) {
-      setQueue(getDemoPendingReservations());
-      setLoading(false);
-      return;
-    }
-
     try {
       const data = await apiClient('/api/reservations/pending');
       setQueue(data.map(normalizePendingReservation));
@@ -56,17 +43,15 @@ export default function FrontDeskView() {
     } finally {
       setLoading(false);
     }
-  }, [canUseProtectedApi]);
+  }, []);
 
   useEffect(() => {
     fetchQueue();
     const pollInterval = setInterval(fetchQueue, 10000);
     const tickInterval = setInterval(() => setTick((tick) => tick + 1), 1000);
-    const unsubscribe = subscribeToDemoReservation(fetchQueue);
     return () => {
       clearInterval(pollInterval);
       clearInterval(tickInterval);
-      unsubscribe();
     };
   }, [fetchQueue]);
 
@@ -83,7 +68,7 @@ export default function FrontDeskView() {
 
   function beginReview(reservationId) {
     setReviewingId(reservationId);
-    setIdentityConfirmed(false);
+    setNameConfirmed(false);
     setReceiptConfirmed(false);
     setRejecting(false);
     setReason('');
@@ -91,20 +76,16 @@ export default function FrontDeskView() {
 
   function closeReview() {
     setReviewingId(null);
-    setIdentityConfirmed(false);
+    setNameConfirmed(false);
     setReceiptConfirmed(false);
     setRejecting(false);
     setReason('');
   }
 
   async function handleApprove(reservationId) {
-    if (!identityConfirmed || !receiptConfirmed) return;
+    if (!nameConfirmed || !receiptConfirmed) return;
     try {
-      if (canUseProtectedApi) {
-        await apiClient(`/api/reservations/${reservationId}/approve`, { method: 'POST' });
-      } else {
-        updateDemoReservation(reservationId, 'approve');
-      }
+      await apiClient(`/api/reservations/${reservationId}/approve`, { method: 'POST' });
       closeReview();
       fetchQueue();
     } catch (err) {
@@ -115,11 +96,7 @@ export default function FrontDeskView() {
   async function handleReject(reservationId) {
     if (!reason.trim()) return;
     try {
-      if (canUseProtectedApi) {
-        await apiClient(`/api/reservations/${reservationId}/void`, { method: 'POST' });
-      } else {
-        updateDemoReservation(reservationId, 'reject', { reason: reason.trim() });
-      }
+      await apiClient(`/api/reservations/${reservationId}/void`, { method: 'POST' });
       closeReview();
       fetchQueue();
     } catch (err) {
@@ -133,7 +110,7 @@ export default function FrontDeskView() {
         <div>
           <div className="ui-kicker mb-3"><IdentificationCard size={18} weight="fill" />Entry verification</div>
           <h1 className="ui-page-title">Pending entry queue</h1>
-          <p className="ui-muted mt-2">Match the student's QR receipt and university ID before approving entry.</p>
+          <p className="ui-muted mt-2">Match the receipt code, then confirm the student's name and university ID before approving entry.</p>
         </div>
         <div className="ui-panel flex min-h-11 items-center gap-3 self-start px-4 py-2 text-sm">
           <ClockCountdown size={20} weight="duotone" className="text-[#063a64]" />
@@ -141,12 +118,6 @@ export default function FrontDeskView() {
           <span className="text-slate-500">waiting</span>
         </div>
       </section>
-
-      {!canUseProtectedApi && (
-        <div className="ui-alert-info mt-6">
-          Sample queue: approvals update only the reservation stored in this browser.
-        </div>
-      )}
 
       {error && (
         <div className="ui-alert-danger mt-5">{error}</div>
@@ -162,7 +133,7 @@ export default function FrontDeskView() {
         ) : queue.length === 0 ? (
           <div className="ui-panel grid min-h-72 place-items-center px-6 py-12 text-center">
             <div>
-              <span className="mx-auto grid h-12 w-12 place-items-center rounded-[8px] bg-[#e6f0f7] text-[#063a64]"><QrCode size={25} weight="duotone" /></span>
+              <span className="mx-auto grid h-12 w-12 place-items-center rounded-[8px] bg-[#e6f0f7] text-[#063a64]"><IdentificationCard size={25} weight="duotone" /></span>
               <h2 className="mt-4 font-semibold text-slate-950">No students waiting</h2>
               <p className="mt-1 text-sm text-slate-500">New five-minute reservations will appear here.</p>
             </div>
@@ -175,17 +146,25 @@ export default function FrontDeskView() {
               const isUrgent = timeLeft > 0 && timeLeft < 60000;
               const isExpired = timeLeft <= 0;
               const seatLabel = reservation.seat.label || 'Unlabeled node';
+              const receiptCode = getReceiptCode(reservation.reservationId);
+              const studentId = reservation.user.adduIdLast4
+                ? `ID ending in ${reservation.user.adduIdLast4}`
+                : 'Check physical university ID';
 
               return (
                 <article key={reservation.reservationId} className={`ui-panel overflow-hidden ${isUrgent ? 'border-red-300 shadow-[0_18px_48px_rgba(185,28,28,0.12)]' : ''}`}>
-                  <div className="grid gap-4 p-5 sm:grid-cols-[1.4fr_1fr_auto] sm:items-center">
+                  <div className="grid gap-4 p-5 sm:grid-cols-[1.2fr_1fr_0.8fr_auto] sm:items-center">
                     <div>
                       <p className="font-semibold text-slate-950">{reservation.user.name}</p>
-                      <p className="mt-1 text-sm text-slate-500">AdDU ID ending in <span className="font-mono font-semibold text-slate-800">{reservation.user.adduIdLast4 || 'N/A'}</span></p>
+                      <p className="mt-1 text-sm text-slate-500">{studentId}</p>
                     </div>
                     <div>
                       <p className="font-semibold text-[#063a64]">{seatLabel}</p>
                       <p className="mt-1 text-sm text-slate-500">{getNodeType(reservation.seat.seatType)} - Floor {reservation.seat.floor}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Receipt code</p>
+                      <p className="mt-1 font-mono text-lg font-bold tracking-wider text-[#063a64]">{receiptCode}</p>
                     </div>
                     <div className="flex items-center justify-between gap-4 sm:justify-end">
                       <span className={`font-mono text-lg font-bold ${isExpired ? 'text-gray-400' : isUrgent ? 'text-red-600' : 'text-blue-700'}`}>
@@ -204,17 +183,22 @@ export default function FrontDeskView() {
 
                   {isReviewing && (
                     <div className="border-t border-slate-200 bg-[#f5f9fc] px-5 py-5">
-                      <h3 className="text-sm font-semibold text-slate-950">Required verification</h3>
+                      <div className="grid gap-3 rounded-[8px] border border-blue-200 bg-white p-4 sm:grid-cols-3">
+                        <div><p className="ui-label">Receipt code</p><p className="mt-1 font-mono text-lg font-bold tracking-wider text-[#063a64]">{receiptCode}</p></div>
+                        <div><p className="ui-label">Student name</p><p className="mt-1 text-sm font-semibold text-slate-950">{reservation.user.name}</p></div>
+                        <div><p className="ui-label">Student ID</p><p className="mt-1 text-sm font-semibold text-slate-950">{studentId}</p></div>
+                      </div>
+                      <h3 className="mt-5 text-sm font-semibold text-slate-950">Required verification</h3>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <label className="flex cursor-pointer items-start gap-3 rounded-[8px] border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 shadow-[0_8px_18px_rgba(14,35,56,0.05)]">
-                          <QrCode size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
+                          <CheckCircle size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
                           <input type="checkbox" checked={receiptConfirmed} onChange={(event) => setReceiptConfirmed(event.target.checked)} className="mt-1 h-4 w-4" />
-                          <span>QR receipt matches this reservation.</span>
+                          <span>Receipt code <strong>{receiptCode}</strong> matches the student's receipt.</span>
                         </label>
                         <label className="flex cursor-pointer items-start gap-3 rounded-[8px] border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 shadow-[0_8px_18px_rgba(14,35,56,0.05)]">
                           <IdentificationCard size={20} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
-                          <input type="checkbox" checked={identityConfirmed} onChange={(event) => setIdentityConfirmed(event.target.checked)} className="mt-1 h-4 w-4" />
-                          <span>Name and ID ending in {reservation.user.adduIdLast4 || 'N/A'} match.</span>
+                          <input type="checkbox" checked={nameConfirmed} onChange={(event) => setNameConfirmed(event.target.checked)} className="mt-1 h-4 w-4" />
+                          <span>Student name and university ID match the person presenting the receipt.</span>
                         </label>
                       </div>
 
@@ -236,7 +220,7 @@ export default function FrontDeskView() {
                           <button
                             type="button"
                             onClick={() => handleApprove(reservation.reservationId)}
-                            disabled={!identityConfirmed || !receiptConfirmed}
+                            disabled={!nameConfirmed || !receiptConfirmed}
                             className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-[8px] bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(4,120,87,0.18)] hover:-translate-y-0.5 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0"
                           >
                             <CheckCircle size={18} weight="bold" />

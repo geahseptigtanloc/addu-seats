@@ -115,16 +115,13 @@ npm run dev
 
 Open `http://localhost:5173` in your browser.
 
-## Demo Accounts
+## Test Accounts
 
-Open `/login` and use either one-click account. No password is required because these accounts are only for local UI and workflow testing.
+Open `/login` and continue with a real Google account. New users are created only after a successful Google OAuth login; the database seed does not create sample users.
 
-| Role | Name | Email |
-|------|------|-------|
-| Student | Alex Student | `student.demo@addu.edu.ph` |
-| Admin | Morgan Admin | `admin.demo@addu.edu.ph` |
+For local testing, set `ALLOW_ANY_GOOGLE_EMAIL=true`. Keep it `false` or omit it in production so only accounts under `SCHOOL_EMAIL_DOMAIN` can sign in.
 
-The frontend opens the selected role in local preview mode without enabling protected API actions. The seeded backend users remain available for API-level development and testing.
+Accounts listed in `STAFF_EMAILS` receive the admin role. Other authorized school accounts receive the student role.
 
 When the map geometry changes, regenerate the checked-in backend seat list before seeding:
 
@@ -144,6 +141,7 @@ npm run seed
 | POST | `/api/auth/exchange` | Exchange the one-time OAuth code for a JWT |
 | GET | `/api/auth/me` | Current user profile (requires Bearer token) |
 | GET | `/api/seats` | Public live seat list, optionally filtered by building and floor |
+| POST | `/api/seats/scan` | Validate a physical-node QR token and return safe seat details |
 | POST | `/api/seats/:id/flag` | Report an apparently vacant occupied seat |
 | POST | `/api/reservations` | Create a reservation from a physical-node QR token |
 | GET | `/api/reservations/me/current` | Current authenticated student's reservation |
@@ -162,11 +160,13 @@ Run through this list to confirm Phase 1 works:
 - [ ] Redis is running and `REDIS_URL` in `backend/.env` is correct
 - [ ] `backend/.env` and `frontend/.env` are filled in (especially Google OAuth + JWT secret)
 - [ ] `cd backend && npx prisma migrate dev --name init` completes without errors
-- [ ] `cd backend && npm run seed` inserts the current development seats and two demo accounts
+- [ ] `cd backend && npm run seed` inserts the 821 mapped development seats without creating sample users
 - [ ] `cd backend && npm run dev` starts on port 3001
 - [ ] `cd frontend && npm run dev` starts on port 5173
 - [ ] `curl http://localhost:3001/api/health` returns `{ "status": "ok", "timestamp": "..." }`
 - [ ] Open `http://localhost:5173`, click **Sign in with Google**, complete login, and land on the Seat Map page with your name shown
+- [ ] Open a development physical-QR URL such as `http://localhost:5173/reserve?token=seat%3Ag1-s001`, confirm the node, and create a reservation
+- [ ] Clicking an available node on the public map only instructs the student to scan its physical QR
 - [ ] Browser devtools → Application → Local Storage shows an `addu_seats_token` entry
 
 ## Phase Roadmap

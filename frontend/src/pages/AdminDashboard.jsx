@@ -6,7 +6,6 @@ import Layout from '../components/Layout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiClient, getToken } from '../api/client.js';
 import { getGisbertPreviewSeats } from '../data/gisbertPreviewSeats.js';
-import { getMiguelProPreviewSeats, MIGUEL_PRO_AREAS } from '../data/miguelProMap.js';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -16,31 +15,11 @@ const DATE_RANGES = [
   { value: 90, label: 'Last 90 days' },
 ];
 
-const SAMPLE_GISBERT_AREAS = [
-  { floor: 1, utilization: 62.4 },
-  { floor: 2, utilization: 47.8 },
-  { floor: 3, utilization: 70.9 },
-  { floor: 4, utilization: 55.3 },
-].map((item) => ({
-  ...item,
-  id: String(item.floor),
-  label: `Floor ${item.floor}`,
-  capacity: getGisbertPreviewSeats(item.floor).length,
-  mapPath: `/map/gisbert/${item.floor}`,
-}));
-
-const MIGUEL_PRO_SAMPLE_UTILIZATION = {
-  main_area: 64.7,
-  research_nook: 52.3,
-  workspace_room: 71.6,
-};
-
-const SAMPLE_MIGUEL_PRO_AREAS = MIGUEL_PRO_AREAS.map((area) => ({
-  id: area.id,
-  label: area.label,
-  capacity: getMiguelProPreviewSeats(1, area.id).length,
-  utilization: MIGUEL_PRO_SAMPLE_UTILIZATION[area.id],
-  mapPath: `/map/miguel_pro/1?area=${area.id}`,
+const GISBERT_AREAS = [1, 2, 3, 4].map((floor) => ({
+  id: String(floor),
+  label: `Floor ${floor}`,
+  capacity: getGisbertPreviewSeats(floor).length,
+  mapPath: `/map/gisbert/${floor}`,
 }));
 
 const LIBRARIES = {
@@ -48,115 +27,30 @@ const LIBRARIES = {
     name: 'Gisbert Library',
     filterLabel: 'Floor',
     allLabel: 'All floors',
-    sampleAreas: SAMPLE_GISBERT_AREAS,
+    areas: GISBERT_AREAS,
   },
   miguel_pro: {
     name: 'Miguel Pro Learning Commons',
     filterLabel: 'Area',
     allLabel: 'All areas',
-    sampleAreas: SAMPLE_MIGUEL_PRO_AREAS,
+    areas: [],
   },
 };
 
-const SAMPLE_ANALYTICS = {
-  utilization: { overallUtilizationPercent: 60.1, seats: [] },
-  peakHours: {
-    hours: [0, 0, 0, 0, 0, 0, 2, 8, 12, 19, 33, 48, 63, 71, 68, 59, 54, 61, 73, 78, 69, 51, 31, 4].map((utilizationPercent, hour) => ({
-      hour,
-      utilizationPercent,
-    })),
-  },
-  outcomes: {
-    totalCount: 367,
-    outcomes: [
-      { status: 'COMPLETED', count: 318 },
-      { status: 'CANCELLED', count: 22 },
-      { status: 'VOIDED', count: 14 },
-      { status: 'FORFEITED', count: 9 },
-      { status: 'EVICTED', count: 4 },
-    ],
-  },
-  noShowRate: {
-    totalReservations: 367,
-    cancelledCount: 22,
-    noShowRatePercent: 6,
-  },
-  sessionLength: { sessionCount: 318, averageSessionMinutes: 96.4 },
+const EMPTY_ANALYTICS = {
+  utilization: { overallUtilizationPercent: 0, seats: [] },
+  peakHours: { hours: [] },
+  outcomes: { totalCount: 0, outcomes: [] },
+  noShowRate: { totalReservations: 0, cancelledCount: 0, noShowRatePercent: 0 },
+  sessionLength: { sessionCount: 0, averageSessionMinutes: 0 },
   breakStats: {
-    breakCount: 143,
-    averageBreakMinutes: 7.2,
-    returnedBreakCount: 136,
-    capHitCount: 18,
-    capHitPercent: 13.2,
+    breakCount: 0,
+    averageBreakMinutes: 0,
+    returnedBreakCount: 0,
+    capHitCount: 0,
+    capHitPercent: 0,
   },
-  locationComparison: {
-    locations: [
-      {
-        building: 'gisbert',
-        floor: 3,
-        seatCount: 148,
-        utilizationPercent: 70.9,
-      },
-      {
-        building: 'miguel_pro',
-        floor: 1,
-        seatCount: 230,
-        utilizationPercent: 63.8,
-      },
-      {
-        building: 'gisbert',
-        floor: 1,
-        seatCount: 184,
-        utilizationPercent: 62.4,
-      },
-      {
-        building: 'gisbert',
-        floor: 4,
-        seatCount: 129,
-        utilizationPercent: 55.3,
-      },
-      {
-        building: 'gisbert',
-        floor: 2,
-        seatCount: 130,
-        utilizationPercent: 47.8,
-      },
-    ],
-  },
-};
-
-const MIGUEL_PRO_SAMPLE_ANALYTICS = {
-  ...SAMPLE_ANALYTICS,
-  utilization: { overallUtilizationPercent: 63.8, seats: [] },
-  sessionLength: { sessionCount: 174, averageSessionMinutes: 88.6 },
-  breakStats: {
-    breakCount: 67,
-    averageBreakMinutes: 6.8,
-    returnedBreakCount: 64,
-    capHitCount: 7,
-    capHitPercent: 10.9,
-  },
-  outcomes: {
-    totalCount: 196,
-    outcomes: [
-      { status: 'COMPLETED', count: 174 },
-      { status: 'CANCELLED', count: 11 },
-      { status: 'VOIDED', count: 5 },
-      { status: 'FORFEITED', count: 4 },
-      { status: 'EVICTED', count: 2 },
-    ],
-  },
-  noShowRate: {
-    totalReservations: 196,
-    cancelledCount: 11,
-    noShowRatePercent: 5.6,
-  },
-  locationComparison: SAMPLE_ANALYTICS.locationComparison,
-};
-
-const SAMPLE_ANALYTICS_BY_BUILDING = {
-  gisbert: SAMPLE_ANALYTICS,
-  miguel_pro: MIGUEL_PRO_SAMPLE_ANALYTICS,
+  locationComparison: { locations: [] },
 };
 
 const OUTCOME_STYLES = {
@@ -168,27 +62,18 @@ const OUTCOME_STYLES = {
 };
 
 export default function AdminDashboard() {
-  const { user, canUseProtectedApi } = useAuth();
+  const { user } = useAuth();
   const [rangeDays, setRangeDays] = useState(30);
   const [buildingFilter, setBuildingFilter] = useState('gisbert');
   const [areaFilter, setAreaFilter] = useState('all');
-  const [analytics, setAnalytics] = useState(SAMPLE_ANALYTICS);
-  const [loading, setLoading] = useState(false);
+  const [analytics, setAnalytics] = useState(EMPTY_ANALYTICS);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [usingSampleData, setUsingSampleData] = useState(!canUseProtectedApi);
   const [ghostReports, setGhostReports] = useState([]);
 
   const selectedLibrary = LIBRARIES[buildingFilter];
-  const selectedSampleAnalytics = SAMPLE_ANALYTICS_BY_BUILDING[buildingFilter];
 
   useEffect(() => {
-    if (!canUseProtectedApi || buildingFilter === 'miguel_pro') {
-      setAnalytics(selectedSampleAnalytics);
-      setUsingSampleData(true);
-      setLoadError('');
-      return undefined;
-    }
-
     const controller = new AbortController();
     const to = new Date();
     const from = new Date(to.getTime() - rangeDays * 24 * 60 * 60 * 1000);
@@ -201,7 +86,7 @@ export default function AdminDashboard() {
       ...dateParams,
     });
     const comparisonParams = new URLSearchParams(dateParams);
-    if (areaFilter !== 'all') params.set('floor', areaFilter);
+    if (buildingFilter === 'gisbert' && areaFilter !== 'all') params.set('floor', areaFilter);
 
     async function loadAnalytics() {
       setLoading(true);
@@ -240,12 +125,10 @@ export default function AdminDashboard() {
           breakStats,
           locationComparison,
         });
-        setUsingSampleData(false);
       } catch (error) {
         if (error.name === 'AbortError') return;
-        setAnalytics(selectedSampleAnalytics);
-        setUsingSampleData(true);
-        setLoadError('Live analytics are unavailable, so the dashboard is showing the labeled sample dataset.');
+        setAnalytics(EMPTY_ANALYTICS);
+        setLoadError('Live analytics are unavailable. No sample data is being shown.');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -253,11 +136,11 @@ export default function AdminDashboard() {
 
     loadAnalytics();
     return () => controller.abort();
-  }, [areaFilter, buildingFilter, canUseProtectedApi, rangeDays, selectedSampleAnalytics]);
+  }, [areaFilter, buildingFilter, rangeDays]);
 
   useEffect(() => {
     const token = getToken();
-    if (!token || !canUseProtectedApi) return undefined;
+    if (!token) return undefined;
 
     const socket = io(SOCKET_URL, { auth: { token } });
     socket.on('seat_flagged_admin_notice', (report) => {
@@ -276,7 +159,7 @@ export default function AdminDashboard() {
       setGhostReports((current) => current.filter((item) => item.reservationId !== reservationId));
     });
     return () => socket.disconnect();
-  }, [canUseProtectedApi]);
+  }, []);
 
   const comparisonRows = useMemo(() => (analytics.locationComparison?.locations || []).map(formatComparisonLocation), [analytics.locationComparison]);
 
@@ -302,12 +185,12 @@ export default function AdminDashboard() {
         </Link>
       </section>
 
-      {(usingSampleData || loadError) && (
+      {loadError && (
         <div className="ui-alert-info mt-6 flex items-start gap-3">
           <WarningCircle size={20} weight="duotone" className="mt-0.5 shrink-0" />
           <div>
-            <p className="font-semibold">Sample analytics workspace</p>
-            <p className="mt-1 text-sm">{loadError || (buildingFilter === 'miguel_pro' ? 'Miguel Pro figures are representative demo data while live area-level analytics remain pending.' : "These figures are representative demo data. Front-desk actions still use this browser's reservation records.")}</p>
+            <p className="font-semibold">Live analytics unavailable</p>
+            <p className="mt-1 text-sm">{loadError}</p>
           </div>
         </div>
       )}
@@ -382,7 +265,7 @@ export default function AdminDashboard() {
           </FilterSelect>
           <FilterSelect label={selectedLibrary.filterLabel} value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
             <option value="all">{selectedLibrary.allLabel}</option>
-            {selectedLibrary.sampleAreas.map((area) => (
+            {selectedLibrary.areas.map((area) => (
               <option key={area.id} value={area.id}>
                 {area.label}
               </option>
@@ -392,7 +275,7 @@ export default function AdminDashboard() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Analytics summary">
-        <Metric icon={TrendUp} label="Average utilization" value={`${formatNumber(analytics.utilization?.overallUtilizationPercent)}%`} detail={areaFilter === 'all' ? `Across ${selectedLibrary.name}` : selectedLibrary.sampleAreas.find((area) => area.id === areaFilter)?.label} tone="blue" loading={loading} />
+        <Metric icon={TrendUp} label="Average utilization" value={`${formatNumber(analytics.utilization?.overallUtilizationPercent)}%`} detail={areaFilter === 'all' ? `Across ${selectedLibrary.name}` : selectedLibrary.areas.find((area) => area.id === areaFilter)?.label} tone="blue" loading={loading} />
         <Metric icon={Clock} label="Peak usage" value={formatHour(peakHour.hour)} detail={`${formatNumber(peakHour.utilizationPercent)}% utilization`} tone="amber" loading={loading} />
         <Metric icon={ChartBar} label="Average session" value={formatDuration(analytics.sessionLength?.averageSessionMinutes)} detail={`${analytics.sessionLength?.sessionCount || 0} completed sessions`} tone="green" loading={loading} />
         <Metric icon={Coffee} label="Recorded breaks" value={analytics.breakStats?.breakCount || 0} detail={`${formatNumber(analytics.breakStats?.averageBreakMinutes)} min average across returned and forfeited breaks`} tone="violet" loading={loading} />
@@ -452,7 +335,7 @@ export default function AdminDashboard() {
                 </span>
                 <div>
                   <p className="font-semibold text-slate-950">Waiting for sufficient live data</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Forecasting activates only after at least two weeks of continuous occupancy logs. Demo values are not used to train predictions.</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">Forecasting activates only after at least two weeks of continuous occupancy logs. Only live reservation data will be used.</p>
                 </div>
               </div>
             </div>

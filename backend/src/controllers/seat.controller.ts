@@ -9,6 +9,10 @@ const getSeatsQuerySchema = z.object({
   floor: z.coerce.number().int().optional(),
 });
 
+const scanSeatSchema = z.object({
+  qrToken: z.string().min(1),
+});
+
 export async function getSeats(req: Request, res: Response, next: NextFunction): Promise<void> {
   const parsed = getSeatsQuerySchema.safeParse(req.query);
 
@@ -20,6 +24,26 @@ export async function getSeats(req: Request, res: Response, next: NextFunction):
   try {
     const seats = await seatService.getSeats(parsed.data);
     res.json(seats);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getScannedSeat(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const parsed = scanSeatSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: { message: 'qrToken is required' } });
+    return;
+  }
+
+  try {
+    const seat = await seatService.getScannedSeat(parsed.data.qrToken);
+    res.json({ seat });
   } catch (err) {
     next(err);
   }

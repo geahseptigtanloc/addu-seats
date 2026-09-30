@@ -2,33 +2,16 @@
  * Shared page layout with header navigation.
  */
 import { NavLink, Link, useNavigate } from 'react-router-dom';
-import { ChartBar, MapTrifold, Monitor, ShieldCheck, SignOut, Ticket, UserCircle } from '@phosphor-icons/react';
+import { ChartBar, MapTrifold, Monitor, ShieldCheck, SignOut, Ticket } from '@phosphor-icons/react';
 import { apiClient } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
-import { getDemoReservation } from '../data/demoReservationStore.js';
 
 export default function Layout({ children }) {
-  const { user, logout, canUseProtectedApi } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   async function handleOpenMyReservation() {
-    if (!canUseProtectedApi) {
-      const reservation = getDemoReservation();
-      if (!reservation) {
-        alert('You do not have a reservation in progress right now.');
-        return;
-      }
-      navigate('/receipt', {
-        state: {
-          reservation,
-          qrToken: reservation.qrToken,
-          isDemo: true,
-        },
-      });
-      return;
-    }
-
     try {
       const data = await apiClient('/api/reservations/me/current');
       const reservation = normalizeReservation(data, { user });
@@ -49,7 +32,6 @@ export default function Layout({ children }) {
   }
 
   const navClass = ({ isActive }) => `ui-nav-item ${isActive ? 'ui-nav-item-active' : ''}`;
-  const sampleLabel = !canUseProtectedApi && user ? `Sample ${user.role}` : user?.role;
 
   return (
     <div className="app-shell flex min-h-[100dvh] flex-col">
@@ -92,14 +74,10 @@ export default function Layout({ children }) {
 
               <div className="hidden h-8 w-px bg-white/15 lg:block" />
               <div className="hidden min-w-0 items-center gap-2 rounded-[8px] bg-white/10 px-3 py-2 lg:flex">
-                {canUseProtectedApi ? (
-                  <ShieldCheck size={21} weight="duotone" className="shrink-0 text-amber-200" />
-                ) : (
-                  <UserCircle size={22} weight="duotone" className="shrink-0 text-blue-100/80" />
-                )}
+                <ShieldCheck size={21} weight="duotone" className="shrink-0 text-amber-200" />
                 <span className="min-w-0 leading-tight">
                   <span className="block max-w-36 truncate text-xs font-semibold">{user.name}</span>
-                  <span className="mt-0.5 block text-[10px] font-semibold uppercase text-blue-100/60">{sampleLabel}</span>
+                  <span className="mt-0.5 block text-[10px] font-semibold uppercase text-blue-100/60">{user.role}</span>
                 </span>
               </div>
               <button onClick={handleLogout} className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] text-blue-100/80 hover:bg-white/10 hover:text-white" aria-label="Sign out" title="Sign out">

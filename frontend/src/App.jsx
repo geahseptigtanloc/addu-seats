@@ -13,6 +13,7 @@ import ReservationReceipt from './pages/ReservationReceipt.jsx';
 import FrontDeskView from './pages/FrontDeskView.jsx';
 import VerifyPage from './pages/VerifyPage.jsx';
 import SeatReturn from './pages/SeatReturn.jsx';
+import QrReservation from './pages/QrReservation.jsx';
 
 function AppRoutes() {
   return (
@@ -23,6 +24,7 @@ function AppRoutes() {
       <Route path="/" element={<BuildingFloorSelector />} />
 
       <Route path="/map/:building/:floor" element={<SeatMap />} />
+      <Route path="/reserve" element={<QrReservation />} />
 
       <Route
         path="/receipt"
