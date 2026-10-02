@@ -11,6 +11,7 @@ import analyticsRoutes from './routes/analytics.routes';
 
 export function createApp(): Application {
   const app = express();
+  app.set('trust proxy', 1); // Trust the reverse proxy (Render) to set secure cookies
 
   // `credentials: true` is deliberately not set here. This API is
   // Bearer-JWT-only for ongoing auth, no cross-origin cookies are ever
