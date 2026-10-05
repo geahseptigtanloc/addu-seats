@@ -1,31 +1,44 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Buildings, MapTrifold } from '@phosphor-icons/react';
 import { apiClient, getGoogleAuthUrl } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import {
+  clearPendingReservationToken,
+  storePendingReservationToken,
+  takePendingReservationToken,
+} from '../utils/pendingReservation.js';
 
-const AUTH_RETURN_TO_KEY = 'addu_seats_auth_return_to';
-
-function getSafeReturnTo(value) {
-  return typeof value === 'string' && value.startsWith('/reserve?token=') ? value : null;
+function getTokenFromLegacyReturnTo(value) {
+  if (typeof value !== 'string') return null;
+  if (!value.startsWith('/scan?token=') && !value.startsWith('/reserve?token=')) return null;
+  try {
+    return new URL(value, window.location.origin).searchParams.get('token');
+  } catch {
+    return null;
+  }
 }
 
 export default function Login() {
   const { user, loading, loginWithToken } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const handledAuthResponse = useRef(null);
 
   useEffect(() => {
-    const returnTo = getSafeReturnTo(searchParams.get('returnTo'));
-    if (returnTo) sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
+    const legacyToken = getTokenFromLegacyReturnTo(searchParams.get('returnTo'));
+    if (legacyToken) storePendingReservationToken(legacyToken);
 
     const token = searchParams.get('token');
     const code = searchParams.get('code');
     const error = searchParams.get('error');
-    if (!returnTo && !token && !code && !error) {
-      sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
+    if (!legacyToken && !token && !code && !error) {
+      clearPendingReservationToken();
     }
     if (error) return;
+    const authResponseKey = token ? `token:${token}` : code ? `code:${code}` : null;
+    if (!authResponseKey || handledAuthResponse.current === authResponseKey) return;
+    handledAuthResponse.current = authResponseKey;
     if (token) loginWithToken(token).catch(() => navigate('/login?error=token_failed', { replace: true }));
     if (code) {
       apiClient('/api/auth/exchange', {
@@ -39,9 +52,11 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && user) {
-      const returnTo = getSafeReturnTo(sessionStorage.getItem(AUTH_RETURN_TO_KEY));
-      sessionStorage.removeItem(AUTH_RETURN_TO_KEY);
-      navigate(returnTo || (user.role === 'admin' ? '/admin' : '/'), { replace: true });
+      const pendingReservationToken = takePendingReservationToken();
+      const destination = pendingReservationToken
+        ? `/scan?token=${encodeURIComponent(pendingReservationToken)}`
+        : user.role === 'admin' ? '/admin' : '/';
+      navigate(destination, { replace: true });
     }
   }, [user, loading, navigate]);
 

@@ -17,6 +17,15 @@ export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+export class ApiError extends Error {
+  constructor(message, status, body) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 /**
  * @param {string} path — API path starting with /api/...
  * @param {RequestInit} [options]
@@ -42,7 +51,7 @@ export async function apiClient(path, options = {}) {
     const message = typeof body.error === 'string'
       ? body.error
       : body.error?.message || body.message || `Request failed (${response.status})`;
-    throw new Error(message);
+    throw new ApiError(message, response.status, body);
   }
 
   if (response.status === 204) return null;

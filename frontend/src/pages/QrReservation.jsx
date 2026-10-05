@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Clock, MapPin, QrCode, WarningCircle } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
-import { apiClient } from '../api/client.js';
+import { apiClient, getGoogleAuthUrl } from '../api/client.js';
 import { normalizeReservation, normalizeSeat, seatLabelFromQrToken } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { storePendingReservationToken } from '../utils/pendingReservation.js';
 
 function titleCase(value) {
   return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -15,51 +16,37 @@ export default function QrReservation() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const qrToken = searchParams.get('token') || '';
-  const [seat, setSeat] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [reserving, setReserving] = useState(false);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState(null);
 
-  useEffect(() => {
-    if (authLoading || !user || !qrToken || user.role !== 'student') return;
-
-    let cancelled = false;
-    setLoading(true);
-    setError('');
-    apiClient('/api/seats/scan', {
-      method: 'POST',
-      body: JSON.stringify({ qrToken }),
-    })
-      .then((data) => {
-        if (!cancelled) setSeat(normalizeSeat(data.seat));
-      })
-      .catch((requestError) => {
-        if (!cancelled) setError(requestError.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, qrToken, user]);
+  const tokenSeatLabel = seatLabelFromQrToken(qrToken);
+  const scannedSeat = tokenSeatLabel
+    ? normalizeSeat(null, { label: tokenSeatLabel, status: 'available' })
+    : null;
 
   const handleSignIn = () => {
-    const returnTo = `/reserve?token=${encodeURIComponent(qrToken)}`;
-    navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+    storePendingReservationToken(qrToken);
+    window.location.href = getGoogleAuthUrl();
   };
 
   const handleReserve = async () => {
-    if (!seat || seat.status !== 'available') return;
     setReserving(true);
-    setError('');
+    setFailure(null);
     try {
       const response = await apiClient('/api/reservations', {
         method: 'POST',
         body: JSON.stringify({ qrToken }),
       });
-      const reservation = normalizeReservation(response, { seat, user });
+      const source = response?.reservation || response || {};
+      const receiptSeat = normalizeSeat(source.seat, {
+        ...scannedSeat,
+        seatId: source.seatId || scannedSeat?.seatId,
+        label: source.seat?.label || scannedSeat?.label || source.seatId,
+        building: source.building || scannedSeat?.building,
+        floor: source.floor || scannedSeat?.floor,
+        status: 'available',
+      });
+      const reservation = normalizeReservation(response, { seat: receiptSeat, user });
       navigate('/receipt', {
         replace: true,
         state: {
@@ -68,17 +55,45 @@ export default function QrReservation() {
         },
       });
     } catch (requestError) {
-      setError(requestError.message);
+      if (requestError.status === 401) {
+        handleSignIn();
+        return;
+      }
+
+      const messages = {
+        400: {
+          title: 'This QR code is malformed',
+          copy: 'Please scan the QR attached to the study node again. If it still fails, notify the front desk.',
+        },
+        404: {
+          title: 'This QR code is no longer active',
+          copy: 'The scanned code is invalid or stale. Please notify the front desk.',
+        },
+        500: {
+          title: 'Reservation service unavailable',
+          copy: 'Something went wrong while creating your reservation. Please try again.',
+          retryable: true,
+        },
+      };
+      setFailure(requestError.status === 409
+        ? { title: 'Reservation could not be created', copy: requestError.message }
+        : messages[requestError.status] || {
+          title: 'Reservation could not be created',
+          copy: requestError.message || 'Please try again.',
+          retryable: true,
+        });
     } finally {
       setReserving(false);
     }
   };
 
-  const scannedLabel = seat?.label || seatLabelFromQrToken(qrToken) || 'Scanned node';
-  const locationLabel = seat
-    ? `${titleCase(seat.building)}${seat.building === 'gisbert' ? ' Library' : ''} - Floor ${seat.floor}`
+  const scannedLabel = scannedSeat?.label || 'Physical QR';
+  const locationLabel = scannedSeat?.building && scannedSeat?.floor
+    ? `${titleCase(scannedSeat.building)}${scannedSeat.building === 'gisbert' ? ' Library' : ''} - Floor ${scannedSeat.floor}`
     : '';
-  const mapPath = seat ? `/map/${seat.building}/${seat.floor}` : '/';
+  const mapPath = scannedSeat?.building && scannedSeat?.floor
+    ? `/map/${scannedSeat.building}/${scannedSeat.floor}`
+    : '/';
 
   return (
     <Layout>
@@ -104,7 +119,7 @@ export default function QrReservation() {
 
           <div className="p-6 sm:p-8">
             {!qrToken ? (
-              <Message icon={WarningCircle} title="QR code missing" copy="Open this page by scanning the QR attached to a mapped study node." tone="danger" />
+              <Message icon={WarningCircle} title="This QR code is malformed" copy="Scan the QR attached to the study node again. If this page still appears, notify the front desk." tone="danger" />
             ) : authLoading ? (
               <div className="space-y-3">
                 <div className="loading-skeleton h-20 rounded-[8px]" />
@@ -117,14 +132,7 @@ export default function QrReservation() {
               </>
             ) : user.role !== 'student' ? (
               <Message icon={WarningCircle} title="Student account required" copy="Administrator accounts can inspect maps but cannot create student reservations." tone="danger" />
-            ) : loading ? (
-              <div className="space-y-3">
-                <div className="loading-skeleton h-24 rounded-[8px]" />
-                <div className="loading-skeleton h-12 rounded-[8px]" />
-              </div>
-            ) : error && !seat ? (
-              <Message icon={WarningCircle} title="QR could not be verified" copy={error} tone="danger" />
-            ) : seat ? (
+            ) : (
               <>
                 <div className="grid gap-4 rounded-[8px] border border-emerald-200 bg-emerald-50 p-5 sm:grid-cols-2">
                   <div>
@@ -133,7 +141,7 @@ export default function QrReservation() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase text-emerald-700">Location</p>
-                    <p className="mt-1 flex items-center gap-2 text-sm font-semibold text-emerald-950"><MapPin size={17} weight="fill" />{locationLabel}</p>
+                    <p className="mt-1 flex items-center gap-2 text-sm font-semibold text-emerald-950"><MapPin size={17} weight="fill" />{locationLabel || 'Confirmed after reservation'}</p>
                   </div>
                 </div>
 
@@ -142,17 +150,23 @@ export default function QrReservation() {
                   <span>After you reserve, present the digital receipt and your name at the front desk within five minutes.</span>
                 </div>
 
-                {error && <div className="ui-alert-danger mt-5">{error}</div>}
+                {failure && (
+                  <div className="mt-5">
+                    <Message icon={WarningCircle} title={failure.title} copy={failure.copy} tone="danger" />
+                  </div>
+                )}
 
                 <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <Link to={mapPath} className="ui-button-secondary">Cancel</Link>
-                  <button type="button" onClick={handleReserve} disabled={reserving || seat.status !== 'available'} className="ui-button-primary">
-                    <CheckCircle size={18} weight="bold" />
-                    {reserving ? 'Creating reservation...' : seat.status === 'available' ? `Reserve ${scannedLabel}` : `Currently ${seat.status.replace('_', ' ')}`}
-                  </button>
+                  {(!failure || failure.retryable) && (
+                    <button type="button" onClick={handleReserve} disabled={reserving} className="ui-button-primary">
+                      <CheckCircle size={18} weight="bold" />
+                      {reserving ? 'Creating reservation...' : failure?.retryable ? 'Try reservation again' : `Reserve ${scannedLabel}`}
+                    </button>
+                  )}
                 </div>
               </>
-            ) : null}
+            )}
           </div>
         </div>
       </section>

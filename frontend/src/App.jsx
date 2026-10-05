@@ -24,6 +24,8 @@ function AppRoutes() {
       <Route path="/" element={<BuildingFloorSelector />} />
 
       <Route path="/map/:building/:floor" element={<SeatMap />} />
+      <Route path="/scan" element={<QrReservation />} />
+      {/* Keep previously shared development links working; printed QRs use /scan. */}
       <Route path="/reserve" element={<QrReservation />} />
 
       <Route
