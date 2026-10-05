@@ -31,7 +31,7 @@ function secondsUntil(value) {
   return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 1000));
 }
 
-function getNodeType(seatType) {
+function getSeatType(seatType) {
   if (seatType === 'table_node') return 'Collaborative table';
   if (seatType === 'cubicle') return 'Study cubicle';
   return 'Individual seat';
@@ -162,7 +162,7 @@ export default function ReservationReceipt() {
   const locallyExpired = reservation.status === 'pending_entry' && entrySeconds === 0;
   const status = locallyExpired ? 'expired' : reservation.status;
   const seat = reservation.seat || {};
-  const nodeLabel = seat.label || 'Reserved node';
+  const seatLabel = seat.label || 'Reserved seat';
   const buildingName = (seat.building || 'gisbert').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   const receiptCode = getReceiptCode(reservation.reservationId);
   const allocatedBreakMinutes = reservation.breakMinutesUsed || 5;
@@ -187,10 +187,10 @@ export default function ReservationReceipt() {
 
         {flagged && (
           <div className="ui-alert-danger mt-5">
-            <h2 className="font-semibold text-red-900">Your node was reported vacant</h2>
+            <h2 className="font-semibold text-red-900">Your seat was reported vacant</h2>
             <p className="mt-1 text-sm text-red-800">{flagMessage}</p>
             <p className="mt-3 rounded-[8px] border border-red-200 bg-white/70 px-4 py-3 text-sm font-semibold text-red-900">
-              Return to your assigned node and scan its physical QR. An in-app confirmation cannot clear this report.
+              Return to your assigned seat and scan its physical QR. An in-app confirmation cannot clear this report.
             </p>
           </div>
         )}
@@ -199,8 +199,8 @@ export default function ReservationReceipt() {
           <div className="space-y-5">
             <section className="ui-panel p-5">
               <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
-                <Detail label="Reservation node" value={nodeLabel} emphasis />
-                <Detail label="Node type" value={getNodeType(seat.seatType)} />
+                <Detail label="Reserved seat" value={seatLabel} emphasis />
+                <Detail label="Seat type" value={getSeatType(seat.seatType)} />
                 <Detail
                   label="Location"
                   value={seat.building === 'miguel_pro'
@@ -235,7 +235,7 @@ export default function ReservationReceipt() {
                   <CheckCircle size={26} weight="fill" className="shrink-0 text-green-700" />
                   <div>
                     <p className="font-semibold text-green-950">Entry verified</p>
-                    <p className="mt-1 text-sm leading-relaxed text-green-800">{nodeLabel} remains assigned to you until checkout or forfeiture.</p>
+                    <p className="mt-1 text-sm leading-relaxed text-green-800">{seatLabel} remains assigned to you until checkout or forfeiture.</p>
                   </div>
                 </div>
 
@@ -274,7 +274,7 @@ export default function ReservationReceipt() {
                 <div className="border-t border-gray-100 px-5 py-4">
                   <button type="button" onClick={() => setConfirmation('checkout')} disabled={Boolean(busyAction)} className="inline-flex items-center gap-2 text-sm font-semibold text-red-700 hover:text-red-900 disabled:opacity-50">
                     <SignOut size={18} weight="bold" />
-                    Check out and release node
+                    Check out and release seat
                   </button>
                 </div>
               </section>
@@ -289,7 +289,7 @@ export default function ReservationReceipt() {
                         {breakIsUrgent ? <Warning size={20} weight="fill" className="text-red-200" /> : <Coffee size={20} weight="fill" />}
                         {breakIsUrgent ? 'Return now' : 'Break protected'}
                       </div>
-                      <p className="mt-2 max-w-md text-sm leading-relaxed text-blue-100">Your belongings may remain at {nodeLabel}. Scan its QR before time expires to keep the reservation.</p>
+                      <p className="mt-2 max-w-md text-sm leading-relaxed text-blue-100">Your belongings may remain at {seatLabel}. Scan its QR before time expires to keep the reservation.</p>
                     </div>
                     <div
                       className="grid h-28 w-28 shrink-0 place-items-center self-center rounded-full p-2 sm:self-auto"
@@ -338,8 +338,8 @@ export default function ReservationReceipt() {
                 <p className="font-semibold text-gray-900">
                   {status === 'expired' ? 'Reservation expired' : status === 'cancelled' ? 'Reservation cancelled' : 'Session completed'}
                 </p>
-                <p className="mt-2 text-sm text-gray-500">The reservation node is available for another student.</p>
-                <Link to="/" className="ui-button-primary mt-4">Find another node</Link>
+                <p className="mt-2 text-sm text-gray-500">The reserved seat is available for another student.</p>
+                <Link to="/" className="ui-button-primary mt-4">Find another seat</Link>
               </section>
             )}
           </div>
@@ -364,7 +364,7 @@ export default function ReservationReceipt() {
 
         {showBreakDialog && (
           <BreakStartDialog
-            nodeLabel={nodeLabel}
+            seatLabel={seatLabel}
             busy={busyAction === 'start_break'}
             onClose={() => setShowBreakDialog(false)}
             onConfirm={async () => {
@@ -376,10 +376,10 @@ export default function ReservationReceipt() {
         <AppDialog
           open={Boolean(confirmation)}
           tone="danger"
-          title={confirmation === 'cancel' ? 'Cancel this reservation?' : 'Check out and release this node?'}
+          title={confirmation === 'cancel' ? 'Cancel this reservation?' : 'Check out and release this seat?'}
           description={confirmation === 'cancel'
-            ? 'Your pending reservation will be cancelled and the node will become available again.'
-            : `Your study session at ${nodeLabel} will end and the node will become available to other students.`}
+            ? 'Your pending reservation will be cancelled and the seat will become available again.'
+            : `Your study session at ${seatLabel} will end and the seat will become available to other students.`}
           confirmLabel={confirmation === 'cancel' ? 'Cancel reservation' : 'Check out'}
           cancelLabel="Keep reservation"
           busy={Boolean(busyAction)}
@@ -399,7 +399,7 @@ export default function ReservationReceipt() {
   );
 }
 
-function BreakStartDialog({ nodeLabel, busy, onClose, onConfirm }) {
+function BreakStartDialog({ seatLabel, busy, onClose, onConfirm }) {
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === 'Escape' && !busy) onClose();
@@ -420,7 +420,7 @@ function BreakStartDialog({ nodeLabel, busy, onClose, onConfirm }) {
             </div>
             <div>
               <h2 id="break-dialog-title" className="text-lg font-bold text-gray-950">Start a five-minute break?</h2>
-              <p className="mt-1 text-sm text-gray-500">Your reservation at {nodeLabel} stays protected.</p>
+              <p className="mt-1 text-sm text-gray-500">Your reservation at {seatLabel} stays protected.</p>
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Close break confirmation" className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] text-gray-500 hover:bg-gray-100 hover:text-gray-900">
@@ -431,8 +431,8 @@ function BreakStartDialog({ nodeLabel, busy, onClose, onConfirm }) {
         <div className="p-5">
           <div className="space-y-4 text-sm text-gray-700">
             <Rule icon={Timer} title="Starts with five minutes" copy="Add five minutes twice if needed. The maximum is 15 minutes." />
-            <Rule icon={QrCode} title="Return at your node" copy={`Scan the QR attached to ${nodeLabel}. A remote return is not accepted.`} />
-            <Rule icon={Warning} title="Timer expiry releases the node" copy="If time reaches zero before the scan, the reservation is forfeited." />
+            <Rule icon={QrCode} title="Return at your seat" copy={`Scan the QR attached to ${seatLabel}. A remote return is not accepted.`} />
+            <Rule icon={Warning} title="Timer expiry releases the seat" copy="If time reaches zero before the scan, the reservation is forfeited." />
           </div>
 
           <div className="mt-6 flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">

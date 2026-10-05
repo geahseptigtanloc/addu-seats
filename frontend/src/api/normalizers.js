@@ -1,5 +1,6 @@
 const SEAT_STATUS = {
   AVAILABLE: 'available',
+  PENDING: 'pending_entry',
   OCCUPIED: 'occupied',
   OCCUPIED_ON_BREAK: 'on_break',
   UNAVAILABLE: 'disabled',
@@ -108,7 +109,7 @@ export function normalizePendingReservation(item) {
       building: item.building,
       floor: item.floor,
       currentQrToken,
-      status: 'AVAILABLE',
+      status: 'PENDING',
     }),
   };
 }

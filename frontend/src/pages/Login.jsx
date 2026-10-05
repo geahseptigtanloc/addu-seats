@@ -74,7 +74,7 @@ export default function Login() {
             <div className="mt-12 hidden lg:block">
               <Buildings size={34} weight="duotone" className="text-amber-200" />
               <h1 className="mt-5 max-w-sm text-4xl font-semibold leading-tight">Library access with a clear front-desk handoff.</h1>
-              <p className="mt-4 max-w-sm text-sm leading-7 text-blue-100/78">Reserve a mapped node, present your receipt code and university ID, and manage the session from one workspace.</p>
+              <p className="mt-4 max-w-sm text-sm leading-7 text-blue-100/78">Reserve a mapped seat, present your receipt code and university ID, and manage the session from one workspace.</p>
               <LibraryPreview />
             </div>
           </div>
@@ -88,7 +88,7 @@ export default function Login() {
           <div className="w-full">
             <p className="ui-kicker"><MapTrifold size={18} weight="duotone" />Access workspace</p>
             <h2 className="mt-3 text-3xl font-semibold leading-tight text-slate-950">Sign in to AdDU Seats</h2>
-            <p className="ui-muted mt-2">Continue with Google to reserve a study node.</p>
+            <p className="ui-muted mt-2">Continue with Google to reserve a study seat.</p>
 
             {authError && <p className="ui-alert-danger mt-5">Sign-in failed. Please try again.</p>}
 
@@ -110,7 +110,7 @@ function LibraryPreview() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-white">Gisbert Floor 2</p>
-          <p className="mt-1 text-xs text-blue-100/65">130 mapped nodes</p>
+          <p className="mt-1 text-xs text-blue-100/65">130 mapped seats</p>
         </div>
         <span className="rounded-[8px] bg-amber-200 px-3 py-1 text-xs font-semibold text-[#3d2d04]">Live map</span>
       </div>

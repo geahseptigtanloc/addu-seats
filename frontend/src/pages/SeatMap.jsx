@@ -55,7 +55,7 @@ function getSeatColor(status) {
       return '#b42318';
     case 'pending':
     case 'pending_entry':
-      return '#b7791f';
+      return '#d97706';
     case 'on_break':
       return '#256d9c';
     default:
@@ -209,6 +209,9 @@ function LayoutFeature({ feature, hatchId, onHubClick, seatStatusByLabel }) {
           fill={MAP_THEME.desk}
           stroke={MAP_THEME.wall}
           strokeWidth="1.5"
+          transform={feature.rotation
+            ? `rotate(${feature.rotation} ${feature.x + feature.width / 2} ${feature.y + feature.height / 2})`
+            : undefined}
         />
       );
     case 'chair': {
@@ -217,6 +220,7 @@ function LayoutFeature({ feature, hatchId, onHubClick, seatStatusByLabel }) {
       const inset = chairStatus ? 1.25 : 0;
       return (
         <g pointerEvents="none">
+          {feature.label && <title>{feature.label}</title>}
           <rect
             x={feature.x}
             y={feature.y}
@@ -321,6 +325,47 @@ function LayoutFeature({ feature, hatchId, onHubClick, seatStatusByLabel }) {
         </g>
       );
     }
+    case 'segmentedCouch': {
+      const dividerLines = Array.from(
+        { length: Math.max(0, feature.segments - 1) },
+        (_, index) => index + 1,
+      );
+      return (
+        <g>
+          <rect
+            x={feature.x}
+            y={feature.y}
+            width={feature.width}
+            height={feature.height}
+            rx="2"
+            fill={MAP_THEME.couch}
+            stroke={MAP_THEME.wall}
+            strokeWidth="1.5"
+          />
+          {dividerLines.map((segment) => feature.orientation === 'vertical' ? (
+            <line
+              key={segment}
+              x1={feature.x}
+              x2={feature.x + feature.width}
+              y1={feature.y + (feature.height * segment) / feature.segments}
+              y2={feature.y + (feature.height * segment) / feature.segments}
+              stroke={MAP_THEME.wall}
+              strokeWidth="1"
+            />
+          ) : (
+            <line
+              key={segment}
+              x1={feature.x + (feature.width * segment) / feature.segments}
+              x2={feature.x + (feature.width * segment) / feature.segments}
+              y1={feature.y}
+              y2={feature.y + feature.height}
+              stroke={MAP_THEME.wall}
+              strokeWidth="1"
+            />
+          ))}
+        </g>
+      );
+    }
     case 'curve':
       return (
         <path
@@ -368,7 +413,7 @@ function LayoutFeature({ feature, hatchId, onHubClick, seatStatusByLabel }) {
 
 function SeatMarker({ seat, index, onClick, rotation = 0 }) {
   const statusLabel = STATUS_LABELS[seat.status] || seat.status.replace('_', ' ');
-  const nodeLabel = seat.label || `Seat ${index + 1}`;
+  const seatLabel = seat.label || `Seat ${index + 1}`;
   const fill = getSeatColor(seat.status);
   const isDisabled = seat.status === 'disabled';
   const isOnBreak = seat.status === 'on_break';
@@ -376,8 +421,9 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
     ? 'seat-marker cursor-not-allowed opacity-65'
     : 'seat-marker cursor-pointer';
   const isTableNode = seat.seatType === 'table_node';
-  const hitWidth = isTableNode ? seat.hitWidth || 38 : 16;
-  const hitHeight = isTableNode ? seat.hitHeight || 38 : 16;
+  const renderAsTableNode = isTableNode && !seat.displayAsChair;
+  const hitWidth = renderAsTableNode ? seat.hitWidth || 38 : 16;
+  const hitHeight = renderAsTableNode ? seat.hitHeight || 38 : 16;
 
   return (
     <g
@@ -391,13 +437,13 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
       }}
       role="button"
       tabIndex={isDisabled ? -1 : 0}
-      aria-label={`${nodeLabel}, ${getSeatTypeLabel(seat.seatType)}, ${statusLabel}`}
+      aria-label={`${seatLabel}, ${getSeatTypeLabel(seat.seatType)}, ${statusLabel}`}
       aria-disabled={isDisabled}
       className={markerClass}
     >
-      <title>{`${nodeLabel} - ${statusLabel}`}</title>
+      <title>{`${seatLabel} - ${statusLabel}`}</title>
       <rect x={-hitWidth / 2} y={-hitHeight / 2} width={hitWidth} height={hitHeight} fill="transparent" />
-      {isOnBreak && !isTableNode && (
+      {isOnBreak && !renderAsTableNode && (
         <circle
           cx="0"
           cy="0"
@@ -409,7 +455,7 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
           pointerEvents="none"
         />
       )}
-      {isTableNode ? (
+      {renderAsTableNode ? (
         <rect
           className="seat-focus-ring"
           x={-hitWidth / 2}
@@ -567,7 +613,11 @@ export default function SeatMap() {
     : getFloorLayout(building, floor) || DEFAULT_LAYOUT;
   const availableFloors = getAvailableFloors(building);
   const hatchId = `map-hatch-${building}-${floor}`;
-  const visibleSeats = seats;
+  const visibleSeats = seats.filter((seat) => !(
+    building === 'gisbert'
+    && Number(floor) === 1
+    && seat.seatType === 'table_node'
+  ));
   const seatStatusByLabel = new Map(visibleSeats.map((seat) => [seat.label, seat.status]));
   const sortedSeats = [...visibleSeats].sort((a, b) => (a.posY - b.posY) || (a.posX - b.posX));
   const selectedSeatNumber = selectedSeat
@@ -596,7 +646,7 @@ export default function SeatMap() {
             All locations
           </button>
           <h1 className="ui-page-title">{locationLabel}</h1>
-          <p className="ui-muted mt-2">Select an available node to begin a reservation.</p>
+          <p className="ui-muted mt-2">Select an available seat to begin a reservation.</p>
         </div>
         {activeReservation && (
           <button type="button" onClick={handleOpenActiveReservation} className="ui-button-secondary self-start border-amber-300 bg-amber-50 text-amber-900">
@@ -648,7 +698,7 @@ export default function SeatMap() {
 
         {activeReservation ? (
           <div className="flex flex-col justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center">
-            <span>A reservation is already in progress. Finish or cancel it before choosing another node.</span>
+            <span>A reservation is already in progress. Finish or cancel it before choosing another seat.</span>
             {activeReservation && <button type="button" onClick={handleOpenActiveReservation} className="self-start font-semibold underline decoration-2 underline-offset-4">View details</button>}
           </div>
         ) : null}
@@ -656,7 +706,7 @@ export default function SeatMap() {
         <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-[#f5f9fc] px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">{layout.name}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{availableCount} of {sortedSeats.length} nodes available</p>
+            <p className="mt-0.5 text-xs text-slate-500">{availableCount} of {sortedSeats.length} seats available</p>
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => setMapZoom(zoom - 0.2)} disabled={zoom <= 0.8} className="ui-icon-button" aria-label="Zoom out" title="Zoom out"><Minus size={18} weight="bold" /></button>
@@ -772,7 +822,7 @@ export default function SeatMap() {
                       <QrCode size={24} weight="duotone" className="mt-0.5 shrink-0 text-[#063a64]" />
                       <div>
                         <h3 className="text-sm font-semibold text-slate-950">Scan the physical QR to reserve</h3>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">Please scan the QR code attached to {selectedSeatLabel} at {locationLabel}. Selecting a node on this map only shows its availability.</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-600">Please scan the QR code attached to {selectedSeatLabel} at {locationLabel}. Selecting a seat on this map only shows its availability.</p>
                       </div>
                     </div>
                   </div>
@@ -781,7 +831,7 @@ export default function SeatMap() {
                     <span>After the physical scan and reservation, you have five minutes to present the digital receipt and your name at the front desk.</span>
                   </div>
                   {activeReservation && (
-                    <p className="mt-4 text-sm font-semibold text-red-700">Finish or cancel your current reservation before scanning another node.</p>
+                    <p className="mt-4 text-sm font-semibold text-red-700">Finish or cancel your current reservation before scanning another seat.</p>
                   )}
                   <div className="mt-6 flex justify-end">
                     <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary">Close</button>
@@ -790,7 +840,7 @@ export default function SeatMap() {
               ) : (
                 <>
                   <p className="text-sm font-semibold capitalize text-slate-950">Currently {selectedSeat.status.replace('_', ' ')}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{user?.role === 'student' && selectedSeat.status === 'occupied' ? 'If this node appears vacant in person, report it so the reservation holder can respond.' : 'This reservation node cannot be selected right now.'}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{user?.role === 'student' && selectedSeat.status === 'occupied' ? 'If this seat appears vacant in person, report it so the reservation holder can respond.' : 'This seat cannot be selected right now.'}</p>
                   <div className="mt-6 flex justify-end gap-2">
                     <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary">Close</button>
                     {user?.role === 'student' && selectedSeat.status === 'occupied' && <button type="button" onClick={() => setFlagSeatId(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}

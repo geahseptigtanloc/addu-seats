@@ -7,6 +7,13 @@ import { normalizeReservation, normalizeSeat, seatLabelFromQrToken } from '../ap
 import { useAuth } from '../context/AuthContext.jsx';
 import { storePendingReservationToken } from '../utils/pendingReservation.js';
 
+const FRONT_DESK_CHAIR_TOKENS = new Set([
+  'seat:g3-c020',
+  'seat:g3-c021',
+  'seat:g3-c022',
+  'seat:g4-c030',
+]);
+
 function titleCase(value) {
   return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -16,6 +23,7 @@ export default function QrReservation() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const qrToken = searchParams.get('token') || '';
+  const isFrontDeskChair = FRONT_DESK_CHAIR_TOKENS.has(qrToken.toLowerCase());
   const [reserving, setReserving] = useState(false);
   const [failure, setFailure] = useState(null);
 
@@ -44,7 +52,7 @@ export default function QrReservation() {
         label: source.seat?.label || scannedSeat?.label || source.seatId,
         building: source.building || scannedSeat?.building,
         floor: source.floor || scannedSeat?.floor,
-        status: 'available',
+        status: 'pending_entry',
       });
       const reservation = normalizeReservation(response, { seat: receiptSeat, user });
       navigate('/receipt', {
@@ -63,7 +71,7 @@ export default function QrReservation() {
       const messages = {
         400: {
           title: 'This QR code is malformed',
-          copy: 'Please scan the QR attached to the study node again. If it still fails, notify the front desk.',
+          copy: 'Please scan the QR attached to the study seat again. If it still fails, notify the front desk.',
         },
         404: {
           title: 'This QR code is no longer active',
@@ -111,7 +119,7 @@ export default function QrReservation() {
               </span>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-blue-100/70">Physical QR scan</p>
-                <h1 className="mt-2 text-2xl font-semibold">Reserve this study node</h1>
+                <h1 className="mt-2 text-2xl font-semibold">Reserve this study seat</h1>
                 <p className="mt-2 text-sm leading-6 text-blue-100/80">A reservation can begin only from the QR attached to the physical seat or table.</p>
               </div>
             </div>
@@ -119,7 +127,9 @@ export default function QrReservation() {
 
           <div className="p-6 sm:p-8">
             {!qrToken ? (
-              <Message icon={WarningCircle} title="This QR code is malformed" copy="Scan the QR attached to the study node again. If this page still appears, notify the front desk." tone="danger" />
+              <Message icon={WarningCircle} title="This QR code is malformed" copy="Scan the QR attached to the study seat again. If this page still appears, notify the front desk." tone="danger" />
+            ) : isFrontDeskChair ? (
+              <Message icon={WarningCircle} title="Front desk chair" copy="This chair is reserved for front desk use and cannot be booked as a study seat." tone="danger" />
             ) : authLoading ? (
               <div className="space-y-3">
                 <div className="loading-skeleton h-20 rounded-[8px]" />
@@ -136,7 +146,7 @@ export default function QrReservation() {
               <>
                 <div className="grid gap-4 rounded-[8px] border border-emerald-200 bg-emerald-50 p-5 sm:grid-cols-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase text-emerald-700">Reservation node</p>
+                    <p className="text-xs font-semibold uppercase text-emerald-700">Reserved seat</p>
                     <p className="mt-1 text-lg font-semibold text-emerald-950">{scannedLabel}</p>
                   </div>
                   <div>

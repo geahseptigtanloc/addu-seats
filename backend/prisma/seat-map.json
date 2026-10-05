@@ -2267,21 +2267,6 @@
   {
     "building": "gisbert",
     "floor": 3,
-    "currentQrToken": "seat:g3-c020"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c021"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c022"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
     "currentQrToken": "seat:g3-c023"
   },
   {
@@ -2948,11 +2933,6 @@
     "building": "gisbert",
     "floor": 4,
     "currentQrToken": "seat:g4-c029"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c030"
   },
   {
     "building": "miguel_pro",

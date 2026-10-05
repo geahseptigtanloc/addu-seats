@@ -40,6 +40,11 @@ const addColumn = (floor, seatType, x, startY, count, gap) => {
   }
 };
 
+const skipSeatLabels = (floor, seatType, count) => {
+  const counterKey = `${floor}-${seatType}`;
+  seatCounters.set(counterKey, (seatCounters.get(counterKey) || 0) + count);
+};
+
 const spread = (center, span, count) => {
   if (count <= 0) return [];
   if (count === 1) return [center];
@@ -90,15 +95,16 @@ addSeats(1, 'table_node', [
   [320, 165], [355, 165], [390, 165], [425, 195], [425, 230], [390, 260], [355, 260], [320, 260],
   [320, 330], [355, 330], [390, 330], [425, 360], [425, 395], [390, 425], [355, 425], [320, 425],
 ]);
-addRow(1, 'cubicle', 335, 522, 5, 44);
-addRow(1, 'cubicle', 620, 522, 5, 44);
-addRow(1, 'cubicle', 815, 522, 4, 44);
-addColumn(1, 'cubicle', 970, 210, 8, 38);
-addColumn(1, 'cubicle', 870, 85, 5, 31);
-addRow(1, 'cubicle', 895, 175, 4, 32);
-addRow(1, 'cubicle', 450, 40, 3, 36);
-addRow(1, 'cubicle', 580, 40, 3, 36);
-addRow(1, 'cubicle', 710, 40, 3, 36);
+addSeats(1, 'cubicle', [
+  [330, 522], [370, 522], [435, 522], [475, 522], [515, 522], [555, 522], [620, 522],
+  [660, 522], [700, 522], [740, 522], [805, 522], [845, 522], [885, 522], [925, 522],
+]);
+addColumn(1, 'cubicle', 955, 220, 8, 38);
+addColumn(1, 'cubicle', 855, 66, 5, 28);
+addRow(1, 'cubicle', 870, 195, 4, 30);
+addRow(1, 'cubicle', 440, 40, 3, 36);
+addRow(1, 'cubicle', 565, 40, 3, 36);
+addRow(1, 'cubicle', 690, 40, 3, 36);
 
 for (const [y, xs] of [
   [110, [185, 260, 335, 410]],
@@ -124,17 +130,26 @@ addRow(2, 'cubicle', 305, 535, 9, 28);
   addRectTable(3, 265, y, { width: 90, height: 54, top: 3, bottom: 3 }));
 [[395, 115], [505, 115], [615, 115], [395, 235], [505, 235], [615, 235]].forEach(([x, y]) =>
   addRectTable(3, x, y, { width: 38, height: 42 }));
-[[450, 350], [570, 350], [430, 610], [565, 610], [475, 930], [570, 930], [660, 930]].forEach(([x, y]) =>
+[[450, 350], [570, 350], [430, 610], [565, 610], [440, 915], [535, 915], [625, 915]].forEach(([x, y]) =>
   addRoundTable(3, x, y));
-[[395, 745], [485, 745], [575, 745], [665, 745]].forEach(([x, y]) =>
+[[380, 745], [470, 745], [560, 745], [650, 745]].forEach(([x, y]) =>
   addRectTable(3, x, y, { width: 38, height: 38, type: 'table_node' }));
-[[465, 850], [545, 850], [625, 850]].forEach(([x, y]) =>
+[[465, 825], [545, 825], [625, 825]].forEach(([x, y]) =>
   addRectTable(3, x, y, { width: 36, height: 56, top: 0, bottom: 0, left: 2, right: 2 }));
 addRow(3, 'cubicle', 388, 465, 6, 55);
 addColumn(3, 'cubicle', 115, 180, 7, 43);
 addColumn(3, 'cubicle', 95, 555, 6, 56);
-addSeats(3, 'cubicle', [[95, 880], [95, 915], [95, 950]]);
-addRow(3, 'cubicle', 450, 1005, 6, 40);
+// G3-C020 through G3-C022 are retired because these are front desk staff chairs.
+skipSeatLabels(3, 'cubicle', 3);
+addSeats(3, 'cubicle', [
+  [446, 964], [415, 1004], [477, 1004],
+  [604, 964], [573, 1004], [635, 1004],
+]);
+
+// Floor 3's collaborative seats are drawn at their physical chair positions in the supplied plan.
+seatsByFloor[3].forEach((seat) => {
+  if (seat.seatType === 'table_node') seat.displayAsChair = true;
+});
 
 [300, 425, 550, 675, 800, 900].forEach((y) =>
   addRectTable(4, 250, y, { width: 104, height: 54, top: 3, bottom: 3 }));
@@ -147,7 +162,8 @@ addColumn(4, 'cubicle', 105, 295, 7, 46);
 addColumn(4, 'cubicle', 95, 650, 6, 46);
 addSeats(4, 'cubicle', [[155, 235], [220, 235], [285, 235], [350, 235], [415, 235], [610, 235], [645, 265]]);
 addRow(4, 'cubicle', 160, 970, 8, 50);
-addSeats(4, 'cubicle', [[660, 290], [660, 710]]);
+// The chair at (660, 710) belongs to the front desk, not the study-seat inventory.
+addSeats(4, 'cubicle', [[660, 290]]);
 
 export function getGisbertPreviewSeats(floor) {
   return seatsByFloor[Number(floor)]?.map((seat) => ({ ...seat })) ?? [];

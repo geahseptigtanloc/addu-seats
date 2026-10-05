@@ -9,9 +9,11 @@ import {
 import { prisma } from '../config/prisma';
 import * as reservationRepository from '../repositories/reservation.repository';
 import * as seatRepository from '../repositories/seat.repository';
+import { getSeatLabel } from './seat.service';
 import * as validationEventRepository from '../repositories/validationEvent.repository';
 import { redisClient } from '../config/redis';
 import { logger } from '../config/logger';
+import { isRetiredSeatToken } from '../config/retiredSeats';
 import {
   broadcastSeatStatusUpdate,
   notifySeatFlagged,
@@ -81,10 +83,18 @@ export async function createReservation(
     throw new ConflictError('You are on a break cooldown — please try again later');
   }
 
+  if (isRetiredSeatToken(qrToken)) {
+    throw new NotFoundError('This seat QR code is no longer active');
+  }
+
   const seat = await seatRepository.findByQrToken(qrToken);
 
   if (!seat) {
     throw new NotFoundError('Seat not found');
+  }
+
+  if (seat.status !== SeatStatus.AVAILABLE) {
+    throw new ConflictError('This seat is not available for reservation');
   }
 
   const [activeOnSeat, activeForUser] = await Promise.all([
@@ -102,7 +112,18 @@ export async function createReservation(
 
   let reservation: Reservation;
   try {
-    reservation = await reservationRepository.create({ userId, seatId: seat.id });
+    reservation = await prisma.$transaction(async (tx) => {
+      const claimedSeat = await tx.seat.updateMany({
+        where: { id: seat.id, status: SeatStatus.AVAILABLE },
+        data: { status: SeatStatus.PENDING },
+      });
+
+      if (claimedSeat.count !== 1) {
+        throw new ConflictError('Seat is already reserved');
+      }
+
+      return tx.reservation.create({ data: { userId, seatId: seat.id } });
+    });
   } catch (err) {
     if (isUniqueConstraintError(err)) {
       throw new ConflictError('Seat or user became unavailable — please try again');
@@ -114,6 +135,15 @@ export async function createReservation(
     await redisClient.set(entryTimerKey(reservation.id), '1', { EX: ENTRY_TIMER_SECONDS });
   } catch (err) {
     logger.warn({ err, reservationId: reservation.id }, 'Failed to set entry timer in Redis');
+  }
+
+  try {
+    broadcastSeatStatusUpdate(seat.building, seat.floor, {
+      seatId: seat.id,
+      status: SeatStatus.PENDING,
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId: reservation.id }, 'Failed to broadcast pending seat status');
   }
 
   return {
@@ -146,9 +176,16 @@ export async function cancelReservation(
     throw new ConflictError('Only a pending reservation can be cancelled');
   }
 
-  const updated = await reservationRepository.update(reservationId, {
-    status: ReservationStatus.CANCELLED,
-    endedAt: new Date(),
+  const [updated, updatedSeat] = await prisma.$transaction(async (tx) => {
+    const res = await tx.reservation.update({
+      where: { id: reservationId },
+      data: { status: ReservationStatus.CANCELLED, endedAt: new Date() },
+    });
+    const seat = await tx.seat.update({
+      where: { id: reservation.seatId },
+      data: { status: SeatStatus.AVAILABLE },
+    });
+    return [res, seat] as const;
   });
 
   // Best-effort cleanup, the key would self-expire anyway just cleaner not to leave it.
@@ -156,6 +193,15 @@ export async function cancelReservation(
     await redisClient.del(entryTimerKey(reservationId));
   } catch (err) {
     logger.warn({ err, reservationId }, 'Failed to clear entry timer in Redis');
+  }
+
+  try {
+    broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
+      seatId: updatedSeat.id,
+      status: updatedSeat.status,
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to broadcast cancelled seat status');
   }
 
   return updated;
@@ -172,6 +218,15 @@ export async function approveReservation(reservationId: string): Promise<Reserva
 
   if (reservation.status !== ReservationStatus.PENDING) {
     throw new ConflictError('Only a pending reservation can be approved');
+  }
+
+  const pendingSeat = await seatRepository.findById(reservation.seatId);
+  if (
+    !pendingSeat ||
+    isRetiredSeatToken(pendingSeat.currentQrToken) ||
+    pendingSeat.status !== SeatStatus.PENDING
+  ) {
+    throw new ConflictError('This seat is no longer available for entry');
   }
 
   // Both updates succeed or fail together — a CONFIRMED reservation with
@@ -348,10 +403,13 @@ export async function checkoutReservation(
   });
 
   try {
-    await Promise.all([
+    const [, clearedFlag] = await Promise.all([
       redisClient.del(breakTimerKey(reservationId)),
       redisClient.del(seatFlagKey(reservation.seatId)),
     ]);
+    if (clearedFlag > 0) {
+      notifyAdminsSeatFlagResolved({ reservationId, resolution: 'checked_out' });
+    }
   } catch (err) {
     logger.warn({ err, reservationId }, 'Failed to clear checkout timers');
   }
@@ -427,16 +485,40 @@ export async function voidReservation(reservationId: string): Promise<Reservatio
     }
   } else {
     // PENDING
-    updatedReservation = await reservationRepository.update(reservationId, {
-      status: ReservationStatus.VOIDED,
-      endedAt: new Date(),
+    const [res, seat] = await prisma.$transaction(async (tx) => {
+      const r = await tx.reservation.update({
+        where: { id: reservationId },
+        data: { status: ReservationStatus.VOIDED, endedAt: new Date() },
+      });
+      const s = await tx.seat.update({
+        where: { id: reservation.seatId },
+        data: { status: SeatStatus.AVAILABLE },
+      });
+      return [r, s] as const;
     });
+    updatedReservation = res;
+
+    try {
+      broadcastSeatStatusUpdate(seat.building, seat.floor, {
+        seatId: seat.id,
+        status: seat.status,
+      });
+    } catch (err) {
+      logger.warn({ err, reservationId }, 'Failed to broadcast voided pending seat status');
+    }
   }
 
   try {
-    await redisClient.del(entryTimerKey(reservationId));
+    const [, , clearedFlag] = await Promise.all([
+      redisClient.del(entryTimerKey(reservationId)),
+      redisClient.del(breakTimerKey(reservationId)),
+      redisClient.del(seatFlagKey(reservation.seatId)),
+    ]);
+    if (clearedFlag > 0) {
+      notifyAdminsSeatFlagResolved({ reservationId, resolution: 'voided' });
+    }
   } catch (err) {
-    logger.warn({ err, reservationId }, 'Failed to clear entry timer in Redis');
+    logger.warn({ err, reservationId }, 'Failed to clear reservation timers in Redis');
   }
 
   return updatedReservation;
@@ -647,6 +729,134 @@ function seatFlagKey(seatId: string): string {
 interface FlagState {
   reservationId: string;
   expiresAt: string; // ISO timestamp
+  reportedAt?: string; // optional for flags created before this field was added
+}
+
+export interface FlaggedReservation {
+  reservationId: string;
+  seatId: string;
+  seatLabel: string;
+  building: string;
+  floor: number;
+  studentName: string;
+  studentIdLast4: string | null;
+  windowSeconds: number;
+  remainingSeconds: number;
+  expiresAt: string;
+  reportedAt: string;
+}
+
+export async function getFlaggedReservations(): Promise<FlaggedReservation[]> {
+  const flagKeys: string[] = [];
+  for await (const keys of redisClient.scanIterator({ MATCH: 'seat:flag:*' })) {
+    flagKeys.push(...keys);
+  }
+
+  const reports: FlaggedReservation[] = [];
+
+  for (const key of flagKeys) {
+    try {
+      const raw = await redisClient.get(key);
+      if (!raw) continue;
+
+      const state = JSON.parse(raw) as FlagState;
+      const reservation = await reservationRepository.findDetailsById(state.reservationId);
+
+      if (!reservation || reservation.status !== ReservationStatus.CONFIRMED) {
+        await redisClient.del(key);
+        continue;
+      }
+
+      const expiresAtMs = new Date(state.expiresAt).getTime();
+      if (!Number.isFinite(expiresAtMs)) {
+        logger.warn({ key }, 'Ignoring malformed seat flag expiry');
+        continue;
+      }
+
+      const reportedAt =
+        state.reportedAt || new Date(expiresAtMs - FLAG_WINDOW_SECONDS * 1000).toISOString();
+
+      reports.push({
+        reservationId: reservation.id,
+        seatId: reservation.seat.id,
+        seatLabel: getSeatLabel(reservation.seat),
+        building: reservation.seat.building,
+        floor: reservation.seat.floor,
+        studentName: reservation.user.name,
+        studentIdLast4: reservation.user.studentIdLast4,
+        windowSeconds: FLAG_WINDOW_SECONDS,
+        remainingSeconds: Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000)),
+        expiresAt: state.expiresAt,
+        reportedAt,
+      });
+    } catch (err) {
+      logger.warn({ err, key }, 'Failed to read active seat flag');
+    }
+  }
+
+  return reports.sort(
+    (left, right) => new Date(right.reportedAt).getTime() - new Date(left.reportedAt).getTime(),
+  );
+}
+
+export async function confirmGhostSeat(reservationId: string): Promise<Reservation> {
+  const reservation = await reservationRepository.findById(reservationId);
+
+  if (!reservation || reservation.status !== ReservationStatus.CONFIRMED) {
+    throw new ConflictError('This ghost-seat report is no longer active');
+  }
+
+  const key = seatFlagKey(reservation.seatId);
+  const rawFlag = await redisClient.getDel(key);
+
+  if (!rawFlag) {
+    throw new ConflictError('This ghost-seat report is no longer active');
+  }
+
+  let state: FlagState;
+  try {
+    state = JSON.parse(rawFlag) as FlagState;
+  } catch {
+    throw new ConflictError('This ghost-seat report is invalid');
+  }
+
+  if (state.reservationId !== reservationId) {
+    await redisClient.set(key, rawFlag, {
+      expiration: { type: 'EX', value: FLAG_REDIS_TTL_SECONDS },
+      condition: 'NX',
+    });
+    throw new ConflictError('This ghost-seat report does not match the reservation');
+  }
+
+  let voidedReservation: Reservation;
+  try {
+    voidedReservation = await voidReservation(reservationId);
+  } catch (err) {
+    const expiresAtMs = new Date(state.expiresAt).getTime();
+    const restoreSeconds = Number.isFinite(expiresAtMs)
+      ? Math.max(1, Math.ceil((expiresAtMs - Date.now()) / 1000) + 5 * 60)
+      : FLAG_REDIS_TTL_SECONDS;
+    try {
+      await redisClient.set(key, rawFlag, {
+        expiration: { type: 'EX', value: restoreSeconds },
+        condition: 'NX',
+      });
+    } catch (restoreError) {
+      logger.error(
+        { err: restoreError, reservationId },
+        'Failed to restore ghost-seat report after void failure',
+      );
+    }
+    throw err;
+  }
+
+  try {
+    notifyAdminsSeatFlagResolved({ reservationId, resolution: 'voided' });
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to notify admins of confirmed ghost seat');
+  }
+
+  return voidedReservation;
 }
 
 export async function flagSeat(flaggingUserId: string, seatId: string): Promise<void> {
@@ -670,9 +880,11 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
     throw new ConflictError('You cannot flag your own reservation');
   }
 
+  const reportedAt = new Date().toISOString();
   const state: FlagState = {
     reservationId: reservation.id,
     expiresAt: new Date(Date.now() + FLAG_WINDOW_SECONDS * 1000).toISOString(),
+    reportedAt,
   };
 
   const set = await redisClient.set(seatFlagKey(seatId), JSON.stringify(state), {
@@ -691,7 +903,7 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
       windowSeconds: FLAG_WINDOW_SECONDS,
       expiresAt: state.expiresAt,
       message:
-        'Another student reported this seat as physically vacant. Scan the physical node QR within 10 minutes to keep your reservation.',
+        'Another student reported this seat as physically vacant. Scan the physical seat QR within 10 minutes to keep your reservation.',
     });
   } catch (err) {
     logger.warn(
@@ -701,14 +913,21 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
   }
 
   try {
+    const reservationDetails = await reservationRepository.findDetailsById(reservation.id);
+    if (!reservationDetails) {
+      throw new NotFoundError('Reservation not found');
+    }
     notifyAdminsSeatFlagged({
       seatId,
+      seatLabel: getSeatLabel(seat),
       reservationId: reservation.id,
       building: seat.building,
       floor: seat.floor,
+      studentName: reservationDetails.user.name,
+      studentIdLast4: reservationDetails.user.studentIdLast4,
       windowSeconds: FLAG_WINDOW_SECONDS,
       expiresAt: state.expiresAt,
-      reportedAt: new Date().toISOString(),
+      reportedAt,
     });
   } catch (err) {
     logger.warn({ err, seatId, reservationId: reservation.id }, 'Failed to notify admins of flag');
@@ -761,7 +980,44 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
 // so "expired" means the same thing on both ends.
 export async function expireEntryTimers(): Promise<void> {
   const cutoff = new Date(Date.now() - ENTRY_TIMER_SECONDS * 1000);
-  const count = await reservationRepository.expireStalePendingReservations(cutoff);
+  const staleReservations = await reservationRepository.findStalePendingReservations(cutoff);
+  let count = 0;
+
+  for (const reservation of staleReservations) {
+    const released = await prisma.$transaction(async (tx) => {
+      const expired = await tx.reservation.updateMany({
+        where: {
+          id: reservation.id,
+          status: ReservationStatus.PENDING,
+          createdAt: { lt: cutoff },
+        },
+        data: { status: ReservationStatus.CANCELLED, endedAt: new Date() },
+      });
+
+      if (expired.count !== 1) return false;
+
+      await tx.seat.updateMany({
+        where: { id: reservation.seat.id, status: SeatStatus.PENDING },
+        data: { status: SeatStatus.AVAILABLE },
+      });
+      return true;
+    });
+
+    if (!released) continue;
+    count++;
+
+    try {
+      broadcastSeatStatusUpdate(reservation.seat.building, reservation.seat.floor, {
+        seatId: reservation.seat.id,
+        status: SeatStatus.AVAILABLE,
+      });
+    } catch (err) {
+      logger.warn(
+        { err, reservationId: reservation.id },
+        'Failed to broadcast expired pending seat status',
+      );
+    }
+  }
 
   if (count > 0) {
     logger.info({ count }, 'Expired stale pending reservations (entry timer)');

@@ -2,7 +2,7 @@ import type { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, type DefaultEventsMap } from 'socket.io';
 import { z } from 'zod';
 import type { SeatStatus } from '@prisma/client';
-import { env } from './env';
+import { corsOrigins } from './env';
 import { logger } from './logger';
 import { verifyToken } from '../utils/jwt';
 
@@ -28,16 +28,19 @@ interface ServerToClientEvents {
   }) => void;
   seat_flagged_admin_notice: (payload: {
     seatId: string;
+    seatLabel: string;
     reservationId: string;
     building: string;
     floor: number;
+    studentName: string;
+    studentIdLast4: string | null;
     windowSeconds: number;
     expiresAt: string;
     reportedAt: string;
   }) => void;
   seat_flag_resolved_admin_notice: (payload: {
     reservationId: string;
-    resolution: 'reverified' | 'evicted';
+    resolution: 'reverified' | 'evicted' | 'voided' | 'checked_out';
   }) => void;
   socket_error: (payload: { message: string }) => void;
 }
@@ -84,7 +87,7 @@ const ADMIN_ROOM = 'role:admin';
 export function initSocket(httpServer: HttpServer): AppSocketServer {
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: env.CORS_ORIGIN,
+      origin: corsOrigins,
     },
   });
 
@@ -183,12 +186,16 @@ export function notifySeatFlagged(
   getIO().to(getUserRoom(userId)).emit('seat_flagged', payload);
 }
 
-// Passive, every connected admin sees it, nobody is required to act.
+// Every connected admin sees the report and can open the protected
+// confirmation action from the dashboard.
 export function notifyAdminsSeatFlagged(payload: {
   seatId: string;
+  seatLabel: string;
   reservationId: string;
   building: string;
   floor: number;
+  studentName: string;
+  studentIdLast4: string | null;
   windowSeconds: number;
   expiresAt: string;
   reportedAt: string;
@@ -198,7 +205,7 @@ export function notifyAdminsSeatFlagged(payload: {
 
 export function notifyAdminsSeatFlagResolved(payload: {
   reservationId: string;
-  resolution: 'reverified' | 'evicted';
+  resolution: 'reverified' | 'evicted' | 'voided' | 'checked_out';
 }): void {
   getIO().to(ADMIN_ROOM).emit('seat_flag_resolved_admin_notice', payload);
 }

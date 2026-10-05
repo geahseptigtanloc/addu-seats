@@ -77,7 +77,7 @@ export default function BuildingFloorSelector() {
 
   const firstName = user?.name?.split(' ')[0];
   const libraryStats = [
-    { label: 'Mapped nodes', value: totalSeats },
+    { label: 'Mapped seats', value: totalSeats },
     { label: selectedLibrary.statLabel, value: selectedLibrary.statValue },
     { label: 'Guest browsing', value: 'Open' },
   ];
@@ -92,7 +92,7 @@ export default function BuildingFloorSelector() {
               {selectedLibrary.name}
             </div>
             <h1 className="max-w-2xl text-3xl font-semibold leading-tight sm:text-5xl">
-              Find the right study node before you walk in.
+              Find the right study seat before you walk in.
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-blue-100/82 sm:text-base">
               {user?.role === 'student'
@@ -129,7 +129,7 @@ export default function BuildingFloorSelector() {
             <Ticket size={22} weight="duotone" className="mt-0.5 shrink-0 text-amber-800" />
             <div>
               <p className="font-semibold text-amber-950">Reservation in progress</p>
-              <p className="mt-1 text-sm text-amber-800">{activeReservation.seat?.label || 'Study node'} · {activeReservation.status.replace('_', ' ')}</p>
+              <p className="mt-1 text-sm text-amber-800">{activeReservation.seat?.label || 'Study seat'} · {activeReservation.status.replace('_', ' ')}</p>
             </div>
           </div>
           <button type="button" onClick={openActiveReservation} className="ui-button-secondary self-start border-amber-300 text-amber-900 hover:bg-amber-100">
@@ -143,7 +143,7 @@ export default function BuildingFloorSelector() {
         <div className="mb-5 flex items-center justify-between gap-4">
           <div>
             <h2 className="ui-section-title">{selectedLibrary.shortName} {selectedLibrary.unitLabel}</h2>
-            <p className="mt-1 text-sm text-slate-500">{totalSeats} mapped reservation nodes</p>
+            <p className="mt-1 text-sm text-slate-500">{totalSeats} mapped seats</p>
           </div>
           <Buildings size={30} weight="duotone" className="text-[#063a64]" />
         </div>
@@ -168,7 +168,7 @@ export default function BuildingFloorSelector() {
                 </span>
                 <span className="mt-5 block text-base font-semibold text-slate-950">{building === 'gisbert' ? `Floor ${floor}` : 'Room maps'}</span>
                 <span className="mt-1 block text-sm text-slate-600">{name}</span>
-                <span className="mt-auto block pt-4 text-xs font-semibold text-slate-500">{capacity} mapped nodes</span>
+                <span className="mt-auto block pt-4 text-xs font-semibold text-slate-500">{capacity} mapped seats</span>
               </span>
             </button>
           ))}

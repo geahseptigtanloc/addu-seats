@@ -46,3 +46,20 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+export const corsOrigins = (() => {
+  const origins = new Set([env.CORS_ORIGIN]);
+
+  if (env.NODE_ENV !== 'production') {
+    const localOrigin = new URL(env.CORS_ORIGIN);
+    if (localOrigin.hostname === 'localhost') {
+      localOrigin.hostname = '127.0.0.1';
+      origins.add(localOrigin.origin);
+    } else if (localOrigin.hostname === '127.0.0.1') {
+      localOrigin.hostname = 'localhost';
+      origins.add(localOrigin.origin);
+    }
+  }
+
+  return [...origins];
+})();

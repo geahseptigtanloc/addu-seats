@@ -93,7 +93,7 @@ export default function VerifyPage() {
               <div className="grid gap-x-6 gap-y-5 sm:grid-cols-3">
                 <Detail label="Student" value={reservation.user.name} />
                 <Detail label="Student ID" value={reservation.user.adduIdLast4 ? `Ending in ${reservation.user.adduIdLast4}` : 'Check physical university ID'} />
-                <Detail label="Reservation node" value={reservation.seat.label || 'Reservation node'} accent />
+                <Detail label="Reserved seat" value={reservation.seat.label || 'Reserved seat'} accent />
                 <Detail label="Location" value={`${reservation.seat.building.replace('_', ' ')} - Floor ${reservation.seat.floor}`} />
                 <Detail label="Status" value={reservation.alreadyVerified ? 'Active' : 'Pending entry'} />
                 <Detail label="Receipt code" value={receiptCode} mono />

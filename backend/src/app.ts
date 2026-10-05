@@ -2,7 +2,7 @@ import express, { type Application } from 'express';
 import cors from 'cors';
 import healthRoutes from './routes/health.routes';
 import { notFoundHandler, errorHandler } from './middlewares/errorHandler';
-import { env } from './config/env';
+import { corsOrigins } from './config/env';
 import { passport } from './config/passport';
 import authRoutes from './routes/auth.routes';
 import seatRoutes from './routes/seat.routes';
@@ -19,7 +19,7 @@ export function createApp(): Application {
   // The one place a cookie exists is set during
   // a top-level browser redirect to/from Google, which
   // isn't a fetch/XHR call and isn't subject to CORS.
-  app.use(cors({ origin: env.CORS_ORIGIN }));
+  app.use(cors({ origin: corsOrigins }));
   app.use(express.json());
 
   // Passport's stateless request-decoration middleware only not

@@ -17,7 +17,7 @@ function getCountdown(deadline) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function getNodeType(seatType) {
+function getSeatType(seatType) {
   if (seatType === 'table_node') return 'Collaborative table';
   if (seatType === 'cubicle') return 'Study cubicle';
   return 'Individual seat';
@@ -151,7 +151,7 @@ export default function FrontDeskView() {
               const timeLeft = new Date(reservation.entryDeadline).getTime() - Date.now();
               const isUrgent = timeLeft > 0 && timeLeft < 60000;
               const isExpired = timeLeft <= 0;
-              const seatLabel = reservation.seat.label || 'Unlabeled node';
+              const seatLabel = reservation.seat.label || 'Unlabeled seat';
               const receiptCode = getReceiptCode(reservation.reservationId);
               const studentId = reservation.user.adduIdLast4
                 ? `ID ending in ${reservation.user.adduIdLast4}`
@@ -166,7 +166,7 @@ export default function FrontDeskView() {
                     </div>
                     <div>
                       <p className="font-semibold text-[#063a64]">{seatLabel}</p>
-                      <p className="mt-1 text-sm text-slate-500">{getNodeType(reservation.seat.seatType)} - Floor {reservation.seat.floor}</p>
+                      <p className="mt-1 text-sm text-slate-500">{getSeatType(reservation.seat.seatType)} - Floor {reservation.seat.floor}</p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Receipt code</p>

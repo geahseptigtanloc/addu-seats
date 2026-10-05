@@ -15,11 +15,23 @@ router.post(
   reservationController.approveReservation,
 );
 router.post('/:id/void', requireAuth, requireRole('ADMIN'), reservationController.voidReservation);
+router.post(
+  '/:id/confirm-ghost',
+  requireAuth,
+  requireRole('ADMIN'),
+  reservationController.confirmGhostSeat,
+);
 router.post('/:id/break/start', requireAuth, reservationController.startBreak);
 router.post('/:id/break/extend', requireAuth, reservationController.extendBreak);
 router.post('/break/return', requireAuth, reservationController.returnFromBreak);
 router.post('/reverify', requireAuth, reservationController.reverifyPresence);
 router.get('/pending', requireAuth, requireRole('ADMIN'), reservationController.getPendingQueue);
+router.get(
+  '/flagged',
+  requireAuth,
+  requireRole('ADMIN'),
+  reservationController.getFlaggedReservations,
+);
 router.get('/me/current', requireAuth, reservationController.getCurrentReservation);
 router.get('/:id', requireAuth, requireRole('ADMIN'), reservationController.getReservationDetails);
 

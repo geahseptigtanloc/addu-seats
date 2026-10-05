@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Buildings, CalendarBlank, ChartBar, Clock, Coffee, LockKey, MapTrifold, Monitor, TrendUp, WarningCircle, X } from '@phosphor-icons/react';
+import { ArrowRight, Buildings, CalendarBlank, ChartBar, CheckCircle, Clock, Coffee, LockKey, MapTrifold, Monitor, TrendUp, WarningCircle } from '@phosphor-icons/react';
 import { io } from 'socket.io-client';
+import AppDialog from '../components/AppDialog.jsx';
 import Layout from '../components/Layout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiClient, getToken } from '../api/client.js';
@@ -70,6 +71,10 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [ghostReports, setGhostReports] = useState([]);
+  const [ghostReportsLoading, setGhostReportsLoading] = useState(true);
+  const [ghostReportsError, setGhostReportsError] = useState('');
+  const [selectedGhostReport, setSelectedGhostReport] = useState(null);
+  const [voidingGhostReport, setVoidingGhostReport] = useState(false);
 
   const selectedLibrary = LIBRARIES[buildingFilter];
 
@@ -139,6 +144,29 @@ export default function AdminDashboard() {
   }, [areaFilter, buildingFilter, rangeDays]);
 
   useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadGhostReports() {
+      setGhostReportsLoading(true);
+      setGhostReportsError('');
+      try {
+        const reports = await apiClient('/api/reservations/flagged', {
+          signal: controller.signal,
+        });
+        setGhostReports(Array.isArray(reports) ? reports : []);
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        setGhostReportsError('Active ghost-seat reports could not be loaded.');
+      } finally {
+        if (!controller.signal.aborted) setGhostReportsLoading(false);
+      }
+    }
+
+    loadGhostReports();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
     const token = getToken();
     if (!token) return undefined;
 
@@ -157,9 +185,33 @@ export default function AdminDashboard() {
     });
     socket.on('seat_flag_resolved_admin_notice', ({ reservationId }) => {
       setGhostReports((current) => current.filter((item) => item.reservationId !== reservationId));
+      setSelectedGhostReport((current) =>
+        current?.reservationId === reservationId ? null : current,
+      );
     });
     return () => socket.disconnect();
   }, []);
+
+  async function handleConfirmGhostSeat() {
+    if (!selectedGhostReport || voidingGhostReport) return;
+
+    setVoidingGhostReport(true);
+    setGhostReportsError('');
+    try {
+      await apiClient(`/api/reservations/${selectedGhostReport.reservationId}/confirm-ghost`, {
+        method: 'POST',
+      });
+      setGhostReports((current) =>
+        current.filter((item) => item.reservationId !== selectedGhostReport.reservationId),
+      );
+      setSelectedGhostReport(null);
+    } catch (error) {
+      setGhostReportsError(error.message || 'The reservation could not be voided.');
+      setSelectedGhostReport(null);
+    } finally {
+      setVoidingGhostReport(false);
+    }
+  }
 
   const comparisonRows = useMemo(() => (analytics.locationComparison?.locations || []).map(formatComparisonLocation), [analytics.locationComparison]);
 
@@ -167,6 +219,21 @@ export default function AdminDashboard() {
     const hours = analytics.peakHours?.hours || [];
     return hours.reduce((peak, item) => (item.utilizationPercent > peak.utilizationPercent ? item : peak), { hour: 0, utilizationPercent: 0 });
   }, [analytics.peakHours]);
+
+  const ghostReportStatus = ghostReportsError
+    ? 'Status unavailable'
+    : ghostReportsLoading
+      ? 'Loading reports'
+      : ghostReports.length
+        ? `${ghostReports.length} active`
+        : 'No active reports';
+  const ghostReportStatusClasses = ghostReportsError
+    ? 'bg-amber-100 text-amber-900'
+    : ghostReportsLoading
+      ? 'bg-slate-100 text-slate-700'
+      : ghostReports.length
+        ? 'bg-red-100 text-red-800'
+        : 'bg-emerald-100 text-emerald-800';
 
   return (
     <Layout>
@@ -203,41 +270,69 @@ export default function AdminDashboard() {
             </span>
             <div>
               <h2 className="ui-section-title">Ghost-seat reports</h2>
-              <p className="mt-1 text-xs text-slate-500">Students can report an occupied node that appears physically vacant.</p>
+              <p className="mt-1 text-xs text-slate-500">Students can report an occupied seat that appears physically vacant.</p>
             </div>
           </div>
-          <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold ${ghostReports.length ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>{ghostReports.length ? `${ghostReports.length} active` : 'No active reports'}</span>
+          <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold ${ghostReportStatusClasses}`}>{ghostReportStatus}</span>
         </div>
         <div className="p-5">
-          {ghostReports.length ? (
+          {ghostReportsError && (
+            <div className="mb-4 rounded-[8px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+              {ghostReportsError}
+            </div>
+          )}
+          {ghostReportsLoading ? (
+            <div className="space-y-3" aria-label="Loading ghost-seat reports">
+              {[0, 1].map((item) => (
+                <div key={item} className="h-28 animate-pulse rounded-[8px] bg-slate-100" />
+              ))}
+            </div>
+          ) : ghostReports.length ? (
             <div className="space-y-3">
               {ghostReports.map((report) => (
                 <div key={report.reservationId} className="flex flex-col justify-between gap-3 rounded-[8px] border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center">
-                  <div>
-                    <p className="font-semibold text-red-950">Reported vacant node {formatSeatReference(report.seatId)}</p>
-                    <p className="mt-1 text-sm text-red-800">
-                      {formatBuildingName(report.building)}
-                      {report.floor ? ` · Floor ${report.floor}` : ''} · Holder has {Math.round((report.windowSeconds || 600) / 60)} minutes to re-verify at the physical QR.
+                  <div className="min-w-0">
+                    <p className="font-semibold text-red-950">Flagged seat {report.seatLabel || formatSeatReference(report.seatId)}</p>
+                    <p className="mt-1 text-sm font-medium text-red-900">
+                      {formatBuildingName(report.building)}{report.floor ? `, Floor ${report.floor}` : ''}
                     </p>
+                    <p className="mt-1 text-sm text-red-800">
+                      Reserved by {report.studentName || 'Unknown student'}{report.studentIdLast4 ? `, ID ending ${report.studentIdLast4}` : ''}.
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-red-700">{formatFlagDeadline(report.expiresAt)}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 flex-col gap-2 sm:items-end">
                     {report.building && report.floor && (
                       <Link to={`/map/${report.building}/${report.floor}`} className="ui-button-secondary py-2 text-xs">
                         Open map
                       </Link>
                     )}
-                    <button type="button" onClick={() => setGhostReports((current) => current.filter((item) => item.reservationId !== report.reservationId))} className="ui-icon-button" aria-label="Dismiss ghost-seat report">
-                      <X size={17} weight="bold" />
+                    <button type="button" onClick={() => setSelectedGhostReport(report)} className="ui-button-danger bg-red-700 py-2 text-xs text-white hover:bg-red-800">
+                      <CheckCircle size={17} weight="bold" />
+                      Confirm ghost and void
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-          ) : (
+          ) : ghostReportsError ? null : (
             <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-sm leading-6 text-slate-600">New reports appear here immediately. The reservation holder is notified and must scan the designated physical QR to retain the reservation.</div>
           )}
         </div>
       </section>
+
+      <AppDialog
+        open={Boolean(selectedGhostReport)}
+        tone="danger"
+        title="Confirm ghost seat?"
+        description={selectedGhostReport ? `This will void ${selectedGhostReport.studentName || 'the student'}'s reservation for ${selectedGhostReport.seatLabel || formatSeatReference(selectedGhostReport.seatId)} at ${formatBuildingName(selectedGhostReport.building)}, Floor ${selectedGhostReport.floor}, and release the seat.` : ''}
+        confirmLabel="Void reservation"
+        cancelLabel="Keep report active"
+        busy={voidingGhostReport}
+        dismissible={!voidingGhostReport}
+        onConfirm={handleConfirmGhostSeat}
+        onClose={() => setSelectedGhostReport(null)}
+      />
 
       <section className="flex flex-col gap-3 py-6 sm:flex-row sm:items-end sm:justify-between" aria-label="Analytics filters">
         <div>
@@ -483,7 +578,7 @@ function LocationComparison({ rows, loading }) {
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-950">{item.label}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.seatCount} mapped nodes</p>
+            <p className="mt-1 text-xs text-slate-500">{item.seatCount} mapped seats</p>
           </div>
           <div className="text-right">
             <p className="font-mono text-sm font-bold text-[#063a64]">{formatNumber(item.utilizationPercent)}%</p>
@@ -584,4 +679,15 @@ function formatBuildingName(building) {
 function formatSeatReference(seatId) {
   if (!seatId) return '';
   return String(seatId).slice(-8).toUpperCase();
+}
+
+function formatFlagDeadline(expiresAt) {
+  const expiry = new Date(expiresAt);
+  if (Number.isNaN(expiry.getTime())) {
+    return 'The holder must re-verify at the physical QR within 10 minutes.';
+  }
+  if (expiry.getTime() <= Date.now()) {
+    return 'The re-verification window has elapsed and automatic release is pending.';
+  }
+  return `The holder must re-verify at the physical QR by ${expiry.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
 }

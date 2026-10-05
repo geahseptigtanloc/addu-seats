@@ -96,6 +96,19 @@ export async function getPendingQueue(
   }
 }
 
+export async function getFlaggedReservations(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const reports = await reservationService.getFlaggedReservations();
+    res.json(reports);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getCurrentReservation(
   req: Request,
   res: Response,
@@ -172,6 +185,26 @@ export async function voidReservation(
 
   try {
     const reservation = await reservationService.voidReservation(id);
+    res.json(reservation);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function confirmGhostSeat(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const { id } = req.params;
+
+  if (typeof id !== 'string') {
+    res.status(400).json({ error: { message: 'Invalid reservation id' } });
+    return;
+  }
+
+  try {
+    const reservation = await reservationService.confirmGhostSeat(id);
     res.json(reservation);
   } catch (err) {
     next(err);

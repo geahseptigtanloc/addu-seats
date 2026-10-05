@@ -19,7 +19,7 @@ export default function SeatReturn() {
     if (!qrToken) {
       setResult({
         state: 'unavailable',
-        message: 'This link does not contain the physical node QR token.',
+        message: 'This link does not contain the physical seat QR token.',
       });
       return;
     }
@@ -28,7 +28,7 @@ export default function SeatReturn() {
       try {
         const current = normalizeReservation(await apiClient('/api/reservations/me/current'));
         if (!current || current.seat?.seatId !== seatId) {
-          throw new Error('This QR belongs to a different reservation node.');
+          throw new Error('This QR belongs to a different reserved seat.');
         }
 
         if (current.status === 'on_break') {
@@ -48,7 +48,7 @@ export default function SeatReturn() {
           message: current.status === 'on_break'
             ? 'Return confirmed. Your study session is active again.'
             : 'Presence confirmed. The ghost-seat report has been cleared.',
-          nodeLabel: current.seat?.label,
+          seatLabel: current.seat?.label,
         });
       } catch (error) {
         setResult({ state: 'error', message: error.message });
@@ -71,17 +71,17 @@ export default function SeatReturn() {
           </div>
 
           <div className="p-6 text-center sm:p-8">
-            <p className="ui-kicker justify-center">Physical node QR</p>
+            <p className="ui-kicker justify-center">Physical seat QR</p>
             <h1 className="mt-2 text-2xl font-bold text-gray-950">
               {result.state === 'success' ? 'You are checked back in' : result.state === 'checking' ? 'Checking your return' : 'Return not confirmed'}
             </h1>
             <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-gray-600">{result.message}</p>
 
-            {result.nodeLabel && (
+            {result.seatLabel && (
               <div className="mx-auto mt-6 grid max-w-sm grid-cols-2 gap-4 border-y border-gray-100 py-4 text-left">
                 <div>
-                  <p className="text-xs font-semibold uppercase text-gray-500">Reservation node</p>
-                  <p className="mt-1 font-semibold text-[#063a64]">{result.nodeLabel}</p>
+                  <p className="text-xs font-semibold uppercase text-gray-500">Reserved seat</p>
+                  <p className="mt-1 font-semibold text-[#063a64]">{result.seatLabel}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase text-gray-500">Session</p>
