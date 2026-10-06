@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import {
@@ -43,30 +43,37 @@ export default function ReservationReceipt() {
   const { user } = useAuth();
   const [reservation, setReservation] = useState(location.state?.reservation || null);
   const [busyAction, setBusyAction] = useState('');
-  const [flagged, setFlagged] = useState(false);
-  const [flagMessage, setFlagMessage] = useState('');
+  const [activeFlag, setActiveFlag] = useState(location.state?.reservation?.flag || null);
+  const [evictionMessage, setEvictionMessage] = useState('');
   const [showBreakDialog, setShowBreakDialog] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
   const [notice, setNotice] = useState(null);
   const [, setTick] = useState(0);
 
-  useEffect(() => {
-    async function refreshReservation() {
-      try {
-        const data = await apiClient('/api/reservations/me/current');
-        const normalized = normalizeReservation(data, { user });
-        setReservation(normalized);
-      } catch {
-        // Keep the current receipt visible if the server has just moved it to a terminal state.
+  const refreshReservation = useCallback(async () => {
+    try {
+      const data = await apiClient('/api/reservations/me/current');
+      const normalized = normalizeReservation(data, { user });
+      setReservation(normalized);
+      const source = data?.reservation || data;
+      if (source && Object.prototype.hasOwnProperty.call(source, 'flag')) {
+        setActiveFlag(source.flag || null);
       }
+    } catch {
+      // Keep the current receipt visible if the server has just moved it to a terminal state.
     }
+  }, [user]);
 
+  useEffect(() => {
     refreshReservation();
     const pollInterval = setInterval(refreshReservation, 3000);
+    const handleFocus = () => refreshReservation();
+    window.addEventListener('focus', handleFocus);
     return () => {
       clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocus);
     };
-  }, [user]);
+  }, [refreshReservation]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -80,10 +87,13 @@ export default function ReservationReceipt() {
     if (!token || !reservation) return undefined;
 
     const socket = io(SOCKET_URL, { auth: { token } });
+    socket.on('connect', refreshReservation);
     socket.on('seat_flagged', (data) => {
       if (data.reservationId === reservation.reservationId) {
-        setFlagged(true);
-        setFlagMessage(data.message);
+        setActiveFlag({
+          ...data,
+          expiresAt: data.expiresAt || new Date(Date.now() + (data.windowSeconds || 300) * 1000).toISOString(),
+        });
       }
     });
     socket.on('reservation_status_updated', (data) => {
@@ -95,10 +105,19 @@ export default function ReservationReceipt() {
       setReservation((current) => ({ ...current, status: 'expired' }));
     });
     socket.on('flag_expired', () => {
+      setActiveFlag(null);
+      setEvictionMessage('Your reservation ended because the vacant-seat report was not cleared in time.');
       setReservation((current) => ({ ...current, status: 'expired' }));
     });
+    socket.on('reservation_evicted', (data) => {
+      if (data.reservationId === reservation.reservationId) {
+        setActiveFlag(null);
+        setEvictionMessage(data.message || 'Your reservation ended because the vacant-seat report was not cleared in time.');
+        setReservation((current) => ({ ...current, status: 'expired', endedAt: data.endedAt }));
+      }
+    });
     return () => socket.disconnect();
-  }, [reservation?.reservationId]);
+  }, [refreshReservation, reservation?.reservationId]);
 
   async function performAction(action, apiPath) {
     setBusyAction(action);
@@ -159,6 +178,7 @@ export default function ReservationReceipt() {
   const entrySeconds = secondsUntil(reservation.entryDeadline);
   const breakSeconds = secondsUntil(reservation.breakDeadline);
   const cooldownSeconds = secondsUntil(reservation.cooldownUntil);
+  const flagSeconds = secondsUntil(activeFlag?.expiresAt);
   const locallyExpired = reservation.status === 'pending_entry' && entrySeconds === 0;
   const status = locallyExpired ? 'expired' : reservation.status;
   const seat = reservation.seat || {};
@@ -185,13 +205,24 @@ export default function ReservationReceipt() {
           </Link>
         </div>
 
-        {flagged && (
+        {activeFlag && (
           <div className="ui-alert-danger mt-5">
             <h2 className="font-semibold text-red-900">Your seat was reported vacant</h2>
-            <p className="mt-1 text-sm text-red-800">{flagMessage}</p>
+            <p className="mt-1 text-sm text-red-800">{activeFlag.message || 'Another student reported this seat as physically vacant.'}</p>
+            <div className="mt-3 flex items-end justify-between gap-4 rounded-[8px] border border-red-200 bg-white/70 px-4 py-3">
+              <p className="text-sm font-semibold text-red-900">Scan this seat's physical QR before the report expires.</p>
+              <p className="shrink-0 font-mono text-2xl font-bold text-red-950" aria-label={`${flagSeconds} seconds remaining`}>{formatTime(flagSeconds)}</p>
+            </div>
             <p className="mt-3 rounded-[8px] border border-red-200 bg-white/70 px-4 py-3 text-sm font-semibold text-red-900">
               Return to your assigned seat and scan its physical QR. An in-app confirmation cannot clear this report.
             </p>
+          </div>
+        )}
+
+        {evictionMessage && (
+          <div className="ui-alert-danger mt-5" role="alert">
+            <h2 className="font-semibold text-red-900">Reservation ended</h2>
+            <p className="mt-1 text-sm text-red-800">{evictionMessage}</p>
           </div>
         )}
 
@@ -262,12 +293,15 @@ export default function ReservationReceipt() {
                     <button
                       type="button"
                       onClick={() => setShowBreakDialog(true)}
-                      disabled={Boolean(busyAction)}
+                      disabled={Boolean(busyAction) || Boolean(activeFlag)}
                       className="ui-button-primary mt-5 w-full py-3 sm:w-auto"
                     >
                       <Coffee size={18} weight="bold" />
                       Start a five-minute break
                     </button>
+                    {activeFlag && (
+                      <p className="mt-3 text-sm font-semibold text-red-700">Breaks are unavailable while this seat report is active. Scan the physical QR to confirm your presence.</p>
+                    )}
                   </div>
                 )}
 

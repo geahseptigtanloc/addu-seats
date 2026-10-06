@@ -141,9 +141,9 @@ npm run seed
 | POST | `/api/auth/exchange` | Exchange the one-time OAuth code for a JWT |
 | GET | `/api/auth/me` | Current user profile (requires Bearer token) |
 | GET | `/api/seats` | Public live seat list, optionally filtered by building and floor |
-| POST | `/api/seats/scan` | Validate a physical-node QR token and return safe seat details |
+| POST | `/api/seats/scan` | Validate a physical-seat QR token and return safe seat details |
 | POST | `/api/seats/:id/flag` | Report an apparently vacant occupied seat |
-| POST | `/api/reservations` | Create a reservation from a physical-node QR token |
+| POST | `/api/reservations` | Create a reservation from a physical-seat QR token |
 | GET | `/api/reservations/me/current` | Current authenticated student's reservation |
 | GET | `/api/reservations/pending` | Admin front-desk queue |
 | POST | `/api/reservations/:id/approve` | Approve pending entry |
@@ -165,8 +165,8 @@ Run through this list to confirm Phase 1 works:
 - [ ] `cd frontend && npm run dev` starts on port 5173
 - [ ] `curl http://localhost:3001/api/health` returns `{ "status": "ok", "timestamp": "..." }`
 - [ ] Open `http://localhost:5173`, click **Sign in with Google**, complete login, and land on the Seat Map page with your name shown
-- [ ] Open a development physical-QR URL such as `http://localhost:5173/scan?token=seat%3Ag1-s001`, confirm the node, and create a reservation
-- [ ] Clicking an available node on the public map only instructs the student to scan its physical QR
+- [ ] Open a development physical-QR URL such as `http://localhost:5173/scan?token=seat%3Ag1-s001`, confirm the seat, and create a reservation
+- [ ] Clicking an available seat on the public map only instructs the student to scan its physical QR
 - [ ] Browser devtools → Application → Local Storage shows an `addu_seats_token` entry
 
 ## Phase Roadmap

@@ -17,8 +17,8 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Locations: Gisbert Library and Miguel Pro Learning Commons.
 - Product pillars: real-time interactive seat mapping, front-desk QR verification with automated break controls, and administrative occupancy analytics.
 - Map formal seating only. Exclude informal movable seating among bookshelf stacks and alcoves.
-- Use a single table-level reservation node for each collaborative square table that seats four.
-- Use individual seat-level nodes for long rectangular tables and wall cubicles.
+- Use a single table-level seat for each collaborative square table that seats four.
+- Use individual seats for long rectangular tables and wall cubicles.
 - Evaluate the completed system through functional testing and the System Usability Scale, with a target mean SUS score of at least 70.
 
 ## Current Product Roles
@@ -40,10 +40,10 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Cancel a pending reservation or check out an active reservation.
 - Start a five-minute break and extend it twice up to 15 minutes.
 - Review the break rules before starting, then track the live countdown, allocated-time segments, final-minute urgency, and extension availability.
-- Return from a break by scanning the mapped node's QR route. Production physical-QR token provisioning and printing remain pending.
+- Return from a break by scanning the mapped seat's QR route. Production physical-QR token provisioning and printing remain pending.
 - Receive a 30-minute break cooldown only after consuming the full 15-minute allowance; shorter breaks must not trigger it.
 - See the remaining cooldown as a live countdown before another break becomes available.
-- Receive an immediate warning when another student reports their occupied node as a possible ghost seat. The report can be cleared only through physical-node QR re-verification; there is no in-app confirmation shortcut.
+- Receive an immediate warning when another student reports their occupied seat as a possible ghost seat. The report can be cleared only through physical-seat QR re-verification; there is no in-app confirmation shortcut.
 - Receive real-time reservation, break-expiry, and flagging updates.
 - First-login acceptance of the library terms of use is required by the paper and remains pending.
 
@@ -65,42 +65,42 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Switch dashboard analytics between Gisbert Library and Miguel Pro Learning Commons and review active ghost-seat reports with the exact seat label, building, floor, and reservation holder.
 - Confirm a reported reservation as a ghost seat after verification; confirmation voids the reservation, releases the seat, and removes the active report.
 - Access role-protected admin routes.
-- Target capabilities from the paper include disabling seat nodes for maintenance or reclassification and overriding an automated release only for a verified exceptional case; these remain pending unless confirmed in code.
+- Target capabilities from the paper include disabling seats for maintenance or reclassification and overriding an automated release only for a verified exceptional case; these remain pending unless confirmed in code.
 
 ## Floor Maps And Seats
 
 - Gisbert floor 1: 184 mapped seats.
 - Gisbert floor 2: 130 mapped seats.
-- Gisbert floor 3: 145 reservable nodes. The three chairs inside the lower-left curved front desk are shown as fixtures, not study seats.
-- Gisbert floor 4: 128 reservable nodes. The chair at the curved front desk is shown as a fixture, not a study seat.
-- Total Gisbert capacity: 587 reservable nodes.
-- Miguel Pro uses area tabs instead of floors: Main Area, Research Nook, and Workspace Room. Together they contain 230 frontend preview reservation nodes mapped from the supplied reference. Every visible Miguel Pro chair is an individual clickable node, including the four chairs around each square table, per the current requested UI behavior. Research Nook furniture appears only on its own tab and is excluded from the Main Area.
+- Gisbert floor 3: 145 reservable seats. The three chairs inside the lower-left curved front desk are shown as fixtures, not study seats.
+- Gisbert floor 4: 128 reservable seats. The chair at the curved front desk is shown as a fixture, not a study seat.
+- Total Gisbert capacity: 587 reservable seats.
+- Miguel Pro uses area tabs instead of floors: Main Area, Research Nook, and Workspace Room. Together they contain 230 frontend preview seats mapped from the supplied reference. Every visible Miguel Pro chair is an individual clickable seat, including the four chairs around each square table, per the current requested UI behavior. Research Nook furniture appears only on its own tab and is excluded from the Main Area.
 - The Main Area includes Collab Hubs 1-7 as interactive rooms. Selecting a hub opens a booking-information modal that links to the official AdDU Library Collab Hub reservation page.
 - Seat states: available, pending, occupied, on break, and disabled.
-- Stable node labels identify the building, floor, and node type, such as `G1-S001`, `G1-T001`, and `G1-C001`.
+- Stable seat labels identify the building, floor, and seat type, such as `G1-S001`, `G1-T001`, and `G1-C001`.
 - Floor-specific Socket.IO namespaces publish `seat_status_update` events.
 - Frontend preview coordinates mirror the database seed coordinates.
-- The backend seed mirrors all 817 reservable nodes: 587 Gisbert nodes and 230 Miguel Pro nodes. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Retired front desk chair tokens `G3-C020` through `G3-C022` and `G4-C030` are rejected by the API, and their prior database rows are made unavailable by migrations.
+- The backend seed mirrors all 817 reservable seats: 587 Gisbert seats and 230 Miguel Pro seats. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Retired front desk chair tokens `G3-C020` through `G3-C022` and `G4-C030` are rejected by the API, and their prior database rows are made unavailable by migrations.
 - Before future coordinate changes, preserve the paper's table-level versus seat-level QR assignment rules and its exclusion of informal seating.
 
 ## Reservation Integrity Rules
 
 - Reservation creation is bound to the authenticated JWT user.
-- Clicking a node on the public map never creates a reservation and never reveals its physical QR token.
+- Clicking a seat on the public map never creates a reservation and never reveals its physical QR token.
 - A reservation can be created only by submitting the token obtained from the physical seat or table QR through the scan-first reservation page.
 - Live seat claims use an atomic status update and reject a second in-progress reservation for the same student.
 - A selected seat changes from available to pending during the entry window.
 - Pending-entry reservations expire automatically after five minutes.
 - Front-desk approval changes the reservation to active and the seat to occupied.
 - Front-desk rejection releases the seat.
-- Physical-node QR values are matched against `Seat.currentQrToken`. Development tokens are deterministic so the supplied maps and seed stay synchronized; secure production token generation and printing remain pending.
+- Physical-seat QR values are matched against `Seat.currentQrToken`. Development tokens are deterministic so the supplied maps and seed stay synchronized; secure production token generation and printing remain pending.
 - Breaks begin at five minutes and can be extended by five minutes twice.
 - Returning from a break requires the designated physical QR token; production QR provisioning and printing remain pending.
 - Missing the break deadline before that scan forfeits the reservation and releases the seat.
 - The 30-minute cooldown applies only after a student consumes the full 15-minute break and returns on time. A shorter break does not trigger cooldown.
 - An occupied seat can be flagged as apparently vacant.
 - The reservation holder and administrators receive immediate flag notifications. Active reports persist on the admin dashboard across page reloads and identify the canonical seat label and floor. The backend provides a 10-minute physical-QR re-verification window before automatic eviction, and an administrator can confirm a ghost seat sooner to void the reservation and release the seat.
-- A transfer requires checkout from the old node, a new reservation, and front-desk verification within five minutes. A transfer does not trigger break cooldown.
+- A transfer requires checkout from the old seat, a new reservation, and front-desk verification within five minutes. A transfer does not trigger break cooldown.
 
 ## Analytics And Forecasting Targets
 
@@ -137,6 +137,6 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Break return must ultimately require the physical QR scan specified by the final paper.
 - Cooldown must not be applied after a break shorter than 15 minutes.
 - Changes to seat coordinates must update both seed and frontend preview data.
-- Mapping changes must preserve formal-seat exclusions and the correct table-level or seat-level node type.
+- Mapping changes must preserve formal-seat exclusions and the correct table-level or individual-seat assignment.
 - New analytics must come from occupancy logs rather than fabricated production values.
 - Research-target features must not be described as implemented until the corresponding code and tests exist.

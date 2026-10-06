@@ -590,6 +590,16 @@ export default function SeatMap() {
   };
 
   const handleFlagSeat = async (seatId) => {
+    if (activeReservation?.seat?.seatId === seatId) {
+      setFlagSeatId(null);
+      setNotice({
+        tone: 'warning',
+        title: 'This is your reserved seat',
+        description: 'You cannot report your own reservation as a ghost seat.',
+      });
+      return;
+    }
+
     setFlagging(true);
     try {
       await apiClient(`/api/seats/${seatId}/flag`, { method: 'POST' });
@@ -625,6 +635,9 @@ export default function SeatMap() {
     : 0;
   const buildingCode = building === 'miguel_pro' ? 'M' : 'G';
   const selectedSeatLabel = selectedSeat?.label || `${buildingCode}${floor}-S${String(selectedSeatNumber).padStart(3, '0')}`;
+  const selectedSeatIsOwnReservation = Boolean(
+    selectedSeat?.seatId && activeReservation?.seat?.seatId === selectedSeat.seatId,
+  );
   const availableCount = sortedSeats.filter((seat) => seat.status === 'available').length;
   const pendingCount = sortedSeats.filter((seat) => ['pending', 'pending_entry'].includes(seat.status)).length;
   const occupiedCount = sortedSeats.filter((seat) => seat.status === 'occupied').length;
@@ -840,10 +853,16 @@ export default function SeatMap() {
               ) : (
                 <>
                   <p className="text-sm font-semibold capitalize text-slate-950">Currently {selectedSeat.status.replace('_', ' ')}</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{user?.role === 'student' && selectedSeat.status === 'occupied' ? 'If this seat appears vacant in person, report it so the reservation holder can respond.' : 'This seat cannot be selected right now.'}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {selectedSeatIsOwnReservation
+                      ? 'This is your active reservation. You cannot report your own seat.'
+                      : user?.role === 'student' && selectedSeat.status === 'occupied'
+                        ? 'If this seat appears vacant in person, report it so the reservation holder can respond.'
+                        : 'This seat cannot be selected right now.'}
+                  </p>
                   <div className="mt-6 flex justify-end gap-2">
                     <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary">Close</button>
-                    {user?.role === 'student' && selectedSeat.status === 'occupied' && <button type="button" onClick={() => setFlagSeatId(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}
+                    {user?.role === 'student' && selectedSeat.status === 'occupied' && !selectedSeatIsOwnReservation && <button type="button" onClick={() => setFlagSeatId(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}
                   </div>
                 </>
               )}

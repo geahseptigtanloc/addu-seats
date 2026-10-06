@@ -27,6 +27,7 @@ function AppRoutes() {
       <Route path="/scan" element={<QrReservation />} />
       {/* Keep previously shared development links working; printed QRs use /scan. */}
       <Route path="/reserve" element={<QrReservation />} />
+      <Route path="/reverify" element={<SeatReturn />} />
 
       <Route
         path="/receipt"

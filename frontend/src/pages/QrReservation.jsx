@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Clock, MapPin, QrCode, WarningCircle } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
@@ -28,9 +28,33 @@ export default function QrReservation() {
   const [failure, setFailure] = useState(null);
 
   const tokenSeatLabel = seatLabelFromQrToken(qrToken);
-  const scannedSeat = tokenSeatLabel
+  const [scannedSeat, setScannedSeat] = useState(() => tokenSeatLabel
     ? normalizeSeat(null, { label: tokenSeatLabel, status: 'available' })
-    : null;
+    : null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanFailure, setScanFailure] = useState(null);
+
+  useEffect(() => {
+    if (!qrToken || isFrontDeskChair || authLoading || !user || user.role !== 'student') return undefined;
+
+    const controller = new AbortController();
+    setScanLoading(true);
+    setScanFailure(null);
+    apiClient('/api/seats/scan', {
+      method: 'POST',
+      body: JSON.stringify({ qrToken }),
+      signal: controller.signal,
+    })
+      .then((response) => setScannedSeat(normalizeSeat(response?.seat)))
+      .catch((error) => {
+        if (error.name !== 'AbortError') setScanFailure(error.message || 'The scanned seat could not be verified.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setScanLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [authLoading, isFrontDeskChair, qrToken, user]);
 
   const handleSignIn = () => {
     storePendingReservationToken(qrToken);
@@ -142,16 +166,27 @@ export default function QrReservation() {
               </>
             ) : user.role !== 'student' ? (
               <Message icon={WarningCircle} title="Student account required" copy="Administrator accounts can inspect maps but cannot create student reservations." tone="danger" />
+            ) : scanLoading ? (
+              <div className="space-y-3" aria-label="Checking physical seat QR">
+                <div className="loading-skeleton h-24 rounded-[8px]" />
+                <div className="loading-skeleton h-12 rounded-[8px]" />
+              </div>
+            ) : scanFailure ? (
+              <Message icon={WarningCircle} title="Seat QR could not be confirmed" copy={scanFailure} tone="danger" />
             ) : (
               <>
-                <div className="grid gap-4 rounded-[8px] border border-emerald-200 bg-emerald-50 p-5 sm:grid-cols-2">
+                <div className="grid gap-4 rounded-[8px] border border-emerald-200 bg-emerald-50 p-5 sm:grid-cols-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase text-emerald-700">Reserved seat</p>
+                    <p className="text-xs font-semibold uppercase text-emerald-700">Scanned seat</p>
                     <p className="mt-1 text-lg font-semibold text-emerald-950">{scannedLabel}</p>
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase text-emerald-700">Location</p>
                     <p className="mt-1 flex items-center gap-2 text-sm font-semibold text-emerald-950"><MapPin size={17} weight="fill" />{locationLabel || 'Confirmed after reservation'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-emerald-700">Status</p>
+                    <p className="mt-1 text-sm font-semibold capitalize text-emerald-950">{scannedSeat?.status?.replace('_', ' ') || 'Unknown'}</p>
                   </div>
                 </div>
 
@@ -168,13 +203,16 @@ export default function QrReservation() {
 
                 <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <Link to={mapPath} className="ui-button-secondary">Cancel</Link>
-                  {(!failure || failure.retryable) && (
-                    <button type="button" onClick={handleReserve} disabled={reserving} className="ui-button-primary">
+                  {scannedSeat?.status === 'available' && (!failure || failure.retryable) && (
+                    <button type="button" onClick={handleReserve} disabled={reserving || scanLoading} className="ui-button-primary">
                       <CheckCircle size={18} weight="bold" />
                       {reserving ? 'Creating reservation...' : failure?.retryable ? 'Try reservation again' : `Reserve ${scannedLabel}`}
                     </button>
                   )}
                 </div>
+                {scannedSeat?.status && scannedSeat.status !== 'available' && (
+                  <p className="mt-4 text-sm font-semibold text-red-700">This seat is currently {scannedSeat.status.replace('_', ' ')} and cannot be reserved.</p>
+                )}
               </>
             )}
           </div>
