@@ -41,10 +41,10 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Cancel a pending reservation or check out an active reservation.
 - Start a five-minute break and extend it twice up to 15 minutes.
 - Review the break rules before starting, then track the live countdown, allocated-time segments, final-minute urgency, and extension availability.
-- Return from a break by scanning the mapped seat's QR route. Production physical-QR token provisioning and printing remain pending.
+- Return from a break by scanning the seat's shared verify QR. The same `/reverify` scan also clears an active ghost-seat report; the student app does not provide an “I'm back” button or call the legacy break-return endpoint. Production printing remains pending.
 - Receive a 30-minute break cooldown only after consuming the full 15-minute allowance; shorter breaks must not trigger it.
 - See the remaining cooldown as a live countdown before another break becomes available.
-- Receive an immediate warning when another student reports their occupied seat as a possible ghost seat. The report can be cleared only through physical-seat QR re-verification; there is no in-app confirmation shortcut.
+- Receive an immediate warning when another student reports their occupied seat as a possible ghost seat. The report can be cleared only through the same physical verify QR used for break return; there is no in-app confirmation shortcut.
 - Receive the warning as an immediate modal and persistent notification-bell item from any signed-in page.
 - Receive real-time reservation, break-expiry, and flagging updates.
 - First-login acceptance of the library terms of use is required by the paper and remains pending.
@@ -102,7 +102,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Front-desk rejection releases the seat.
 - Physical-seat QR values are matched against `Seat.currentQrToken`. Development tokens are deterministic so the supplied maps and seed stay synchronized; secure production token generation and printing remain pending.
 - Breaks begin at five minutes and can be extended by five minutes twice.
-- Returning from a break requires the designated physical QR token; production QR provisioning and printing remain pending.
+- Returning from a break and clearing an active ghost-seat report use one authenticated `POST /reservations/reverify` request with the verify QR's seat token. It returns `flag_cleared` or `break_ended`; production printing remains pending.
 - Missing the break deadline before that scan forfeits the reservation and releases the seat.
 - The 30-minute cooldown applies only after a student consumes the full 15-minute break and returns on time. A shorter break does not trigger cooldown.
 - An occupied seat can be flagged as apparently vacant.

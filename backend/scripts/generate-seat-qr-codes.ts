@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { readFileSync, mkdirSync } from 'fs';
+import { readFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import 'dotenv/config';
 
@@ -16,7 +16,6 @@ if (!CORS_ORIGIN) {
 }
 
 const SCAN_BASE_URL = `${CORS_ORIGIN}/scan`;
-const REVERIFY_BASE_URL = `${CORS_ORIGIN}/reverify`;
 
 const QR_OPTIONS = {
   width: 500,
@@ -29,31 +28,22 @@ async function main(): Promise<void> {
   const seatMap = JSON.parse(readFileSync(seatMapPath, 'utf-8')) as SeatMapEntry[];
 
   const outputDir = join(__dirname, '../qr-codes');
-  const reverifyOutputDir = join(outputDir, 'reverify');
+  rmSync(outputDir, { recursive: true, force: true });
   mkdirSync(outputDir, { recursive: true });
-  mkdirSync(reverifyOutputDir, { recursive: true });
 
   for (const seat of seatMap) {
     const reservationUrl = `${SCAN_BASE_URL}?token=${encodeURIComponent(seat.currentQrToken)}`;
-    const reverifyUrl = `${REVERIFY_BASE_URL}?token=${encodeURIComponent(seat.currentQrToken)}`;
     const safeName = seat.currentQrToken.replace(/[^a-zA-Z0-9-]/g, '_');
     const fileName = `${seat.building}-floor${seat.floor}-${safeName}.png`;
     const reservationPath = join(outputDir, fileName);
-    const reverifyPath = join(reverifyOutputDir, fileName);
 
     // High error correction (H, ~30%) since these get printed and stuck
     // on furniture, they'll pick up scratches, dirt, and glare over time.
-    await Promise.all([
-      QRCode.toFile(reservationPath, reservationUrl, QR_OPTIONS),
-      QRCode.toFile(reverifyPath, reverifyUrl, QR_OPTIONS),
-    ]);
+    await QRCode.toFile(reservationPath, reservationUrl, QR_OPTIONS);
     console.log(`Generated reservation QR: ${reservationPath}`);
-    console.log(`Generated verification QR: ${reverifyPath}`);
   }
 
-  console.log(
-    `\nDone — ${seatMap.length} reservation and ${seatMap.length} verification QR codes written to ${outputDir}`,
-  );
+  console.log(`\nDone — ${seatMap.length} reservation QR codes written to ${outputDir}`);
 }
 
 main().catch((err) => {

@@ -67,7 +67,7 @@ function studentNotification(flag, seat, reservationId, unread) {
     id: flag.flagId || reservationId,
     reservationId,
     title: 'Your seat was reported vacant',
-    message: `${seatLabel} needs physical QR verification before the report expires.`,
+    message: `${seatLabel} needs a verify QR scan before the report expires.`,
     seatLabel,
     createdAt: flag.flaggedAt || new Date().toISOString(),
     href: '/receipt',
@@ -247,7 +247,7 @@ export function NotificationProvider({ children }) {
         open={Boolean(holderAlert)}
         tone="danger"
         title="Your seat was reported vacant"
-        description={holderAlert ? `${holderAlert.seatLabel || 'Your reserved seat'} was flagged. Return to the seat and scan its physical QR before the verification window expires.` : ''}
+        description={holderAlert ? `${holderAlert.seatLabel || 'Your reserved seat'} was flagged. Return to the seat and scan its verify QR before the verification window expires.` : ''}
         confirmLabel="Open reservation"
         cancelLabel="Dismiss for now"
         onConfirm={() => {

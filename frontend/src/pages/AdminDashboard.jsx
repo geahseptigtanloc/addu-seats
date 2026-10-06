@@ -408,7 +408,7 @@ export default function AdminDashboard() {
               )}
             </div>
           ) : ghostReportsError ? null : (
-            <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-sm leading-6 text-slate-600">New reports appear here immediately. The reservation holder is notified and must scan the designated physical QR to retain the reservation.</div>
+            <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-sm leading-6 text-slate-600">New reports appear here immediately. The reservation holder is notified and must scan the seat's verify QR to retain the reservation.</div>
           )}
         </div>
       </section>
@@ -857,12 +857,12 @@ function formatSeatReference(seatId) {
 function formatFlagDeadline(expiresAt) {
   const expiry = new Date(expiresAt);
   if (Number.isNaN(expiry.getTime())) {
-    return 'The holder must re-verify at the physical QR before the response window ends.';
+    return 'The holder must scan the seat verify QR before the response window ends.';
   }
   if (expiry.getTime() <= Date.now()) {
     return 'The re-verification window has elapsed and automatic release is pending.';
   }
-  return `The holder must re-verify at the physical QR by ${expiry.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
+  return `The holder must scan the seat verify QR by ${expiry.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
 }
 
 function formatDateTime(value) {

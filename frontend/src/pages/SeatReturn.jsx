@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CheckCircle, QrCode, WarningCircle } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
 import { apiClient, getGoogleAuthUrl } from '../api/client.js';
@@ -10,6 +10,7 @@ import { storePendingReverifyToken } from '../utils/pendingReservation.js';
 
 export default function SeatReturn() {
   const { seatId } = useParams();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const qrToken = searchParams.get('token');
   const { user, loading: authLoading } = useAuth();
@@ -39,31 +40,44 @@ export default function SeatReturn() {
           throw new Error('This QR belongs to a different reserved seat.');
         }
 
-        if (seatId && current.status === 'on_break') {
-          await apiClient('/api/reservations/break/return', {
-            method: 'POST',
-            body: JSON.stringify({ qrToken }),
-          });
-        } else {
-          await apiClient('/api/reservations/reverify', {
-            method: 'POST',
-            body: JSON.stringify({ qrToken }),
-          });
+        const verification = await apiClient('/api/reservations/reverify', {
+          method: 'POST',
+          body: JSON.stringify({ qrToken }),
+        });
+        if (!['flag_cleared', 'break_ended'].includes(verification?.outcome)) {
+          throw new Error('The verification response was not recognized.');
+        }
+
+        let refreshedReservation = current;
+        try {
+          refreshedReservation = normalizeReservation(
+            await apiClient('/api/reservations/me/current'),
+            { user },
+          );
+        } catch {
+          // The verification already succeeded. The receipt page will retry its own refresh.
         }
 
         setResult({
           state: 'success',
-          message: seatId && current.status === 'on_break'
-            ? 'Return confirmed. Your study session is active again.'
-            : 'Presence confirmed. The ghost-seat report has been cleared.',
+          outcome: verification.outcome,
+          message: verification.outcome === 'break_ended'
+            ? 'Your break has ended and your study session is active again.'
+            : 'Your presence is confirmed and the ghost-seat report has been cleared.',
           seatLabel: current.seat?.label,
         });
         clearReservationNotification(current.reservationId);
+        window.setTimeout(() => {
+          navigate('/receipt', {
+            replace: true,
+            state: { reservation: refreshedReservation },
+          });
+        }, 1600);
       } catch (error) {
-        setResult({ state: 'error', message: error.message });
+        setResult({ state: 'error', message: verificationErrorMessage(error) });
       }
     })();
-  }, [authLoading, clearReservationNotification, seatId, qrToken, user]);
+  }, [authLoading, clearReservationNotification, navigate, seatId, qrToken, user]);
 
   function handleSignIn() {
     storePendingReverifyToken(qrToken);
@@ -87,9 +101,11 @@ export default function SeatReturn() {
           </div>
 
           <div className="p-6 text-center sm:p-8">
-            <p className="ui-kicker justify-center">Physical seat QR</p>
+            <p className="ui-kicker justify-center">Seat verify QR</p>
             <h1 className="mt-2 text-2xl font-bold text-gray-950">
-              {result.state === 'success' ? 'You are checked back in' : requiresSignIn ? 'Sign in to confirm your presence' : result.state === 'checking' ? 'Checking your return' : 'Return not confirmed'}
+              {result.state === 'success'
+                ? result.outcome === 'break_ended' ? 'Welcome back' : "You're verified"
+                : requiresSignIn ? 'Sign in to confirm your presence' : result.state === 'checking' ? 'Checking your verification' : 'Verification not completed'}
             </h1>
             <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-gray-600">
               {requiresSignIn ? 'Use the reservation holder account. This QR token will be kept through sign-in.' : result.message}
@@ -123,7 +139,7 @@ export default function SeatReturn() {
 
             {user && (
               <Link to="/receipt" className="ui-button-primary mt-7">
-                Return to reservation
+                {result.state === 'success' ? 'Opening reservation...' : 'Return to reservation'}
                 <ArrowRight size={17} weight="bold" />
               </Link>
             )}
@@ -132,4 +148,20 @@ export default function SeatReturn() {
       </section>
     </Layout>
   );
+}
+
+function verificationErrorMessage(error) {
+  if (error?.status === 404) {
+    return 'No matching reservation found for this seat.';
+  }
+  if (error?.status === 409 && error.message?.includes('verification window has expired')) {
+    return 'The verification window has expired. Please speak with the front desk.';
+  }
+  if (error?.status === 409) {
+    return 'Nothing to verify right now.';
+  }
+  if (error?.status === 400) {
+    return 'This verification QR is missing its seat token. Please scan it again.';
+  }
+  return error?.message || 'Verification could not be completed. Please try again.';
 }

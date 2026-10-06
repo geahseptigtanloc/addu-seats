@@ -13,6 +13,8 @@
     "format:check": "prettier --check .",
     "seed": "prisma db seed",
     "sync:seats": "node scripts/sync-seat-map.mjs",
+    "generate:reservation-qrs": "ts-node --transpile-only scripts/generate-seat-qr-codes.ts",
+    "generate:verify-qrs": "ts-node --transpile-only scripts/generate-verify-qr-codes.ts",
     "typecheck": "tsc --noEmit"
   },
   "prisma": {

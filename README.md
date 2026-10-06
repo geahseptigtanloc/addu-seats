@@ -134,14 +134,15 @@ npm run sync:seats
 npm run seed
 ```
 
-Generate reservation and presence-verification QR images after changing the seat map:
+Generate the two QR sets after changing the seat map:
 
 ```bash
 cd backend
-npx ts-node --transpile-only scripts/generate-seat-qr-codes.ts
+npm run generate:reservation-qrs
+npm run generate:verify-qrs
 ```
 
-Reservation codes are written to `backend/qr-codes/`; verification codes are written to its `reverify/` subfolder.
+Reservation codes are written to `backend/qr-codes/`. The one shared presence-verification code per seat is written to `backend/qr-verify-codes/`; it handles both a flagged-seat presence check and a break return. Both QR types contain the same seat token on different frontend paths.
 
 ## Main API Endpoints
 
@@ -163,8 +164,9 @@ Reservation codes are written to `backend/qr-codes/`; verification codes are wri
 | POST | `/api/reservations/:id/void` | Admin-only forced release of a pending or confirmed reservation |
 | POST | `/api/reservations/:id/break/start` | Start the five-minute break timer |
 | POST | `/api/reservations/:id/break/extend` | Extend a break up to 15 minutes |
-| POST | `/api/reservations/break/return` | Return by scanning the physical QR |
-| POST | `/api/reservations/reverify` | Clear a ghost-seat report by physical QR scan |
+| POST | `/api/reservations/reverify` | Verify physical presence with `{ "qrToken": string }`; returns `200 { "outcome": "flag_cleared" }` or `200 { "outcome": "break_ended" }` |
+
+`POST /api/reservations/reverify` is the frontend's single verification endpoint. Only the reservation holder can use the seat's verify QR. A `404` means the seat or matching holder reservation was not found. A `409` means the flag window expired, the break just ended, or there is nothing to verify. The user-facing empty-state message is **“Nothing to verify right now.”** The older `/api/reservations/break/return` route remains available for compatibility, but the frontend does not call it.
 
 ## Verification Checklist
 

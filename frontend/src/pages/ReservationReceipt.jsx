@@ -210,11 +210,11 @@ export default function ReservationReceipt() {
             <h2 className="font-semibold text-red-900">Your seat was reported vacant</h2>
             <p className="mt-1 text-sm text-red-800">{activeFlag.message || 'Another student reported this seat as physically vacant.'}</p>
             <div className="mt-3 flex items-end justify-between gap-4 rounded-[8px] border border-red-200 bg-white/70 px-4 py-3">
-              <p className="text-sm font-semibold text-red-900">Scan this seat's physical QR before the report expires.</p>
+              <p className="text-sm font-semibold text-red-900">Scan this seat's verify QR before the report expires.</p>
               <p className="shrink-0 font-mono text-2xl font-bold text-red-950" aria-label={`${flagSeconds} seconds remaining`}>{formatTime(flagSeconds)}</p>
             </div>
             <p className="mt-3 rounded-[8px] border border-red-200 bg-white/70 px-4 py-3 text-sm font-semibold text-red-900">
-              Return to your assigned seat and scan its physical QR. An in-app confirmation cannot clear this report.
+              Return to your assigned seat and scan its verify QR. An in-app confirmation cannot clear this report.
             </p>
           </div>
         )}
@@ -300,7 +300,7 @@ export default function ReservationReceipt() {
                       Start a five-minute break
                     </button>
                     {activeFlag && (
-                      <p className="mt-3 text-sm font-semibold text-red-700">Breaks are unavailable while this seat report is active. Scan the physical QR to confirm your presence.</p>
+                      <p className="mt-3 text-sm font-semibold text-red-700">Breaks are unavailable while this seat report is active. Scan the verify QR to confirm your presence.</p>
                     )}
                   </div>
                 )}
@@ -323,7 +323,7 @@ export default function ReservationReceipt() {
                         {breakIsUrgent ? <Warning size={20} weight="fill" className="text-red-200" /> : <Coffee size={20} weight="fill" />}
                         {breakIsUrgent ? 'Return now' : 'Break protected'}
                       </div>
-                      <p className="mt-2 max-w-md text-sm leading-relaxed text-blue-100">Your belongings may remain at {seatLabel}. Scan its QR before time expires to keep the reservation.</p>
+                      <p className="mt-2 max-w-md text-sm leading-relaxed text-blue-100">Your belongings may remain at {seatLabel}. Scan the verify QR at your seat to end your break.</p>
                     </div>
                     <div
                       className="grid h-28 w-28 shrink-0 place-items-center self-center rounded-full p-2 sm:self-auto"
@@ -363,6 +363,9 @@ export default function ReservationReceipt() {
                   {allocatedBreakMinutes >= 15 && (
                     <p className="mt-4 text-sm leading-relaxed text-amber-800">Maximum time reached. Returning on time starts a 30-minute break cooldown.</p>
                   )}
+                  <p className="mt-4 rounded-[8px] border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold leading-6 text-blue-950">
+                    Scan the verify QR at your seat to end your break. This scan prompt stays available if the countdown reaches zero while the server finishes checking the break.
+                  </p>
                 </div>
               </section>
             )}
@@ -465,8 +468,8 @@ function BreakStartDialog({ seatLabel, busy, onClose, onConfirm }) {
         <div className="p-5">
           <div className="space-y-4 text-sm text-gray-700">
             <Rule icon={Timer} title="Starts with five minutes" copy="Add five minutes twice if needed. The maximum is 15 minutes." />
-            <Rule icon={QrCode} title="Return at your seat" copy={`Scan the QR attached to ${seatLabel}. A remote return is not accepted.`} />
-            <Rule icon={Warning} title="Timer expiry releases the seat" copy="If time reaches zero before the scan, the reservation is forfeited." />
+            <Rule icon={QrCode} title="Return at your seat" copy={`Scan the verify QR attached to ${seatLabel}. There is no in-app return button.`} />
+            <Rule icon={Warning} title="Timer expiry releases the seat" copy="Keep the scan prompt available at zero. The verify scan can still succeed until the server confirms expiry." />
           </div>
 
           <div className="mt-6 flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
