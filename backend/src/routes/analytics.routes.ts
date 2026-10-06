@@ -7,6 +7,12 @@ const router = Router();
 
 router.get('/utilization', requireAuth, requireRole('ADMIN'), analyticsController.getUtilization);
 router.get('/peak-hours', requireAuth, requireRole('ADMIN'), analyticsController.getPeakHours);
+router.get(
+  '/forecast',
+  requireAuth,
+  requireRole('ADMIN'),
+  analyticsController.getOccupancyForecast,
+);
 router.get('/outcomes', requireAuth, requireRole('ADMIN'), analyticsController.getOutcomeBreakdown);
 router.get('/no-show-rate', requireAuth, requireRole('ADMIN'), analyticsController.getNoShowRate);
 router.get(

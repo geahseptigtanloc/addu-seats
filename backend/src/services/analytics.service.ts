@@ -77,6 +77,27 @@ export interface PeakHoursReport {
   hours: HourlyUtilization[];
 }
 
+export interface OccupancyForecastHour {
+  hour: number;
+  predictedUtilizationPercent: number;
+  sampleCount: number;
+}
+
+export interface OccupancyForecastDay {
+  date: string;
+  hours: OccupancyForecastHour[];
+}
+
+export interface OccupancyForecastReport {
+  from: Date;
+  to: Date;
+  generatedAt: Date;
+  seatCount: number;
+  hasObservedData: boolean;
+  method: 'HISTORICAL_WEEKDAY_HOURLY_BASELINE';
+  days: OccupancyForecastDay[];
+}
+
 // Same underlying occupied intervals as getUtilization, but split by
 // hour-of-day and summed across every day in the range, instead of
 // collapsed into one aggregate. Hour-of-day is UTC so the project has no
@@ -107,6 +128,86 @@ export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHou
   });
 
   return { from, to, seatCount: seats.length, hours };
+}
+
+// Produces an immediately available seven-day baseline from the selected
+// history window. A matching weekday/hour is preferred; when the selected
+// range has no matching weekday, all observations for that hour are used.
+// This is intentionally distinct from the future SARIMA/XGBoost research
+// models and becomes more representative as real occupancy history grows.
+export async function getOccupancyForecast(
+  filters: UtilizationFilters,
+): Promise<OccupancyForecastReport> {
+  const { from, to, seats, eventsBySeat } = await loadOccupancyData(filters);
+  const occupiedMsByBucket = new Map<string, number>();
+  const possibleMsByBucket = new Map<string, number>();
+
+  for (const seat of seats) {
+    const intervals = extractOccupiedIntervals(eventsBySeat.get(seat.id) ?? [], from, to);
+    for (const interval of intervals) {
+      accumulateDatedHourlyMs(interval.start, interval.end, occupiedMsByBucket);
+    }
+    accumulateDatedHourlyMs(from, to, possibleMsByBucket);
+  }
+
+  const samplesByWeekdayHour = new Map<string, number[]>();
+  const samplesByHour = new Map<number, number[]>();
+  let totalOccupiedMs = 0;
+
+  for (const [bucket, possibleMs] of possibleMsByBucket) {
+    if (possibleMs <= 0) continue;
+    const [date, hourText] = bucket.split('|');
+    const hour = Number(hourText);
+    const utilizationPercent = ((occupiedMsByBucket.get(bucket) ?? 0) / possibleMs) * 100;
+    const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
+    const weekdayHourKey = `${weekday}|${hour}`;
+
+    const weekdaySamples = samplesByWeekdayHour.get(weekdayHourKey) ?? [];
+    weekdaySamples.push(utilizationPercent);
+    samplesByWeekdayHour.set(weekdayHourKey, weekdaySamples);
+
+    const hourlySamples = samplesByHour.get(hour) ?? [];
+    hourlySamples.push(utilizationPercent);
+    samplesByHour.set(hour, hourlySamples);
+    totalOccupiedMs += occupiedMsByBucket.get(bucket) ?? 0;
+  }
+
+  const firstForecastDate = new Date(
+    Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate() + 1),
+  );
+  const days: OccupancyForecastDay[] = Array.from({ length: 7 }, (_, dayOffset) => {
+    const date = new Date(firstForecastDate);
+    date.setUTCDate(firstForecastDate.getUTCDate() + dayOffset);
+    const dateKey = date.toISOString().slice(0, 10);
+    const weekday = date.getUTCDay();
+
+    return {
+      date: dateKey,
+      hours: Array.from({ length: 24 }, (_, hour) => {
+        const weekdaySamples = samplesByWeekdayHour.get(`${weekday}|${hour}`) ?? [];
+        const samples = weekdaySamples.length ? weekdaySamples : (samplesByHour.get(hour) ?? []);
+        const predictedUtilizationPercent = samples.length
+          ? samples.reduce((sum, value) => sum + value, 0) / samples.length
+          : 0;
+
+        return {
+          hour,
+          predictedUtilizationPercent: roundToOneDecimal(predictedUtilizationPercent),
+          sampleCount: samples.length,
+        };
+      }),
+    };
+  });
+
+  return {
+    from,
+    to,
+    generatedAt: new Date(),
+    seatCount: seats.length,
+    hasObservedData: totalOccupiedMs > 0,
+    method: 'HISTORICAL_WEEKDAY_HOURLY_BASELINE',
+    days,
+  };
 }
 
 function roundToOneDecimal(value: number): number {
@@ -221,6 +322,27 @@ function accumulateHourlyMs(start: Date, end: Date, bucketsMs: number[]): void {
     );
     const chunkEndMs = Math.min(nextHourMs, endMs);
     bucketsMs[hour] = (bucketsMs[hour] ?? 0) + (chunkEndMs - cursorMs);
+    cursorMs = chunkEndMs;
+  }
+}
+
+function accumulateDatedHourlyMs(start: Date, end: Date, bucketsMs: Map<string, number>): void {
+  let cursorMs = start.getTime();
+  const endMs = end.getTime();
+
+  while (cursorMs < endMs) {
+    const cursor = new Date(cursorMs);
+    const hour = cursor.getUTCHours();
+    const date = cursor.toISOString().slice(0, 10);
+    const bucket = `${date}|${hour}`;
+    const nextHourMs = Date.UTC(
+      cursor.getUTCFullYear(),
+      cursor.getUTCMonth(),
+      cursor.getUTCDate(),
+      hour + 1,
+    );
+    const chunkEndMs = Math.min(nextHourMs, endMs);
+    bucketsMs.set(bucket, (bucketsMs.get(bucket) ?? 0) + (chunkEndMs - cursorMs));
     cursorMs = chunkEndMs;
   }
 }

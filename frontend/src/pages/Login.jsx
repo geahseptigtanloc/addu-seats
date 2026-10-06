@@ -1,17 +1,29 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Buildings, MapTrifold } from '@phosphor-icons/react';
 import { apiClient, getGoogleAuthUrl } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import {
+  clearPendingReverifyToken,
   clearPendingReservationToken,
+  storePendingReverifyToken,
   storePendingReservationToken,
+  takePendingReverifyToken,
   takePendingReservationToken,
 } from '../utils/pendingReservation.js';
 
 function getTokenFromLegacyReturnTo(value) {
   if (typeof value !== 'string') return null;
   if (!value.startsWith('/scan?token=') && !value.startsWith('/reserve?token=')) return null;
+  try {
+    return new URL(value, window.location.origin).searchParams.get('token');
+  } catch {
+    return null;
+  }
+}
+
+function getReverifyTokenFromReturnTo(value) {
+  if (typeof value !== 'string' || !value.startsWith('/reverify?')) return null;
   try {
     return new URL(value, window.location.origin).searchParams.get('token');
   } catch {
@@ -27,13 +39,16 @@ export default function Login() {
 
   useEffect(() => {
     const legacyToken = getTokenFromLegacyReturnTo(searchParams.get('returnTo'));
+    const reverifyToken = getReverifyTokenFromReturnTo(searchParams.get('returnTo'));
     if (legacyToken) storePendingReservationToken(legacyToken);
+    if (reverifyToken) storePendingReverifyToken(reverifyToken);
 
     const token = searchParams.get('token');
     const code = searchParams.get('code');
     const error = searchParams.get('error');
-    if (!legacyToken && !token && !code && !error) {
+    if (!legacyToken && !reverifyToken && !token && !code && !error) {
       clearPendingReservationToken();
+      clearPendingReverifyToken();
     }
     if (error) return;
     const authResponseKey = token ? `token:${token}` : code ? `code:${code}` : null;
@@ -52,10 +67,13 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && user) {
+      const pendingReverifyToken = takePendingReverifyToken();
       const pendingReservationToken = takePendingReservationToken();
-      const destination = pendingReservationToken
-        ? `/scan?token=${encodeURIComponent(pendingReservationToken)}`
-        : user.role === 'admin' ? '/admin' : '/';
+      const destination = pendingReverifyToken
+        ? `/reverify?token=${encodeURIComponent(pendingReverifyToken)}`
+        : pendingReservationToken
+          ? `/scan?token=${encodeURIComponent(pendingReservationToken)}`
+          : user.role === 'admin' ? '/admin' : '/';
       navigate(destination, { replace: true });
     }
   }, [user, loading, navigate]);
@@ -97,6 +115,12 @@ export default function Login() {
               Continue with Google
             </button>
             <p className="mt-4 text-center text-xs leading-5 text-slate-500">Local testing accepts any Google account. Production access remains restricted to authorized university accounts.</p>
+            <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+              Review our{' '}
+              <Link to="/terms" className="font-semibold text-[#063a64] underline decoration-slate-300 underline-offset-2 hover:decoration-[#063a64]">Terms of Service</Link>
+              {' '}and{' '}
+              <Link to="/privacy" className="font-semibold text-[#063a64] underline decoration-slate-300 underline-offset-2 hover:decoration-[#063a64]">Privacy Policy</Link>.
+            </p>
           </div>
         </div>
       </section>

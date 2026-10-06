@@ -59,6 +59,9 @@ Copy from `backend/.env.example` and fill in:
 | `SESSION_SECRET` | Random string used for the temporary OAuth redirect session |
 | `PORT` | Backend port (default: 3001) |
 | `CORS_ORIGIN` | Frontend origin for CORS and OAuth redirect (default: `http://localhost:5173`) |
+| `ALLOW_ANY_GOOGLE_EMAIL` | Local-only login override; keep `false` in production |
+| `SCHOOL_EMAIL_DOMAIN` | School email domain allowed to sign in |
+| `STAFF_EMAILS` | Comma-separated email addresses that receive the admin role |
 
 ### Frontend (`frontend/.env`)
 
@@ -131,6 +134,15 @@ npm run sync:seats
 npm run seed
 ```
 
+Generate reservation and presence-verification QR images after changing the seat map:
+
+```bash
+cd backend
+npx ts-node --transpile-only scripts/generate-seat-qr-codes.ts
+```
+
+Reservation codes are written to `backend/qr-codes/`; verification codes are written to its `reverify/` subfolder.
+
 ## Main API Endpoints
 
 | Method | Path | Description |
@@ -141,12 +153,14 @@ npm run seed
 | POST | `/api/auth/exchange` | Exchange the one-time OAuth code for a JWT |
 | GET | `/api/auth/me` | Current user profile (requires Bearer token) |
 | GET | `/api/seats` | Public live seat list, optionally filtered by building and floor |
-| POST | `/api/seats/scan` | Validate a physical-node QR token and return safe seat details |
+| POST | `/api/seats/scan` | Validate a physical-seat QR token and return safe seat details |
 | POST | `/api/seats/:id/flag` | Report an apparently vacant occupied seat |
-| POST | `/api/reservations` | Create a reservation from a physical-node QR token |
+| GET | `/api/seats/:id/active-reservation` | Admin-only active reservation details for a mapped seat |
+| POST | `/api/reservations` | Create a reservation from a physical-seat QR token |
 | GET | `/api/reservations/me/current` | Current authenticated student's reservation |
 | GET | `/api/reservations/pending` | Admin front-desk queue |
 | POST | `/api/reservations/:id/approve` | Approve pending entry |
+| POST | `/api/reservations/:id/void` | Admin-only forced release of a pending or confirmed reservation |
 | POST | `/api/reservations/:id/break/start` | Start the five-minute break timer |
 | POST | `/api/reservations/:id/break/extend` | Extend a break up to 15 minutes |
 | POST | `/api/reservations/break/return` | Return by scanning the physical QR |
@@ -165,8 +179,8 @@ Run through this list to confirm Phase 1 works:
 - [ ] `cd frontend && npm run dev` starts on port 5173
 - [ ] `curl http://localhost:3001/api/health` returns `{ "status": "ok", "timestamp": "..." }`
 - [ ] Open `http://localhost:5173`, click **Sign in with Google**, complete login, and land on the Seat Map page with your name shown
-- [ ] Open a development physical-QR URL such as `http://localhost:5173/scan?token=seat%3Ag1-s001`, confirm the node, and create a reservation
-- [ ] Clicking an available node on the public map only instructs the student to scan its physical QR
+- [ ] Open a development physical-QR URL such as `http://localhost:5173/scan?token=seat%3Ag1-s001`, confirm the seat, and create a reservation
+- [ ] Clicking an available seat on the public map only instructs the student to scan its physical QR
 - [ ] Browser devtools → Application → Local Storage shows an `addu_seats_token` entry
 
 ## Phase Roadmap

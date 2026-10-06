@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Buildings, CalendarBlank, ChartBar, CheckCircle, Clock, Coffee, LockKey, MapTrifold, Monitor, TrendUp, WarningCircle } from '@phosphor-icons/react';
+import { ArrowRight, Buildings, ChartBar, CheckCircle, Clock, Coffee, MapTrifold, Monitor, TrendUp, WarningCircle } from '@phosphor-icons/react';
 import { io } from 'socket.io-client';
 import AppDialog from '../components/AppDialog.jsx';
 import Layout from '../components/Layout.jsx';
@@ -15,6 +15,8 @@ const DATE_RANGES = [
   { value: 30, label: 'Last 30 days' },
   { value: 90, label: 'Last 90 days' },
 ];
+
+const GHOST_REPORT_PAGE_SIZE = 5;
 
 const GISBERT_AREAS = [1, 2, 3, 4].map((floor) => ({
   id: String(floor),
@@ -41,6 +43,7 @@ const LIBRARIES = {
 const EMPTY_ANALYTICS = {
   utilization: { overallUtilizationPercent: 0, seats: [] },
   peakHours: { hours: [] },
+  forecast: { days: [], hasObservedData: false },
   outcomes: { totalCount: 0, outcomes: [] },
   noShowRate: { totalReservations: 0, cancelledCount: 0, noShowRatePercent: 0 },
   sessionLength: { sessionCount: 0, averageSessionMinutes: 0 },
@@ -62,6 +65,24 @@ const OUTCOME_STYLES = {
   EVICTED: { label: 'Evicted', color: 'bg-violet-600' },
 };
 
+const FLAG_STATUS_LABELS = {
+  ACTIVE: 'Active',
+  REVERIFIED: 'Presence confirmed',
+  EVICTED: 'Evicted',
+  VOIDED: 'Voided',
+  CHECKED_OUT: 'Checked out',
+};
+
+function normalizeGhostReport(report) {
+  return {
+    ...report,
+    flagId: report.flagId || report.reservationId,
+    status: String(report.status || 'ACTIVE').toUpperCase(),
+    reportedAt: report.reportedAt || report.flaggedAt || new Date().toISOString(),
+    windowSeconds: report.windowSeconds || 300,
+  };
+}
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [rangeDays, setRangeDays] = useState(30);
@@ -73,7 +94,9 @@ export default function AdminDashboard() {
   const [ghostReports, setGhostReports] = useState([]);
   const [ghostReportsLoading, setGhostReportsLoading] = useState(true);
   const [ghostReportsError, setGhostReportsError] = useState('');
+  const [visibleGhostReportCount, setVisibleGhostReportCount] = useState(GHOST_REPORT_PAGE_SIZE);
   const [selectedGhostReport, setSelectedGhostReport] = useState(null);
+  const [ghostResolutionAction, setGhostResolutionAction] = useState('confirm');
   const [voidingGhostReport, setVoidingGhostReport] = useState(false);
 
   const selectedLibrary = LIBRARIES[buildingFilter];
@@ -98,11 +121,14 @@ export default function AdminDashboard() {
       setLoadError('');
       try {
         const query = params.toString();
-        const [utilization, peakHours, outcomes, noShowRate, sessionLength, breakStats, locationComparison] = await Promise.all([
+        const [utilization, peakHours, forecast, outcomes, noShowRate, sessionLength, breakStats, locationComparison] = await Promise.all([
           apiClient(`/api/analytics/utilization?${query}`, {
             signal: controller.signal,
           }),
           apiClient(`/api/analytics/peak-hours?${query}`, {
+            signal: controller.signal,
+          }),
+          apiClient(`/api/analytics/forecast?${query}`, {
             signal: controller.signal,
           }),
           apiClient(`/api/analytics/outcomes?${query}`, {
@@ -124,6 +150,7 @@ export default function AdminDashboard() {
         setAnalytics({
           utilization,
           peakHours,
+          forecast,
           outcomes,
           noShowRate,
           sessionLength,
@@ -143,66 +170,79 @@ export default function AdminDashboard() {
     return () => controller.abort();
   }, [areaFilter, buildingFilter, rangeDays]);
 
+  const loadGhostReports = useCallback(async ({ signal, showLoading = false } = {}) => {
+    if (showLoading) setGhostReportsLoading(true);
+    setGhostReportsError('');
+    try {
+      const reports = await apiClient('/api/reservations/flagged?status=all', { signal });
+      setGhostReports(Array.isArray(reports) ? reports.map(normalizeGhostReport) : []);
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      setGhostReportsError('Ghost-seat reports could not be loaded.');
+    } finally {
+      if (!signal?.aborted) setGhostReportsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
+    loadGhostReports({ signal: controller.signal, showLoading: true });
+    const handleFocus = () => loadGhostReports();
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      controller.abort();
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadGhostReports]);
 
-    async function loadGhostReports() {
-      setGhostReportsLoading(true);
-      setGhostReportsError('');
-      try {
-        const reports = await apiClient('/api/reservations/flagged', {
-          signal: controller.signal,
-        });
-        setGhostReports(Array.isArray(reports) ? reports : []);
-      } catch (error) {
-        if (error.name === 'AbortError') return;
-        setGhostReportsError('Active ghost-seat reports could not be loaded.');
-      } finally {
-        if (!controller.signal.aborted) setGhostReportsLoading(false);
-      }
+  useEffect(() => {
+    if (ghostReports.length <= GHOST_REPORT_PAGE_SIZE) {
+      setVisibleGhostReportCount(GHOST_REPORT_PAGE_SIZE);
     }
-
-    loadGhostReports();
-    return () => controller.abort();
-  }, []);
+  }, [ghostReports.length]);
 
   useEffect(() => {
     const token = getToken();
     if (!token) return undefined;
 
     const socket = io(SOCKET_URL, { auth: { token } });
+    socket.on('connect', () => loadGhostReports());
     socket.on('seat_flagged_admin_notice', (report) => {
       setGhostReports((current) =>
         [
-          {
-            ...report,
-            reportedAt: report.reportedAt || new Date().toISOString(),
-            windowSeconds: report.windowSeconds || 600,
-          },
-          ...current.filter((item) => item.reservationId !== report.reservationId),
-        ].slice(0, 20),
+          normalizeGhostReport(report),
+          ...current.filter((item) => (item.flagId || item.reservationId) !== (report.flagId || report.reservationId)),
+        ],
       );
     });
-    socket.on('seat_flag_resolved_admin_notice', ({ reservationId }) => {
-      setGhostReports((current) => current.filter((item) => item.reservationId !== reservationId));
-      setSelectedGhostReport((current) =>
-        current?.reservationId === reservationId ? null : current,
-      );
+    socket.on('seat_flag_resolved_admin_notice', ({ flagId, reservationId, resolution, resolvedAt }) => {
+      const status = String(resolution || '').toUpperCase();
+      setGhostReports((current) => current.map((item) => (
+        (flagId && item.flagId === flagId) || item.reservationId === reservationId
+          ? { ...item, status, resolvedAt: resolvedAt || new Date().toISOString() }
+          : item
+      )));
+      setSelectedGhostReport(null);
     });
     return () => socket.disconnect();
-  }, []);
+  }, [loadGhostReports]);
 
-  async function handleConfirmGhostSeat() {
+  async function handleResolveGhostSeat() {
     if (!selectedGhostReport || voidingGhostReport) return;
 
     setVoidingGhostReport(true);
     setGhostReportsError('');
     try {
-      await apiClient(`/api/reservations/${selectedGhostReport.reservationId}/confirm-ghost`, {
+      const apiPath = ghostResolutionAction === 'void'
+        ? `/api/reservations/${selectedGhostReport.reservationId}/void`
+        : `/api/reservations/${selectedGhostReport.reservationId}/confirm-ghost`;
+      await apiClient(apiPath, {
         method: 'POST',
       });
       setGhostReports((current) =>
-        current.filter((item) => item.reservationId !== selectedGhostReport.reservationId),
+        current.map((item) => item.reservationId === selectedGhostReport.reservationId
+          ? { ...item, status: 'VOIDED', resolvedAt: new Date().toISOString() }
+          : item),
       );
       setSelectedGhostReport(null);
     } catch (error) {
@@ -220,18 +260,23 @@ export default function AdminDashboard() {
     return hours.reduce((peak, item) => (item.utilizationPercent > peak.utilizationPercent ? item : peak), { hour: 0, utilizationPercent: 0 });
   }, [analytics.peakHours]);
 
+  const activeGhostReportCount = ghostReports.filter((report) => report.status === 'ACTIVE').length;
+  const visibleGhostReports = ghostReports.slice(0, visibleGhostReportCount);
+  const hiddenGhostReportCount = Math.max(0, ghostReports.length - visibleGhostReportCount);
+  const nextGhostReportBatchSize = Math.min(GHOST_REPORT_PAGE_SIZE, hiddenGhostReportCount);
+
   const ghostReportStatus = ghostReportsError
     ? 'Status unavailable'
     : ghostReportsLoading
       ? 'Loading reports'
-      : ghostReports.length
-        ? `${ghostReports.length} active`
+      : activeGhostReportCount
+        ? `${activeGhostReportCount} active`
         : 'No active reports';
   const ghostReportStatusClasses = ghostReportsError
     ? 'bg-amber-100 text-amber-900'
     : ghostReportsLoading
       ? 'bg-slate-100 text-slate-700'
-      : ghostReports.length
+      : activeGhostReportCount
         ? 'bg-red-100 text-red-800'
         : 'bg-emerald-100 text-emerald-800';
 
@@ -262,7 +307,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <section className="ui-panel mt-6 overflow-hidden" aria-label="Ghost-seat reports">
+      <section id="ghost-reports" className="ui-panel mt-6 scroll-mt-24 overflow-hidden" aria-label="Ghost-seat reports">
         <div className="flex flex-col justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-red-50 text-red-700">
@@ -270,7 +315,7 @@ export default function AdminDashboard() {
             </span>
             <div>
               <h2 className="ui-section-title">Ghost-seat reports</h2>
-              <p className="mt-1 text-xs text-slate-500">Students can report an occupied seat that appears physically vacant.</p>
+              <p className="mt-1 text-xs text-slate-500">Active reports and outcomes from the past 24 hours.</p>
             </div>
           </div>
           <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold ${ghostReportStatusClasses}`}>{ghostReportStatus}</span>
@@ -289,31 +334,78 @@ export default function AdminDashboard() {
             </div>
           ) : ghostReports.length ? (
             <div className="space-y-3">
-              {ghostReports.map((report) => (
-                <div key={report.reservationId} className="flex flex-col justify-between gap-3 rounded-[8px] border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-red-950">Flagged seat {report.seatLabel || formatSeatReference(report.seatId)}</p>
-                    <p className="mt-1 text-sm font-medium text-red-900">
-                      {formatBuildingName(report.building)}{report.floor ? `, Floor ${report.floor}` : ''}
-                    </p>
-                    <p className="mt-1 text-sm text-red-800">
-                      Reserved by {report.studentName || 'Unknown student'}{report.studentIdLast4 ? `, ID ending ${report.studentIdLast4}` : ''}.
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-red-700">{formatFlagDeadline(report.expiresAt)}</p>
+              {visibleGhostReports.map((report) => {
+                const isActive = report.status === 'ACTIVE';
+                const reporterName = report.flaggedBy?.name;
+                const reporterId = report.flaggedBy?.studentIdLast4;
+                return (
+                  <div key={report.flagId || report.reservationId} className={`flex flex-col justify-between gap-3 rounded-[8px] border p-4 sm:flex-row sm:items-center ${isActive ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-slate-50'}`}>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className={isActive ? 'font-semibold text-red-950' : 'font-semibold text-slate-950'}>Flagged seat {report.seatLabel || formatSeatReference(report.seatId)}</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${isActive ? 'bg-red-100 text-red-800' : 'bg-slate-200 text-slate-700'}`}>{FLAG_STATUS_LABELS[report.status] || report.status}</span>
+                      </div>
+                      <p className={`mt-1 text-sm font-medium ${isActive ? 'text-red-900' : 'text-slate-800'}`}>
+                        {formatBuildingName(report.building)}{report.floor ? `, Floor ${report.floor}` : ''}
+                      </p>
+                      <p className={`mt-1 text-sm ${isActive ? 'text-red-800' : 'text-slate-700'}`}>
+                        Reserved by {report.studentName || 'Unknown student'}{report.studentIdLast4 ? `, ID ending ${report.studentIdLast4}` : ''}.
+                      </p>
+                      {reporterName && (
+                        <p className="mt-1 text-xs text-slate-600">Reported by {reporterName}{reporterId ? `, ID ending ${reporterId}` : ''}.</p>
+                      )}
+                      <p className={`mt-1 text-xs leading-5 ${isActive ? 'text-red-700' : 'text-slate-600'}`}>
+                        {isActive ? formatFlagDeadline(report.expiresAt) : `Resolved ${formatDateTime(report.resolvedAt)}`}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                      {report.building && report.floor && (
+                        <Link to={`/map/${report.building}/${report.floor}`} className="ui-button-secondary py-2 text-xs">
+                          Open map
+                        </Link>
+                      )}
+                      {isActive && (
+                        <>
+                          <button type="button" onClick={() => { setGhostResolutionAction('confirm'); setSelectedGhostReport(report); }} className="ui-button-danger bg-red-700 py-2 text-xs text-white hover:bg-red-800">
+                            <CheckCircle size={17} weight="bold" />
+                            Confirm vacant
+                          </button>
+                          <button type="button" onClick={() => { setGhostResolutionAction('void'); setSelectedGhostReport(report); }} className="ui-button-secondary py-2 text-xs text-red-800">
+                            Void reservation
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-                    {report.building && report.floor && (
-                      <Link to={`/map/${report.building}/${report.floor}`} className="ui-button-secondary py-2 text-xs">
-                        Open map
-                      </Link>
+                );
+              })}
+              {ghostReports.length > GHOST_REPORT_PAGE_SIZE && (
+                <div className="flex flex-col justify-between gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center">
+                  <p className="text-xs font-medium text-slate-500" aria-live="polite">
+                    Showing {visibleGhostReports.length} of {ghostReports.length} reports
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {visibleGhostReportCount > GHOST_REPORT_PAGE_SIZE && (
+                      <button
+                        type="button"
+                        onClick={() => setVisibleGhostReportCount(GHOST_REPORT_PAGE_SIZE)}
+                        className="ui-button-secondary py-2 text-xs"
+                      >
+                        Show fewer
+                      </button>
                     )}
-                    <button type="button" onClick={() => setSelectedGhostReport(report)} className="ui-button-danger bg-red-700 py-2 text-xs text-white hover:bg-red-800">
-                      <CheckCircle size={17} weight="bold" />
-                      Confirm ghost and void
-                    </button>
+                    {hiddenGhostReportCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setVisibleGhostReportCount((count) => count + GHOST_REPORT_PAGE_SIZE)}
+                        className="ui-button-primary py-2 text-xs"
+                      >
+                        View {nextGhostReportBatchSize} more
+                      </button>
+                    )}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           ) : ghostReportsError ? null : (
             <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-sm leading-6 text-slate-600">New reports appear here immediately. The reservation holder is notified and must scan the designated physical QR to retain the reservation.</div>
@@ -324,13 +416,13 @@ export default function AdminDashboard() {
       <AppDialog
         open={Boolean(selectedGhostReport)}
         tone="danger"
-        title="Confirm ghost seat?"
+        title={ghostResolutionAction === 'void' ? 'Void this reservation?' : 'Confirm this seat is vacant?'}
         description={selectedGhostReport ? `This will void ${selectedGhostReport.studentName || 'the student'}'s reservation for ${selectedGhostReport.seatLabel || formatSeatReference(selectedGhostReport.seatId)} at ${formatBuildingName(selectedGhostReport.building)}, Floor ${selectedGhostReport.floor}, and release the seat.` : ''}
         confirmLabel="Void reservation"
         cancelLabel="Keep report active"
         busy={voidingGhostReport}
         dismissible={!voidingGhostReport}
-        onConfirm={handleConfirmGhostSeat}
+        onConfirm={handleResolveGhostSeat}
         onClose={() => setSelectedGhostReport(null)}
       />
 
@@ -421,23 +513,9 @@ export default function AdminDashboard() {
         </article>
 
         <article className="ui-panel overflow-hidden xl:col-span-2">
-          <PanelHeader icon={LockKey} title="Predictive occupancy" description="Research-target forecasting readiness" />
+          <PanelHeader icon={TrendUp} title="Predictive occupancy" description="Seven-day baseline from the selected period's observed weekday and hourly patterns" />
           <div className="p-5">
-            <div className="rounded-[8px] border border-slate-200 bg-[#f5f9fc] p-5">
-              <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-white text-[#063a64] shadow-sm">
-                  <CalendarBlank size={22} weight="duotone" />
-                </span>
-                <div>
-                  <p className="font-semibold text-slate-950">Waiting for sufficient live data</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Forecasting activates only after at least two weeks of continuous occupancy logs. Only live reservation data will be used.</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <ModelNote title="SARIMA" copy="Seven-day hourly forecast with a 95% confidence interval." />
-              <ModelNote title="GBDT / XGBoost" copy="Peak-hour heatmap using calendar, building, and floor context." />
-            </div>
+            <OccupancyForecast forecast={analytics.forecast} loading={loading} />
           </div>
         </article>
       </section>
@@ -637,13 +715,108 @@ function DataPoint({ label, value, loading = false }) {
   );
 }
 
-function ModelNote({ title, copy }) {
+function OccupancyForecast({ forecast, loading }) {
+  if (loading) return <div className="h-80 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading occupancy forecast" />;
+
+  const days = forecast?.days || [];
+  const points = days.flatMap((day) => day.hours.map((hour) => ({ ...hour, date: day.date })));
+  if (!days.length || !forecast?.hasObservedData || !points.some((point) => point.sampleCount > 0)) {
+    return <EmptyState copy="No occupied intervals have been recorded for this selection yet. The seven-day forecast will update automatically after the first live occupancy record." />;
+  }
+
+  const peak = points.reduce((highest, point) => (
+    point.predictedUtilizationPercent > highest.predictedUtilizationPercent ? point : highest
+  ), points[0]);
+  const average = points.reduce((sum, point) => sum + point.predictedUtilizationPercent, 0) / points.length;
+  const observedCells = points.filter((point) => point.sampleCount > 0).length;
+
   return (
-    <div>
-      <p className="text-sm font-semibold text-slate-950">{title}</p>
-      <p className="mt-1 text-sm leading-6 text-slate-600">{copy}</p>
+    <div className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <ForecastMetric label="Forecast average" value={`${formatNumber(average)}%`} />
+        <ForecastMetric label="Forecast peak" value={`${formatNumber(peak.predictedUtilizationPercent)}%`} detail={`${formatForecastDate(peak.date)}, ${formatHour(peak.hour)}`} />
+        <ForecastMetric label="Observed coverage" value={`${observedCells} / ${points.length}`} detail="forecast hour cells" />
+      </div>
+
+      <div>
+        <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-950">Forecast heat map</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Darker cells indicate higher predicted utilization. Times are shown in UTC.</p>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500" aria-label="Heat map legend">
+            <span>Lower</span>
+            {[0, 25, 50, 75, 100].map((value) => (
+              <span key={value} className="h-3.5 w-5 rounded-sm border border-slate-200" style={forecastCellStyle(value)} />
+            ))}
+            <span>Higher</span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-[8px] border border-slate-200 bg-slate-50/60 p-3 pb-4">
+          <div className="min-w-[760px]">
+            <div className="grid items-end gap-1" style={{ gridTemplateColumns: '7.5rem repeat(24, minmax(1.25rem, 1fr))' }} aria-hidden="true">
+              <span />
+              {Array.from({ length: 24 }, (_, hour) => (
+                <span key={hour} className="text-center text-[9px] font-semibold text-slate-500">
+                  {hour % 3 === 0 ? String(hour).padStart(2, '0') : ''}
+                </span>
+              ))}
+            </div>
+            <div className="mt-1 space-y-1.5" role="img" aria-label="Seven-day predicted occupancy heat map">
+              {days.map((day) => (
+                <div key={day.date} className="grid items-center gap-1" style={{ gridTemplateColumns: '7.5rem repeat(24, minmax(1.25rem, 1fr))' }}>
+                  <span className="truncate pr-2 text-xs font-semibold text-slate-700">{formatForecastDate(day.date)}</span>
+                  {day.hours.map((hour) => (
+                    <span
+                      key={hour.hour}
+                      className="grid aspect-square min-h-5 place-items-center rounded-sm border border-white/60 text-[8px] font-bold"
+                      style={forecastCellStyle(hour.predictedUtilizationPercent)}
+                      title={`${formatForecastDate(day.date)}, ${formatHour(hour.hour)}: ${formatNumber(hour.predictedUtilizationPercent)}% predicted utilization from ${hour.sampleCount} observation${hour.sampleCount === 1 ? '' : 's'}`}
+                    >
+                      <span className="sr-only">{formatForecastDate(day.date)}, {formatHour(hour.hour)}: {formatNumber(hour.predictedUtilizationPercent)}%</span>
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p className="rounded-[8px] border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-950">
+        This live baseline uses real occupancy logs from the selected date range, favoring the same weekday and hour. It works as soon as records exist and becomes more representative as history grows.
+      </p>
     </div>
   );
+}
+
+function ForecastMetric({ label, value, detail }) {
+  return (
+    <div className="rounded-[8px] border border-slate-200 bg-[#f5f9fc] p-4">
+      <p className="ui-label">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
+      {detail && <p className="mt-1 text-xs text-slate-500">{detail}</p>}
+    </div>
+  );
+}
+
+function forecastCellStyle(value) {
+  const percent = Math.max(0, Math.min(100, Number(value) || 0));
+  const opacity = 0.08 + (percent / 100) * 0.84;
+  return {
+    backgroundColor: `rgba(6, 58, 100, ${opacity})`,
+    color: percent >= 48 ? '#ffffff' : '#334155',
+  };
+}
+
+function formatForecastDate(date) {
+  return new Date(`${date}T00:00:00.000Z`).toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 function EmptyState({ copy }) {
@@ -684,10 +857,16 @@ function formatSeatReference(seatId) {
 function formatFlagDeadline(expiresAt) {
   const expiry = new Date(expiresAt);
   if (Number.isNaN(expiry.getTime())) {
-    return 'The holder must re-verify at the physical QR within 10 minutes.';
+    return 'The holder must re-verify at the physical QR before the response window ends.';
   }
   if (expiry.getTime() <= Date.now()) {
     return 'The re-verification window has elapsed and automatic release is pending.';
   }
   return `The holder must re-verify at the physical QR by ${expiry.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'recently';
+  return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 }

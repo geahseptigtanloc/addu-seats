@@ -2,21 +2,26 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, CheckCircle, QrCode, WarningCircle } from '@phosphor-icons/react';
 import Layout from '../components/Layout.jsx';
-import { apiClient } from '../api/client.js';
+import { apiClient, getGoogleAuthUrl } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import { useNotifications } from '../context/NotificationContext.jsx';
+import { storePendingReverifyToken } from '../utils/pendingReservation.js';
 
 export default function SeatReturn() {
   const { seatId } = useParams();
   const [searchParams] = useSearchParams();
   const qrToken = searchParams.get('token');
+  const { user, loading: authLoading } = useAuth();
+  const { clearReservationNotification } = useNotifications();
   const handledScan = useRef(false);
   const [result, setResult] = useState({ state: 'checking', message: 'Checking reservation...' });
 
   useEffect(() => {
     if (handledScan.current) return;
-    handledScan.current = true;
 
     if (!qrToken) {
+      handledScan.current = true;
       setResult({
         state: 'unavailable',
         message: 'This link does not contain the physical seat QR token.',
@@ -24,14 +29,17 @@ export default function SeatReturn() {
       return;
     }
 
+    if (authLoading || !user) return;
+    handledScan.current = true;
+
     void (async () => {
       try {
         const current = normalizeReservation(await apiClient('/api/reservations/me/current'));
-        if (!current || current.seat?.seatId !== seatId) {
+        if (!current || (seatId && current.seat?.seatId !== seatId)) {
           throw new Error('This QR belongs to a different reserved seat.');
         }
 
-        if (current.status === 'on_break') {
+        if (seatId && current.status === 'on_break') {
           await apiClient('/api/reservations/break/return', {
             method: 'POST',
             body: JSON.stringify({ qrToken }),
@@ -45,16 +53,24 @@ export default function SeatReturn() {
 
         setResult({
           state: 'success',
-          message: current.status === 'on_break'
+          message: seatId && current.status === 'on_break'
             ? 'Return confirmed. Your study session is active again.'
             : 'Presence confirmed. The ghost-seat report has been cleared.',
           seatLabel: current.seat?.label,
         });
+        clearReservationNotification(current.reservationId);
       } catch (error) {
         setResult({ state: 'error', message: error.message });
       }
     })();
-  }, [seatId, qrToken]);
+  }, [authLoading, clearReservationNotification, seatId, qrToken, user]);
+
+  function handleSignIn() {
+    storePendingReverifyToken(qrToken);
+    window.location.href = getGoogleAuthUrl();
+  }
+
+  const requiresSignIn = !user && !authLoading && Boolean(qrToken);
 
   return (
     <Layout>
@@ -73,9 +89,18 @@ export default function SeatReturn() {
           <div className="p-6 text-center sm:p-8">
             <p className="ui-kicker justify-center">Physical seat QR</p>
             <h1 className="mt-2 text-2xl font-bold text-gray-950">
-              {result.state === 'success' ? 'You are checked back in' : result.state === 'checking' ? 'Checking your return' : 'Return not confirmed'}
+              {result.state === 'success' ? 'You are checked back in' : requiresSignIn ? 'Sign in to confirm your presence' : result.state === 'checking' ? 'Checking your return' : 'Return not confirmed'}
             </h1>
-            <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-gray-600">{result.message}</p>
+            <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-gray-600">
+              {requiresSignIn ? 'Use the reservation holder account. This QR token will be kept through sign-in.' : result.message}
+            </p>
+
+            {requiresSignIn && (
+              <button type="button" onClick={handleSignIn} className="ui-button-primary mt-7">
+                Continue to sign in
+                <ArrowRight size={17} weight="bold" />
+              </button>
+            )}
 
             {result.seatLabel && (
               <div className="mx-auto mt-6 grid max-w-sm grid-cols-2 gap-4 border-y border-gray-100 py-4 text-left">
@@ -96,10 +121,12 @@ export default function SeatReturn() {
               </p>
             )}
 
-            <Link to="/receipt" className="ui-button-primary mt-7">
-              Return to reservation
-              <ArrowRight size={17} weight="bold" />
-            </Link>
+            {user && (
+              <Link to="/receipt" className="ui-button-primary mt-7">
+                Return to reservation
+                <ArrowRight size={17} weight="bold" />
+              </Link>
+            )}
           </div>
         </div>
       </section>

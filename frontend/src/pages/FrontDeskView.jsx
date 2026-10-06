@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import Layout from '../components/Layout.jsx';
-import { apiClient, getToken } from '../api/client.js';
-import { getReceiptCode, normalizePendingReservation } from '../api/normalizers.js';
 import { io } from 'socket.io-client';
+import Layout from '../components/Layout.jsx';
+import { API_URL, apiClient, getToken } from '../api/client.js';
+import { getReceiptCode, normalizePendingReservation } from '../api/normalizers.js';
 import { CheckCircle, ClockCountdown, IdentificationCard, X } from '@phosphor-icons/react';
 import AppDialog from '../components/AppDialog.jsx';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_URL;
 
 function getCountdown(deadline) {
   if (!deadline) return '';
@@ -51,26 +51,19 @@ export default function FrontDeskView() {
     fetchQueue();
     const pollInterval = setInterval(fetchQueue, 10000);
     const tickInterval = setInterval(() => setTick((tick) => tick + 1), 1000);
+    const token = getToken();
+    const socket = token ? io(SOCKET_URL, { auth: { token } }) : null;
+
+    socket?.on('connect', fetchQueue);
+    socket?.on('reservation_pending_admin_notice', fetchQueue);
+    socket?.on('reservation_pending_resolved_admin_notice', fetchQueue);
+
     return () => {
       clearInterval(pollInterval);
       clearInterval(tickInterval);
+      socket?.disconnect();
     };
   }, [fetchQueue]);
-
-  useEffect(() => {
-    const token = getToken();
-    if (!token) return undefined;
-
-    const socket = io(SOCKET_URL, { auth: { token } });
-    socket.on('seat_flagged_admin_notice', (data) => {
-      setNotice({
-        tone: 'warning',
-        title: 'Possible ghost seat reported',
-        description: `A student reported a vacant seat on Floor ${data.floor} in ${data.building.replace('_', ' ')}.`,
-      });
-    });
-    return () => socket.disconnect();
-  }, []);
 
   function beginReview(reservationId) {
     setReviewingId(reservationId);

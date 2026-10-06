@@ -53,6 +53,22 @@ interface SeatFlagResolvedPayload {
   resolvedAt: string;
 }
 
+interface ReservationPendingAdminPayload {
+  reservationId: string;
+  seatId: string;
+  seatLabel: string;
+  building: string;
+  floor: number;
+  studentName: string;
+  studentIdLast4: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
+interface ReservationPendingResolvedPayload {
+  reservationId: string;
+}
+
 interface ReservationEvictedPayload {
   reservationId: string;
   seatId: string;
@@ -67,6 +83,8 @@ interface ServerToClientEvents {
   seat_flagged: (payload: SeatFlaggedPayload) => void;
   seat_flagged_admin_notice: (payload: SeatFlaggedAdminPayload) => void;
   seat_flag_resolved_admin_notice: (payload: SeatFlagResolvedPayload) => void;
+  reservation_pending_admin_notice: (payload: ReservationPendingAdminPayload) => void;
+  reservation_pending_resolved_admin_notice: (payload: ReservationPendingResolvedPayload) => void;
   reservation_evicted: (payload: ReservationEvictedPayload) => void;
   socket_error: (payload: { message: string }) => void;
 }
@@ -211,6 +229,16 @@ export function notifyAdminsSeatFlagged(payload: SeatFlaggedAdminPayload): void 
 
 export function notifyAdminsSeatFlagResolved(payload: SeatFlagResolvedPayload): void {
   getIO().to(ADMIN_ROOM).emit('seat_flag_resolved_admin_notice', payload);
+}
+
+export function notifyAdminsReservationPending(payload: ReservationPendingAdminPayload): void {
+  getIO().to(ADMIN_ROOM).emit('reservation_pending_admin_notice', payload);
+}
+
+export function notifyAdminsReservationPendingResolved(
+  payload: ReservationPendingResolvedPayload,
+): void {
+  getIO().to(ADMIN_ROOM).emit('reservation_pending_resolved_admin_notice', payload);
 }
 
 // The holder's reservation was ended by the flag deadline, so their open

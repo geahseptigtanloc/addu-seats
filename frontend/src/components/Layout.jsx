@@ -7,6 +7,7 @@ import { ChartBar, MapTrifold, Monitor, ShieldCheck, SignOut, Ticket } from '@ph
 import { apiClient } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { NotificationBell } from '../context/NotificationContext.jsx';
 import AppDialog from './AppDialog.jsx';
 
 export default function Layout({ children }) {
@@ -45,7 +46,7 @@ export default function Layout({ children }) {
         <div className="mx-auto flex min-h-[72px] max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <Link to="/" className="flex shrink-0 items-center gap-3" aria-label="AdDU Seats home">
             <span className="grid h-10 w-10 place-items-center rounded-[8px] border border-white/25 bg-white text-base font-bold text-[#063a64] shadow-[0_10px_24px_rgba(3,41,70,0.24)]">A</span>
-            <span className="leading-none">
+            <span className="hidden leading-none min-[420px]:block">
               <span className="block text-[15px] font-semibold">AdDU Seats</span>
               <span className="mt-1 hidden text-[11px] font-medium text-blue-100/70 sm:block">University Libraries</span>
             </span>
@@ -78,6 +79,8 @@ export default function Layout({ children }) {
                 )}
               </nav>
 
+              <NotificationBell />
+
               <div className="hidden h-8 w-px bg-white/15 lg:block" />
               <div className="hidden min-w-0 items-center gap-2 rounded-[8px] bg-white/10 px-3 py-2 lg:flex">
                 <ShieldCheck size={21} weight="duotone" className="shrink-0 text-amber-200" />
@@ -103,9 +106,13 @@ export default function Layout({ children }) {
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">{children}</main>
       <footer className="border-t border-slate-200/80 bg-white/70 px-4 py-4 text-xs text-slate-500">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <span>Ateneo de Davao University Library Services</span>
-          <span className="font-medium text-slate-600">Mapped plans: Gisbert and Miguel Pro</span>
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 font-semibold text-slate-600" aria-label="Legal information">
+            <Link to="/privacy" className="hover:text-[#063a64]">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-[#063a64]">Terms of Service</Link>
+            <a href="https://library.addu.edu.ph/contact/" target="_blank" rel="noreferrer" className="hover:text-[#063a64]">Contact</a>
+          </nav>
         </div>
       </footer>
       <AppDialog

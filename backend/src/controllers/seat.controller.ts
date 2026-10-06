@@ -69,3 +69,23 @@ export async function flagSeat(req: Request, res: Response, next: NextFunction):
     next(err);
   }
 }
+
+export async function getActiveReservation(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const { id } = req.params;
+
+  if (typeof id !== 'string') {
+    res.status(400).json({ error: { message: 'Invalid seat id' } });
+    return;
+  }
+
+  try {
+    const reservation = await reservationService.getActiveReservationForSeat(id);
+    res.json(reservation);
+  } catch (err) {
+    next(err);
+  }
+}
