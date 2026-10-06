@@ -16,32 +16,58 @@ interface ClientToServerEvents {
   leave_floor: () => void;
 }
 
+export type SeatFlagResolution = 'reverified' | 'evicted' | 'voided' | 'checked_out';
+
+// Sent to the reservation holder. Never includes who reported the seat.
+interface SeatFlaggedPayload {
+  flagId: string;
+  seatId: string;
+  seatLabel: string;
+  building: string;
+  floor: number;
+  reservationId: string;
+  windowSeconds: number;
+  flaggedAt: string;
+  expiresAt: string;
+  message: string;
+}
+
+interface SeatFlaggedAdminPayload {
+  flagId: string;
+  seatId: string;
+  seatLabel: string;
+  reservationId: string;
+  building: string;
+  floor: number;
+  studentName: string;
+  studentIdLast4: string | null;
+  windowSeconds: number;
+  expiresAt: string;
+  reportedAt: string;
+}
+
+interface SeatFlagResolvedPayload {
+  flagId: string;
+  reservationId: string;
+  resolution: SeatFlagResolution;
+  resolvedAt: string;
+}
+
+interface ReservationEvictedPayload {
+  reservationId: string;
+  seatId: string;
+  reason: 'flag_expired';
+  message: string;
+  endedAt: string;
+}
+
 interface ServerToClientEvents {
   joined_floor: (payload: { room: string }) => void;
   seat_status_update: (payload: { seatId: string; status: SeatStatus }) => void;
-  seat_flagged: (payload: {
-    seatId: string;
-    reservationId: string;
-    windowSeconds: number;
-    expiresAt: string;
-    message: string;
-  }) => void;
-  seat_flagged_admin_notice: (payload: {
-    seatId: string;
-    seatLabel: string;
-    reservationId: string;
-    building: string;
-    floor: number;
-    studentName: string;
-    studentIdLast4: string | null;
-    windowSeconds: number;
-    expiresAt: string;
-    reportedAt: string;
-  }) => void;
-  seat_flag_resolved_admin_notice: (payload: {
-    reservationId: string;
-    resolution: 'reverified' | 'evicted' | 'voided' | 'checked_out';
-  }) => void;
+  seat_flagged: (payload: SeatFlaggedPayload) => void;
+  seat_flagged_admin_notice: (payload: SeatFlaggedAdminPayload) => void;
+  seat_flag_resolved_admin_notice: (payload: SeatFlagResolvedPayload) => void;
+  reservation_evicted: (payload: ReservationEvictedPayload) => void;
   socket_error: (payload: { message: string }) => void;
 }
 
@@ -173,41 +199,24 @@ export function broadcastSeatStatusUpdate(
 
 // Targets only the reservation holder, not the whole floor, a no-op if
 // they aren't currently connected (Socket.IO just finds an empty room).
-export function notifySeatFlagged(
-  userId: string,
-  payload: {
-    seatId: string;
-    reservationId: string;
-    windowSeconds: number;
-    expiresAt: string;
-    message: string;
-  },
-): void {
+export function notifySeatFlagged(userId: string, payload: SeatFlaggedPayload): void {
   getIO().to(getUserRoom(userId)).emit('seat_flagged', payload);
 }
 
 // Every connected admin sees the report and can open the protected
 // confirmation action from the dashboard.
-export function notifyAdminsSeatFlagged(payload: {
-  seatId: string;
-  seatLabel: string;
-  reservationId: string;
-  building: string;
-  floor: number;
-  studentName: string;
-  studentIdLast4: string | null;
-  windowSeconds: number;
-  expiresAt: string;
-  reportedAt: string;
-}): void {
+export function notifyAdminsSeatFlagged(payload: SeatFlaggedAdminPayload): void {
   getIO().to(ADMIN_ROOM).emit('seat_flagged_admin_notice', payload);
 }
 
-export function notifyAdminsSeatFlagResolved(payload: {
-  reservationId: string;
-  resolution: 'reverified' | 'evicted' | 'voided' | 'checked_out';
-}): void {
+export function notifyAdminsSeatFlagResolved(payload: SeatFlagResolvedPayload): void {
   getIO().to(ADMIN_ROOM).emit('seat_flag_resolved_admin_notice', payload);
+}
+
+// The holder's reservation was ended by the flag deadline, so their open
+// page can leave the "active reservation" state without a refresh.
+export function notifyReservationEvicted(userId: string, payload: ReservationEvictedPayload): void {
+  getIO().to(getUserRoom(userId)).emit('reservation_evicted', payload);
 }
 
 export function getIO(): AppSocketServer {

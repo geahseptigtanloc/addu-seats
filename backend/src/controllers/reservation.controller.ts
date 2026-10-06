@@ -7,6 +7,10 @@ const createReservationSchema = z.object({
   qrToken: z.string().min(1),
 });
 
+const flaggedQuerySchema = z.object({
+  status: z.enum(['active', 'all']).default('active'),
+});
+
 export async function createReservation(
   req: Request,
   res: Response,
@@ -96,13 +100,22 @@ export async function getPendingQueue(
   }
 }
 
+// Admin-only, enforced at the route level. Active flags by default;
+// ?status=all adds recently resolved ones.
 export async function getFlaggedReservations(
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  const parsed = flaggedQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    res.status(400).json({ error: { message: "status must be 'active' or 'all'" } });
+    return;
+  }
+
   try {
-    const reports = await reservationService.getFlaggedReservations();
+    const reports = await reservationService.getFlaggedReservations(parsed.data.status === 'all');
     res.json(reports);
   } catch (err) {
     next(err);

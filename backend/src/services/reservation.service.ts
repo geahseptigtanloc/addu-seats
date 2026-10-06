@@ -7,6 +7,7 @@ import {
   OccupancyEventType,
   type Reservation,
   type Seat,
+  type SeatFlag,
 } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import * as reservationRepository from '../repositories/reservation.repository';
@@ -21,6 +22,8 @@ import {
   notifySeatFlagged,
   notifyAdminsSeatFlagResolved,
   notifyAdminsSeatFlagged,
+  notifyReservationEvicted,
+  type SeatFlagResolution,
 } from '../config/socket';
 import { NotFoundError, ConflictError } from '../utils/AppError';
 
@@ -48,7 +51,7 @@ async function isOnBreakCooldown(userId: string): Promise<boolean> {
   try {
     return (await redisClient.get(breakCooldownKey(userId))) !== null;
   } catch (err) {
-    logger.warn({ err, userId }, 'Failed to check break cooldown in Redis');
+    logger.warn({ err, userId }, 'Failed to check break cooldown in Redis — assuming none');
     return false;
   }
 }
@@ -312,6 +315,32 @@ export async function getPendingQueue(): Promise<PendingQueueItem[]> {
   );
 }
 
+// The holder's view of an open flag: when and where it was reported and how
+// long they have left. Deliberately omits who reported it.
+export interface ActiveFlagInfo {
+  flagId: string;
+  seatLabel: string;
+  building: string;
+  floor: number;
+  flaggedAt: string;
+  expiresAt: string;
+  windowSeconds: number;
+  remainingSeconds: number;
+}
+
+function toActiveFlagInfo(flag: SeatFlag, seat: Seat): ActiveFlagInfo {
+  return {
+    flagId: flag.id,
+    seatLabel: getSeatLabel(seat),
+    building: seat.building,
+    floor: seat.floor,
+    flaggedAt: flag.createdAt.toISOString(),
+    expiresAt: flag.expiresAt.toISOString(),
+    windowSeconds: flagWindowSeconds(flag),
+    remainingSeconds: flagRemainingSeconds(flag),
+  };
+}
+
 export interface ReservationDetails {
   reservationId: string;
   status: ReservationStatus;
@@ -321,6 +350,7 @@ export interface ReservationDetails {
   remainingSeconds?: number;
   breakRemainingSeconds?: number;
   breakMinutesUsed?: number;
+  flag?: ActiveFlagInfo;
   seat: Seat;
   user: { name: string; studentIdLast4: string | null };
 }
@@ -362,6 +392,15 @@ async function toReservationDetails(
     }
   }
 
+  // Lets a refreshed page restore the flag banner and its countdown.
+  if (reservation.status === ReservationStatus.CONFIRMED) {
+    const flag = await seatFlagRepository.findActiveByReservation(prisma, reservation.id);
+
+    if (flag) {
+      details.flag = toActiveFlagInfo(flag, reservation.seat);
+    }
+  }
+
   return details;
 }
 
@@ -373,6 +412,33 @@ export async function getCurrentReservation(userId: string): Promise<Reservation
 export async function getReservationDetails(reservationId: string): Promise<ReservationDetails> {
   const reservation = await reservationRepository.findDetailsById(reservationId);
   return toReservationDetails(reservation);
+}
+
+const RESOLUTION_BY_STATUS: Record<seatFlagRepository.ResolvedSeatFlagStatus, SeatFlagResolution> =
+  {
+    REVERIFIED: 'reverified',
+    EVICTED: 'evicted',
+    VOIDED: 'voided',
+    CHECKED_OUT: 'checked_out',
+  };
+
+// Tells front desk a flag was resolved, so its card can flip to "resolved"
+// without a refetch. Best-effort: the DB already holds the outcome.
+function notifyFlagResolved(flag: SeatFlag): void {
+  if (flag.status === SeatFlagStatus.ACTIVE || flag.resolvedAt === null) {
+    return; // only ever called with a flag a close helper just resolved
+  }
+
+  try {
+    notifyAdminsSeatFlagResolved({
+      flagId: flag.id,
+      reservationId: flag.reservationId,
+      resolution: RESOLUTION_BY_STATUS[flag.status],
+      resolvedAt: flag.resolvedAt.toISOString(),
+    });
+  } catch (err) {
+    logger.warn({ err, flagId: flag.id }, 'Failed to notify admins of flag resolution');
+  }
 }
 
 // Row-locks a CONFIRMED reservation until the transaction ends. Every path
@@ -427,7 +493,7 @@ export async function checkoutReservation(
     throw new ConflictError('Only a confirmed reservation can be checked out');
   }
 
-  const { updatedReservation, updatedSeat, flagClosed } = await prisma.$transaction(async (tx) => {
+  const { updatedReservation, updatedSeat, closedFlag } = await prisma.$transaction(async (tx) => {
     // Conditional update, so a concurrent void or eviction isn't overwritten.
     const ended = await tx.reservation.updateMany({
       where: { id: reservationId, status: ReservationStatus.CONFIRMED },
@@ -454,7 +520,7 @@ export async function checkoutReservation(
     return {
       updatedReservation: await tx.reservation.findUniqueOrThrow({ where: { id: reservationId } }),
       updatedSeat: released.seat,
-      flagClosed: closed,
+      closedFlag: closed,
     };
   });
 
@@ -464,12 +530,8 @@ export async function checkoutReservation(
     logger.warn({ err, reservationId }, 'Failed to clear checkout timers');
   }
 
-  if (flagClosed) {
-    try {
-      notifyAdminsSeatFlagResolved({ reservationId, resolution: 'checked_out' });
-    } catch (err) {
-      logger.warn({ err, reservationId }, 'Failed to notify admins of flag resolution');
-    }
+  if (closedFlag) {
+    notifyFlagResolved(closedFlag);
   }
 
   try {
@@ -497,7 +559,7 @@ async function endReservationAsStaff(
     ? GHOST_REPORT_INACTIVE
     : 'Only an active reservation can be voided';
 
-  const { updated, seat, flagClosed } = await prisma.$transaction(async (tx) => {
+  const { updated, seat, closedFlag } = await prisma.$transaction(async (tx) => {
     // Conditional update, so a concurrent checkout or eviction isn't overwritten.
     const ended = await tx.reservation.updateMany({
       where: {
@@ -532,7 +594,7 @@ async function endReservationAsStaff(
     return {
       updated: await tx.reservation.findUniqueOrThrow({ where: { id: reservation.id } }),
       seat: released.seat,
-      flagClosed: closed,
+      closedFlag: closed,
     };
   });
 
@@ -548,15 +610,8 @@ async function endReservationAsStaff(
     );
   }
 
-  if (flagClosed) {
-    try {
-      notifyAdminsSeatFlagResolved({ reservationId: reservation.id, resolution: 'voided' });
-    } catch (err) {
-      logger.warn(
-        { err, reservationId: reservation.id },
-        'Failed to notify admins of flag resolution',
-      );
-    }
+  if (closedFlag) {
+    notifyFlagResolved(closedFlag);
   }
 
   try {
@@ -789,6 +844,11 @@ export async function returnFromBreak(userId: string, qrToken: string): Promise<
 const FLAG_WINDOW_SECONDS = 5 * 60;
 const FLAG_COOLDOWN_SECONDS = 5 * 60;
 
+// `status=all` on the admin list also shows flags resolved within this
+// lookback, capped, so the response stays bounded as history grows.
+const RESOLVED_FLAG_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+const MAX_RESOLVED_FLAGS = 500;
+
 function flagCooldownKey(userId: string): string {
   return `user:flag-cooldown:${userId}`;
 }
@@ -834,7 +894,19 @@ async function releaseFlagCooldown(userId: string): Promise<void> {
   }
 }
 
+function flagWindowSeconds(flag: SeatFlag): number {
+  return Math.round((flag.expiresAt.getTime() - flag.createdAt.getTime()) / 1000);
+}
+
+function flagRemainingSeconds(flag: SeatFlag): number {
+  return Math.max(0, Math.ceil((flag.expiresAt.getTime() - Date.now()) / 1000));
+}
+
+// Admin view of a flag. `flaggedBy` is admin-only; the holder-facing
+// ActiveFlagInfo never includes it.
 export interface FlaggedReservation {
+  flagId: string;
+  status: SeatFlagStatus;
   reservationId: string;
   seatId: string;
   seatLabel: string;
@@ -842,16 +914,18 @@ export interface FlaggedReservation {
   floor: number;
   studentName: string;
   studentIdLast4: string | null;
+  flaggedBy: { id: string; name: string; studentIdLast4: string | null };
   windowSeconds: number;
   remainingSeconds: number;
   expiresAt: string;
   reportedAt: string;
+  resolvedAt: string | null;
 }
 
-export async function getFlaggedReservations(): Promise<FlaggedReservation[]> {
-  const flags = await seatFlagRepository.findActiveWithDetails();
-
-  return flags.map((flag) => ({
+function toFlaggedReservation(flag: seatFlagRepository.SeatFlagWithDetails): FlaggedReservation {
+  return {
+    flagId: flag.id,
+    status: flag.status,
     reservationId: flag.reservationId,
     seatId: flag.seatId,
     seatLabel: getSeatLabel(flag.seat),
@@ -859,11 +933,34 @@ export async function getFlaggedReservations(): Promise<FlaggedReservation[]> {
     floor: flag.seat.floor,
     studentName: flag.reservation.user.name,
     studentIdLast4: flag.reservation.user.studentIdLast4,
-    windowSeconds: Math.round((flag.expiresAt.getTime() - flag.createdAt.getTime()) / 1000),
-    remainingSeconds: Math.max(0, Math.ceil((flag.expiresAt.getTime() - Date.now()) / 1000)),
+    flaggedBy: flag.flaggedBy,
+    windowSeconds: flagWindowSeconds(flag),
+    // Only a live flag has time left.
+    remainingSeconds: flag.status === SeatFlagStatus.ACTIVE ? flagRemainingSeconds(flag) : 0,
     expiresAt: flag.expiresAt.toISOString(),
     reportedAt: flag.createdAt.toISOString(),
-  }));
+    resolvedAt: flag.resolvedAt?.toISOString() ?? null,
+  };
+}
+
+// Active flags by default. With includeResolved, also flags resolved within
+// the lookback window (capped), newest report first.
+export async function getFlaggedReservations(
+  includeResolved = false,
+): Promise<FlaggedReservation[]> {
+  const since = new Date(Date.now() - RESOLVED_FLAG_LOOKBACK_MS);
+  const noResolved: seatFlagRepository.SeatFlagWithDetails[] = [];
+
+  const [active, resolved] = await Promise.all([
+    seatFlagRepository.findActiveWithDetails(),
+    includeResolved
+      ? seatFlagRepository.findResolvedSince(since, MAX_RESOLVED_FLAGS)
+      : Promise.resolve(noResolved),
+  ]);
+
+  return [...active, ...resolved]
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+    .map(toFlaggedReservation);
 }
 
 // Front desk confirms the seat really is empty. Voids the reservation and
@@ -907,7 +1004,7 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
   const now = new Date();
   const expiresAt = new Date(now.getTime() + FLAG_WINDOW_SECONDS * 1000);
 
-  let flag: Awaited<ReturnType<typeof seatFlagRepository.create>>;
+  let flag: SeatFlag;
   try {
     flag = await prisma.$transaction(async (tx) => {
       // Re-checked under the reservation lock: since the reads above, the
@@ -945,9 +1042,14 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
 
   try {
     notifySeatFlagged(reservation.userId, {
+      flagId: flag.id,
       seatId,
+      seatLabel: getSeatLabel(seat),
+      building: seat.building,
+      floor: seat.floor,
       reservationId: reservation.id,
       windowSeconds: FLAG_WINDOW_SECONDS,
+      flaggedAt: flag.createdAt.toISOString(),
       expiresAt: flag.expiresAt.toISOString(),
       message: `Another student reported this seat as physically vacant. Scan the physical seat QR within ${FLAG_WINDOW_SECONDS / 60} minutes to keep your reservation.`,
     });
@@ -964,6 +1066,7 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
       throw new NotFoundError('Reservation not found');
     }
     notifyAdminsSeatFlagged({
+      flagId: flag.id,
       seatId,
       seatLabel: getSeatLabel(seat),
       reservationId: reservation.id,
@@ -997,7 +1100,7 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
     throw new NotFoundError('No matching reservation found for this seat');
   }
 
-  await prisma.$transaction(async (tx) => {
+  const closedFlag = await prisma.$transaction(async (tx) => {
     if (!(await lockConfirmedReservation(tx, reservation.id))) {
       throw new ConflictError('No active flag to re-verify');
     }
@@ -1023,16 +1126,11 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
         eventType: ValidationEventType.FLAG_REVERIFICATION,
       },
     });
+
+    return closed;
   });
 
-  try {
-    notifyAdminsSeatFlagResolved({ reservationId: reservation.id, resolution: 'reverified' });
-  } catch (err) {
-    logger.warn(
-      { err, reservationId: reservation.id },
-      'Failed to notify admins of flag re-verification',
-    );
-  }
+  notifyFlagResolved(closedFlag);
 }
 
 // Called by the entry-timer-expiry background job. Same
@@ -1144,6 +1242,9 @@ export async function expireBreakTimers(): Promise<void> {
   }
 }
 
+const EVICTION_MESSAGE =
+  'Your reservation ended: the seat was reported vacant and your presence was not verified in time.';
+
 // Called by the flag-eviction background job. Postgres is the source of
 // truth for flags, so "due" is a plain query on the flag's own deadline.
 export async function evictExpiredFlags(): Promise<void> {
@@ -1153,7 +1254,7 @@ export async function evictExpiredFlags(): Promise<void> {
   for (const flag of dueFlags) {
     // Per-flag try/catch, one failure shouldn't hold up the rest of the batch.
     try {
-      const evictedSeat = await prisma.$transaction(async (tx) => {
+      const evicted = await prisma.$transaction(async (tx) => {
         if (!(await lockConfirmedReservation(tx, flag.reservationId))) {
           // Every path that ends a reservation closes its flag, so this is
           // defensive: close the stale flag rather than evict anything.
@@ -1170,18 +1271,18 @@ export async function evictExpiredFlags(): Promise<void> {
         }
 
         const now = new Date();
-        const claimed = await seatFlagRepository.closeIfExpired(
+        const closedFlag = await seatFlagRepository.closeIfExpired(
           tx,
           flag.id,
           SeatFlagStatus.EVICTED,
           now,
         );
 
-        if (!claimed) {
+        if (!closedFlag) {
           return null; // re-verified or otherwise resolved since the batch was read
         }
 
-        await tx.reservation.update({
+        const reservation = await tx.reservation.update({
           where: { id: flag.reservationId },
           data: { status: ReservationStatus.EVICTED, endedAt: now },
         });
@@ -1194,28 +1295,35 @@ export async function evictExpiredFlags(): Promise<void> {
           });
         }
 
-        return released.seat;
+        return { closedFlag, userId: reservation.userId, seat: released.seat, endedAt: now };
       });
 
-      if (!evictedSeat) {
+      if (!evicted) {
         continue;
       }
 
       evictedCount++;
+      notifyFlagResolved(evicted.closedFlag);
 
       try {
-        notifyAdminsSeatFlagResolved({ reservationId: flag.reservationId, resolution: 'evicted' });
+        notifyReservationEvicted(evicted.userId, {
+          reservationId: flag.reservationId,
+          seatId: evicted.seat.id,
+          reason: 'flag_expired',
+          message: EVICTION_MESSAGE,
+          endedAt: evicted.endedAt.toISOString(),
+        });
       } catch (err) {
         logger.warn(
           { err, reservationId: flag.reservationId },
-          'Failed to notify admins of flag eviction',
+          'Failed to notify student of eviction',
         );
       }
 
       try {
-        broadcastSeatStatusUpdate(evictedSeat.building, evictedSeat.floor, {
-          seatId: evictedSeat.id,
-          status: evictedSeat.status,
+        broadcastSeatStatusUpdate(evicted.seat.building, evicted.seat.floor, {
+          seatId: evicted.seat.id,
+          status: evicted.seat.status,
         });
       } catch (err) {
         logger.warn(
