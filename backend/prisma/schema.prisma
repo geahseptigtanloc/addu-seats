@@ -59,6 +59,7 @@ model User {
   role           UserRole @default(STUDENT)
   studentIdLast4 String?  @map("student_id_last4") // set during post-OAuth registration step
   reservations Reservation[]
+  flagsRaised SeatFlag[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -77,6 +78,7 @@ model Seat {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   reservations Reservation[]
+  seatFlags SeatFlag[]
 
   @@index([building, floor]) // supports GET /seats?building=&floor= 
   @@map("seats")
@@ -101,6 +103,7 @@ model Reservation {
 
   validationEvents ValidationEvent[]
   occupancyLogs OccupancyLog[]
+  seatFlags SeatFlag[]
 
   @@index([userId])
   @@index([seatId])
@@ -141,4 +144,43 @@ model OccupancyLog {
 
   @@index([reservationId])
   @@map("occupancy_logs")
+}
+
+// A community report that an OCCUPIED seat looks vacant. The holder has
+// until expiresAt to re-verify, and every flag ends in exactly one terminal
+// status. A front-desk ghost-seat confirmation is recorded as VOIDED.
+enum SeatFlagStatus {
+  ACTIVE
+  REVERIFIED // holder scanned the verify QR in time
+  EVICTED // window expired without re-verification
+  VOIDED // staff ended the reservation
+  CHECKED_OUT // holder checked out first
+}
+
+model SeatFlag {
+  id            String         @id @default(uuid(7))
+  seatId        String         @map("seat_id")
+  reservationId String         @map("reservation_id")
+  flaggedById   String         @map("flagged_by_id")
+  status        SeatFlagStatus @default(ACTIVE)
+
+  // Cascade on reservation: a flag has no meaning without the reservation
+  // it targets (same as ValidationEvent/OccupancyLog). Restrict on seat and
+  // flagger so abuse history can't vanish if either is ever deleted.
+  seat        Seat        @relation(fields: [seatId], references: [id], onDelete: Restrict)
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  flaggedBy   User        @relation(fields: [flaggedById], references: [id], onDelete: Restrict)
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  expiresAt  DateTime  @map("expires_at")
+  resolvedAt DateTime? @map("resolved_at") // null while ACTIVE
+
+  @@index([status, expiresAt]) // eviction job: active flags past their deadline
+  @@index([flaggedById, createdAt]) // flagger cooldown lookup
+  @@index([reservationId])
+  // NOTE: "one ACTIVE flag per seat" and "resolved_at is set exactly when the
+  // flag is resolved" are enforced by a partial unique index and a CHECK
+  // constraint hand-written into prisma/migrations/..._add_seat_flags/
+  // migration.sql. Prisma's schema syntax can express neither.
+  @@map("seat_flags")
 }
