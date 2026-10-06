@@ -48,6 +48,17 @@ export function findActiveDetailsByUser(userId: string) {
   });
 }
 
+export function findActiveDetailsBySeat(seatId: string) {
+  return prisma.reservation.findFirst({
+    where: { seatId, status: { in: ACTIVE_STATUSES } },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      user: { select: { name: true, studentIdLast4: true } },
+      seat: true,
+    },
+  });
+}
+
 export function findDetailsById(id: string) {
   return prisma.reservation.findUnique({
     where: { id },

@@ -155,10 +155,12 @@ Reservation codes are written to `backend/qr-codes/`; verification codes are wri
 | GET | `/api/seats` | Public live seat list, optionally filtered by building and floor |
 | POST | `/api/seats/scan` | Validate a physical-seat QR token and return safe seat details |
 | POST | `/api/seats/:id/flag` | Report an apparently vacant occupied seat |
+| GET | `/api/seats/:id/active-reservation` | Admin-only active reservation details for a mapped seat |
 | POST | `/api/reservations` | Create a reservation from a physical-seat QR token |
 | GET | `/api/reservations/me/current` | Current authenticated student's reservation |
 | GET | `/api/reservations/pending` | Admin front-desk queue |
 | POST | `/api/reservations/:id/approve` | Approve pending entry |
+| POST | `/api/reservations/:id/void` | Admin-only forced release of a pending or confirmed reservation |
 | POST | `/api/reservations/:id/break/start` | Start the five-minute break timer |
 | POST | `/api/reservations/:id/break/extend` | Extend a break up to 15 minutes |
 | POST | `/api/reservations/break/return` | Return by scanning the physical QR |

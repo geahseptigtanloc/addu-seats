@@ -18,7 +18,7 @@ import {
 } from '../data/miguelProMap.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { io } from 'socket.io-client';
-import { ArrowLeft, ArrowSquareOut, Clock, Minus, Plus, QrCode, Ticket, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowSquareOut, Clock, Minus, Plus, QrCode, Ticket, Trash, X } from '@phosphor-icons/react';
 
 const DEFAULT_LAYOUT = {
   name: 'Floor Map',
@@ -514,6 +514,11 @@ export default function SeatMap() {
   const [activeReservation, setActiveReservation] = useState(null);
   const [flagSeatId, setFlagSeatId] = useState(null);
   const [flagging, setFlagging] = useState(false);
+  const [adminReservation, setAdminReservation] = useState(null);
+  const [adminReservationLoading, setAdminReservationLoading] = useState(false);
+  const [adminReservationError, setAdminReservationError] = useState('');
+  const [adminVoidTarget, setAdminVoidTarget] = useState(null);
+  const [voidingReservation, setVoidingReservation] = useState(false);
   const [notice, setNotice] = useState(null);
   const [zoom, setZoom] = useState(1);
   const requestedArea = searchParams.get('area');
@@ -574,6 +579,40 @@ export default function SeatMap() {
     };
   }, [building, floor, user, miguelProArea]);
 
+  useEffect(() => {
+    const canAdminVoid = user?.role === 'admin'
+      && selectedSeat
+      && ['pending', 'pending_entry', 'occupied', 'on_break'].includes(selectedSeat.status);
+
+    setAdminReservation(null);
+    setAdminReservationError('');
+
+    if (!canAdminVoid) {
+      setAdminReservationLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setAdminReservationLoading(true);
+
+    apiClient(`/api/seats/${selectedSeat.seatId}/active-reservation`, {
+      signal: controller.signal,
+    })
+      .then((reservation) => {
+        setAdminReservation(normalizeReservation(reservation));
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          setAdminReservationError(err.message || 'The active reservation could not be loaded.');
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setAdminReservationLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [selectedSeat, user?.role]);
+
   const handleSeatClick = (seat) => {
     if (seat.status === 'disabled') return;
     setSelectedSeat(seat);
@@ -615,6 +654,37 @@ export default function SeatMap() {
       setNotice({ tone: 'danger', title: 'Report failed', description: err.message });
     } finally {
       setFlagging(false);
+    }
+  };
+
+  const handleAdminVoid = async () => {
+    if (!adminVoidTarget || voidingReservation) return;
+
+    setVoidingReservation(true);
+    try {
+      await apiClient(`/api/reservations/${adminVoidTarget.reservationId}/void`, {
+        method: 'POST',
+      });
+      setSeats((currentSeats) => currentSeats.map((seat) => (
+        seat.seatId === adminVoidTarget.seatId ? { ...seat, status: 'available' } : seat
+      )));
+      setSelectedSeat(null);
+      setAdminReservation(null);
+      setAdminVoidTarget(null);
+      setNotice({
+        tone: 'success',
+        title: 'Reservation voided',
+        description: `${adminVoidTarget.seatLabel} is available again.`,
+      });
+    } catch (err) {
+      setAdminVoidTarget(null);
+      setNotice({
+        tone: 'danger',
+        title: 'Void failed',
+        description: err.message || 'The reservation could not be voided.',
+      });
+    } finally {
+      setVoidingReservation(false);
     }
   };
 
@@ -854,15 +924,51 @@ export default function SeatMap() {
                 <>
                   <p className="text-sm font-semibold capitalize text-slate-950">Currently {selectedSeat.status.replace('_', ' ')}</p>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    {selectedSeatIsOwnReservation
+                    {user?.role === 'admin'
+                      ? 'Review the active reservation before releasing this seat.'
+                      : selectedSeatIsOwnReservation
                       ? 'This is your active reservation. You cannot report your own seat.'
                       : user?.role === 'student' && selectedSeat.status === 'occupied'
                         ? 'If this seat appears vacant in person, report it so the reservation holder can respond.'
                         : 'This seat cannot be selected right now.'}
                   </p>
+                  {user?.role === 'admin' && ['pending', 'pending_entry', 'occupied', 'on_break'].includes(selectedSeat.status) && (
+                    <div className="ui-soft-panel mt-4 p-4">
+                      <p className="ui-label">Active reservation</p>
+                      {adminReservationLoading ? (
+                        <div className="mt-3 space-y-2" aria-label="Loading active reservation">
+                          <div className="loading-skeleton h-4 w-2/3 rounded" />
+                          <div className="loading-skeleton h-4 w-1/2 rounded" />
+                        </div>
+                      ) : adminReservationError ? (
+                        <p className="mt-2 text-sm leading-6 text-red-700">{adminReservationError}</p>
+                      ) : adminReservation ? (
+                        <div className="mt-2 text-sm leading-6 text-slate-700">
+                          <p className="font-semibold text-slate-950">{adminReservation.user?.name || 'Unknown student'}</p>
+                          <p>{adminReservation.user?.adduIdLast4 ? `ID ending ${adminReservation.user.adduIdLast4}` : 'Student ID suffix unavailable'}</p>
+                          <p className="capitalize">Reservation status: {adminReservation.status.replace('_', ' ')}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
                   <div className="mt-6 flex justify-end gap-2">
                     <button type="button" onClick={() => setSelectedSeat(null)} className="ui-button-secondary">Close</button>
                     {user?.role === 'student' && selectedSeat.status === 'occupied' && !selectedSeatIsOwnReservation && <button type="button" onClick={() => setFlagSeatId(selectedSeat.seatId)} className="ui-button-danger">Report ghost seat</button>}
+                    {user?.role === 'admin' && adminReservation && (
+                      <button
+                        type="button"
+                        onClick={() => setAdminVoidTarget({
+                          reservationId: adminReservation.reservationId,
+                          seatId: selectedSeat.seatId,
+                          seatLabel: selectedSeatLabel,
+                          studentName: adminReservation.user?.name,
+                        })}
+                        className="ui-button-danger bg-red-700 text-white hover:bg-red-800"
+                      >
+                        <Trash size={18} weight="bold" />
+                        Void reservation
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -880,6 +986,18 @@ export default function SeatMap() {
         busy={flagging}
         onConfirm={() => handleFlagSeat(flagSeatId)}
         onClose={() => setFlagSeatId(null)}
+      />
+      <AppDialog
+        open={Boolean(adminVoidTarget)}
+        tone="danger"
+        title="Void this reservation?"
+        description={adminVoidTarget ? `This will end ${adminVoidTarget.studentName || 'the student'}'s reservation for ${adminVoidTarget.seatLabel} and make the seat available again.` : ''}
+        confirmLabel="Void reservation"
+        cancelLabel="Keep reservation"
+        busy={voidingReservation}
+        dismissible={!voidingReservation}
+        onConfirm={handleAdminVoid}
+        onClose={() => setAdminVoidTarget(null)}
       />
       <AppDialog
         open={Boolean(notice)}

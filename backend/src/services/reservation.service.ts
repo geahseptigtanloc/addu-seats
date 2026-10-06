@@ -442,6 +442,14 @@ export async function getReservationDetails(reservationId: string): Promise<Rese
   return toReservationDetails(reservation);
 }
 
+export async function getActiveReservationForSeat(seatId: string): Promise<ReservationDetails> {
+  const reservation = await reservationRepository.findActiveDetailsBySeat(seatId);
+  if (!reservation) {
+    throw new NotFoundError('No active reservation was found for this seat');
+  }
+  return toReservationDetails(reservation);
+}
+
 const RESOLUTION_BY_STATUS: Record<seatFlagRepository.ResolvedSeatFlagStatus, SeatFlagResolution> =
   {
     REVERIFIED: 'reverified',
