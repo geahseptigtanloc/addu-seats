@@ -14,6 +14,8 @@ import FrontDeskView from './pages/FrontDeskView.jsx';
 import VerifyPage from './pages/VerifyPage.jsx';
 import SeatReturn from './pages/SeatReturn.jsx';
 import QrReservation from './pages/QrReservation.jsx';
+import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
+import TermsOfService from './pages/TermsOfService.jsx';
 
 function AppRoutes() {
   return (
@@ -22,6 +24,11 @@ function AppRoutes() {
       <Route path="/auth/callback" element={<Login />} />
 
       <Route path="/" element={<BuildingFloorSelector />} />
+
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
 
       <Route path="/map/:building/:floor" element={<SeatMap />} />
       <Route path="/scan" element={<QrReservation />} />

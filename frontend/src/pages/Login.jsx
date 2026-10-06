@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Buildings, MapTrifold } from '@phosphor-icons/react';
 import { apiClient, getGoogleAuthUrl } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -115,6 +115,12 @@ export default function Login() {
               Continue with Google
             </button>
             <p className="mt-4 text-center text-xs leading-5 text-slate-500">Local testing accepts any Google account. Production access remains restricted to authorized university accounts.</p>
+            <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+              Review our{' '}
+              <Link to="/terms" className="font-semibold text-[#063a64] underline decoration-slate-300 underline-offset-2 hover:decoration-[#063a64]">Terms of Service</Link>
+              {' '}and{' '}
+              <Link to="/privacy" className="font-semibold text-[#063a64] underline decoration-slate-300 underline-offset-2 hover:decoration-[#063a64]">Privacy Policy</Link>.
+            </p>
           </div>
         </div>
       </section>

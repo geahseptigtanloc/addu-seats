@@ -59,6 +59,9 @@ Copy from `backend/.env.example` and fill in:
 | `SESSION_SECRET` | Random string used for the temporary OAuth redirect session |
 | `PORT` | Backend port (default: 3001) |
 | `CORS_ORIGIN` | Frontend origin for CORS and OAuth redirect (default: `http://localhost:5173`) |
+| `ALLOW_ANY_GOOGLE_EMAIL` | Local-only login override; keep `false` in production |
+| `SCHOOL_EMAIL_DOMAIN` | School email domain allowed to sign in |
+| `STAFF_EMAILS` | Comma-separated email addresses that receive the admin role |
 
 ### Frontend (`frontend/.env`)
 
@@ -130,6 +133,15 @@ cd backend
 npm run sync:seats
 npm run seed
 ```
+
+Generate reservation and presence-verification QR images after changing the seat map:
+
+```bash
+cd backend
+npx ts-node --transpile-only scripts/generate-seat-qr-codes.ts
+```
+
+Reservation codes are written to `backend/qr-codes/`; verification codes are written to its `reverify/` subfolder.
 
 ## Main API Endpoints
 

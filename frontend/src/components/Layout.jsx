@@ -103,9 +103,13 @@ export default function Layout({ children }) {
 
       <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">{children}</main>
       <footer className="border-t border-slate-200/80 bg-white/70 px-4 py-4 text-xs text-slate-500">
-        <div className="mx-auto flex max-w-[1440px] flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <span>Ateneo de Davao University Library Services</span>
-          <span className="font-medium text-slate-600">Mapped plans: Gisbert and Miguel Pro</span>
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 font-semibold text-slate-600" aria-label="Legal information">
+            <Link to="/privacy" className="hover:text-[#063a64]">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-[#063a64]">Terms of Service</Link>
+            <a href="https://library.addu.edu.ph/contact/" target="_blank" rel="noreferrer" className="hover:text-[#063a64]">Contact</a>
+          </nav>
         </div>
       </footer>
       <AppDialog

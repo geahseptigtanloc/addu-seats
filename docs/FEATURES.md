@@ -26,6 +26,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 ### Guest
 
 - Browse the building and floor selector without login.
+- Open the public Privacy Policy and Terms of Service from the shared footer or sign-in page.
 - Open all four Gisbert floor maps and the Miguel Pro Main Area, Research Nook, and Workspace Room maps.
 - Inspect seat availability in frontend preview mode when the API is offline.
 - Cannot create, cancel, check out, flag, or manage reservations.
@@ -118,7 +119,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 | Foundation, schema, auth, environment, and frontend API wiring | Implemented |
 | Public map browsing and reservation lifecycle | QR-first reservation flow implemented; production physical QR provisioning and printing remain pending |
 | Front-desk entry verification, break timer, cooldown, and flagging | Live authenticated workflow is implemented, including persistent admin report details and confirmed ghost-seat voiding; production physical-QR token provisioning still remains |
-| First-login terms acceptance | Not implemented |
+| Public legal pages and first-login terms acceptance | Privacy Policy and Terms of Service pages implemented; recorded first-login acceptance remains pending |
 | Admin seat disabling and exceptional release override | Not implemented |
 | Occupancy logging and admin analytics | Implemented: live occupancy logs and seven admin-only reports cover utilization, peak hours, outcomes, no-shows, session length, break behavior, and location comparison; Miguel Pro area-level grouping remains unavailable because the backend groups by building and floor |
 | SARIMA and GBDT/XGBoost forecasting | Not implemented |

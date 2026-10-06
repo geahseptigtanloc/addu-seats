@@ -182,15 +182,30 @@ export async function cancelReservation(
   }
 
   const [updated, updatedSeat] = await prisma.$transaction(async (tx) => {
-    const res = await tx.reservation.update({
-      where: { id: reservationId },
+    // Claim the pending reservation first. A concurrent front-desk approval
+    // uses the same conditional claim, so exactly one action can succeed.
+    const cancelled = await tx.reservation.updateMany({
+      where: { id: reservationId, userId, status: ReservationStatus.PENDING },
       data: { status: ReservationStatus.CANCELLED, endedAt: new Date() },
     });
-    const seat = await tx.seat.update({
-      where: { id: reservation.seatId },
+
+    if (cancelled.count !== 1) {
+      throw new ConflictError('Only a pending reservation can be cancelled');
+    }
+
+    const released = await tx.seat.updateMany({
+      where: { id: reservation.seatId, status: SeatStatus.PENDING },
       data: { status: SeatStatus.AVAILABLE },
     });
-    return [res, seat] as const;
+
+    if (released.count !== 1) {
+      throw new ConflictError('This seat is no longer pending entry');
+    }
+
+    return Promise.all([
+      tx.reservation.findUniqueOrThrow({ where: { id: reservationId } }),
+      tx.seat.findUniqueOrThrow({ where: { id: reservation.seatId } }),
+    ]);
   });
 
   // Best-effort cleanup, the key would self-expire anyway just cleaner not to leave it.
@@ -234,23 +249,36 @@ export async function approveReservation(reservationId: string): Promise<Reserva
     throw new ConflictError('This seat is no longer available for entry');
   }
 
-  // Both updates succeed or fail together — a CONFIRMED reservation with
-  // a seat still marked AVAILABLE would be a real data-integrity bug.
-  // Composed directly here (not via the single-model repositories) since
-  // a two-model transaction doesn't belong to either one alone.
+  // Both updates succeed or fail together. The conditional reservation
+  // claim serializes approval against cancellation, so both requests can no
+  // longer report success for the same pending reservation.
   const [updatedReservation, updatedSeat] = await prisma.$transaction(async (tx) => {
-    const res = await tx.reservation.update({
-      where: { id: reservationId },
+    const approved = await tx.reservation.updateMany({
+      where: { id: reservationId, status: ReservationStatus.PENDING },
       data: { status: ReservationStatus.CONFIRMED, confirmedAt: new Date() },
     });
-    const seat = await tx.seat.update({
-      where: { id: reservation.seatId },
+
+    if (approved.count !== 1) {
+      throw new ConflictError('Only a pending reservation can be approved');
+    }
+
+    const occupied = await tx.seat.updateMany({
+      where: { id: reservation.seatId, status: SeatStatus.PENDING },
       data: { status: SeatStatus.OCCUPIED },
     });
+
+    if (occupied.count !== 1) {
+      throw new ConflictError('This seat is no longer available for entry');
+    }
+
     await tx.occupancyLog.create({
       data: { reservationId, eventType: OccupancyEventType.OCCUPIED },
     });
-    return [res, seat] as const;
+
+    return Promise.all([
+      tx.reservation.findUniqueOrThrow({ where: { id: reservationId } }),
+      tx.seat.findUniqueOrThrow({ where: { id: reservation.seatId } }),
+    ]);
   });
 
   try {
