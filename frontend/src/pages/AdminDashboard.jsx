@@ -16,6 +16,8 @@ const DATE_RANGES = [
   { value: 90, label: 'Last 90 days' },
 ];
 
+const GHOST_REPORT_PAGE_SIZE = 5;
+
 const GISBERT_AREAS = [1, 2, 3, 4].map((floor) => ({
   id: String(floor),
   label: `Floor ${floor}`,
@@ -91,6 +93,7 @@ export default function AdminDashboard() {
   const [ghostReports, setGhostReports] = useState([]);
   const [ghostReportsLoading, setGhostReportsLoading] = useState(true);
   const [ghostReportsError, setGhostReportsError] = useState('');
+  const [visibleGhostReportCount, setVisibleGhostReportCount] = useState(GHOST_REPORT_PAGE_SIZE);
   const [selectedGhostReport, setSelectedGhostReport] = useState(null);
   const [ghostResolutionAction, setGhostResolutionAction] = useState('confirm');
   const [voidingGhostReport, setVoidingGhostReport] = useState(false);
@@ -188,6 +191,12 @@ export default function AdminDashboard() {
   }, [loadGhostReports]);
 
   useEffect(() => {
+    if (ghostReports.length <= GHOST_REPORT_PAGE_SIZE) {
+      setVisibleGhostReportCount(GHOST_REPORT_PAGE_SIZE);
+    }
+  }, [ghostReports.length]);
+
+  useEffect(() => {
     const token = getToken();
     if (!token) return undefined;
 
@@ -198,7 +207,7 @@ export default function AdminDashboard() {
         [
           normalizeGhostReport(report),
           ...current.filter((item) => (item.flagId || item.reservationId) !== (report.flagId || report.reservationId)),
-        ].slice(0, 20),
+        ],
       );
     });
     socket.on('seat_flag_resolved_admin_notice', ({ flagId, reservationId, resolution, resolvedAt }) => {
@@ -247,6 +256,9 @@ export default function AdminDashboard() {
   }, [analytics.peakHours]);
 
   const activeGhostReportCount = ghostReports.filter((report) => report.status === 'ACTIVE').length;
+  const visibleGhostReports = ghostReports.slice(0, visibleGhostReportCount);
+  const hiddenGhostReportCount = Math.max(0, ghostReports.length - visibleGhostReportCount);
+  const nextGhostReportBatchSize = Math.min(GHOST_REPORT_PAGE_SIZE, hiddenGhostReportCount);
 
   const ghostReportStatus = ghostReportsError
     ? 'Status unavailable'
@@ -317,7 +329,7 @@ export default function AdminDashboard() {
             </div>
           ) : ghostReports.length ? (
             <div className="space-y-3">
-              {ghostReports.map((report) => {
+              {visibleGhostReports.map((report) => {
                 const isActive = report.status === 'ACTIVE';
                 const reporterName = report.flaggedBy?.name;
                 const reporterId = report.flaggedBy?.studentIdLast4;
@@ -362,6 +374,33 @@ export default function AdminDashboard() {
                   </div>
                 );
               })}
+              {ghostReports.length > GHOST_REPORT_PAGE_SIZE && (
+                <div className="flex flex-col justify-between gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center">
+                  <p className="text-xs font-medium text-slate-500" aria-live="polite">
+                    Showing {visibleGhostReports.length} of {ghostReports.length} reports
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {visibleGhostReportCount > GHOST_REPORT_PAGE_SIZE && (
+                      <button
+                        type="button"
+                        onClick={() => setVisibleGhostReportCount(GHOST_REPORT_PAGE_SIZE)}
+                        className="ui-button-secondary py-2 text-xs"
+                      >
+                        Show fewer
+                      </button>
+                    )}
+                    {hiddenGhostReportCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setVisibleGhostReportCount((count) => count + GHOST_REPORT_PAGE_SIZE)}
+                        className="ui-button-primary py-2 text-xs"
+                      >
+                        View {nextGhostReportBatchSize} more
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : ghostReportsError ? null : (
             <div className="rounded-[8px] border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-sm leading-6 text-slate-600">New reports appear here immediately. The reservation holder is notified and must scan the designated physical QR to retain the reservation.</div>

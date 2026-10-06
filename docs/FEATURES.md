@@ -64,6 +64,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Sign in through Google OAuth from an address configured in `STAFF_EMAILS`.
 - Review live reservations and approve entry only after matching the receipt code and checking the student's name and university ID.
 - Receive new ghost-seat reports as a toast and notification-bell badge from any administrator page.
+- Review ghost-seat reports in a compact newest-first list that reveals five more records at a time.
 - Open a pending, occupied, or on-break seat from a floor map and void its active reservation, immediately releasing the seat.
 - View the responsive occupancy dashboard and open individual floor maps.
 - Switch dashboard analytics between Gisbert Library and Miguel Pro Learning Commons and review active ghost-seat reports with the exact seat label, building, floor, and reservation holder.
