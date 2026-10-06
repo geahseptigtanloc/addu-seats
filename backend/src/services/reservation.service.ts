@@ -22,6 +22,8 @@ import {
   notifySeatFlagged,
   notifyAdminsSeatFlagResolved,
   notifyAdminsSeatFlagged,
+  notifyAdminsReservationPending,
+  notifyAdminsReservationPendingResolved,
   notifyReservationEvicted,
   type SeatFlagResolution,
 } from '../config/socket';
@@ -151,6 +153,24 @@ export async function createReservation(
     logger.warn({ err, reservationId: reservation.id }, 'Failed to broadcast pending seat status');
   }
 
+  try {
+    notifyAdminsReservationPending({
+      reservationId: reservation.id,
+      seatId: seat.id,
+      seatLabel: getSeatLabel(seat),
+      building: seat.building,
+      floor: seat.floor,
+      studentName: student.name,
+      studentIdLast4: student.studentIdLast4,
+      createdAt: reservation.createdAt.toISOString(),
+      expiresAt: new Date(
+        reservation.createdAt.getTime() + ENTRY_TIMER_SECONDS * 1000,
+      ).toISOString(),
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId: reservation.id }, 'Failed to notify admins of reservation');
+  }
+
   return {
     reservationId: reservation.id,
     status: reservation.status,
@@ -224,6 +244,8 @@ export async function cancelReservation(
     logger.warn({ err, reservationId }, 'Failed to broadcast cancelled seat status');
   }
 
+  notifyPendingReservationResolved(reservationId);
+
   return updated;
 }
 // Front desk staff visually check the student's name/ID against the
@@ -296,6 +318,8 @@ export async function approveReservation(reservationId: string): Promise<Reserva
     logger.warn({ err, reservationId }, 'Failed to broadcast seat status update');
   }
 
+  notifyPendingReservationResolved(reservationId);
+
   return updatedReservation;
 }
 
@@ -323,6 +347,9 @@ export interface PendingQueueItem {
   building: string;
   floor: number;
   currentQrToken: string;
+  seatLabel: string;
+  createdAt: Date;
+  expiresAt: Date;
   remainingSeconds: number;
 }
 
@@ -338,6 +365,9 @@ export async function getPendingQueue(): Promise<PendingQueueItem[]> {
       building: r.seat.building,
       floor: r.seat.floor,
       currentQrToken: r.seat.currentQrToken,
+      seatLabel: getSeatLabel(r.seat),
+      createdAt: r.createdAt,
+      expiresAt: new Date(r.createdAt.getTime() + ENTRY_TIMER_SECONDS * 1000),
       remainingSeconds: await getRemainingSeconds(r.id, r.createdAt),
     })),
   );
@@ -474,6 +504,14 @@ function notifyFlagResolved(flag: SeatFlag): void {
     });
   } catch (err) {
     logger.warn({ err, flagId: flag.id }, 'Failed to notify admins of flag resolution');
+  }
+}
+
+function notifyPendingReservationResolved(reservationId: string): void {
+  try {
+    notifyAdminsReservationPendingResolved({ reservationId });
+  } catch (err) {
+    logger.warn({ err, reservationId }, 'Failed to clear pending reservation notification');
   }
 }
 
@@ -657,6 +695,10 @@ async function endReservationAsStaff(
     });
   } catch (err) {
     logger.warn({ err, reservationId: reservation.id }, 'Failed to broadcast seat status update');
+  }
+
+  if (reservation.status === ReservationStatus.PENDING) {
+    notifyPendingReservationResolved(reservation.id);
   }
 
   return updated;
@@ -1225,6 +1267,8 @@ export async function expireEntryTimers(): Promise<void> {
         'Failed to broadcast expired pending seat status',
       );
     }
+
+    notifyPendingReservationResolved(reservation.id);
   }
 
   if (count > 0) {

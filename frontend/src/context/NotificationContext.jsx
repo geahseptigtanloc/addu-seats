@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Bell, WarningCircle, X } from '@phosphor-icons/react';
+import { ArrowRight, Bell, ClockCountdown, WarningCircle, X } from '@phosphor-icons/react';
 import { io } from 'socket.io-client';
 import AppDialog from '../components/AppDialog.jsx';
 import { API_URL, apiClient, getToken } from '../api/client.js';
@@ -39,6 +39,24 @@ function adminNotification(report, unread) {
     seatLabel: report.seatLabel,
     createdAt: report.reportedAt || new Date().toISOString(),
     href: '/admin#ghost-reports',
+    kind: 'flag',
+    unread,
+  };
+}
+
+function pendingReservationNotification(reservation, unread) {
+  const reservationId = reservation.reservationId || reservation.id;
+  const seatLabel = reservation.seatLabel || reservation.seat?.label || 'A seat';
+  const location = `${String(reservation.building || reservation.seat?.building || 'the library').replace('_', ' ')}${reservation.floor || reservation.seat?.floor ? `, Floor ${reservation.floor || reservation.seat?.floor}` : ''}`;
+  return {
+    id: `pending:${reservationId}`,
+    reservationId,
+    title: 'New seat reservation',
+    message: `${reservation.studentName || reservation.user?.name || 'A student'} reserved ${seatLabel} in ${location}. Entry approval is pending.`,
+    seatLabel,
+    createdAt: reservation.createdAt || new Date().toISOString(),
+    href: '/frontdesk',
+    kind: 'reservation',
     unread,
   };
 }
@@ -53,6 +71,7 @@ function studentNotification(flag, seat, reservationId, unread) {
     seatLabel,
     createdAt: flag.flaggedAt || new Date().toISOString(),
     href: '/receipt',
+    kind: 'flag',
     unread,
   };
 }
@@ -83,16 +102,34 @@ export function NotificationProvider({ children }) {
     seenIdsRef.current = readSeenIds(user.id);
 
     if (user.role === 'admin') {
-      apiClient('/api/reservations/flagged', { signal: controller.signal })
-        .then((reports) => {
-          if (!Array.isArray(reports)) return;
-          setNotifications((current) => reports.reduce(
-            (next, report) => upsertNotification(next, adminNotification(
-              report,
-              !seenIdsRef.current.has(report.flagId || report.reservationId),
-            )),
-            current,
-          ));
+      Promise.all([
+        apiClient('/api/reservations/flagged', { signal: controller.signal }),
+        apiClient('/api/reservations/pending', { signal: controller.signal }),
+      ])
+        .then(([reports, pendingReservations]) => {
+          setNotifications((current) => {
+            let next = current;
+            if (Array.isArray(reports)) {
+              next = reports.reduce(
+                (items, report) => upsertNotification(items, adminNotification(
+                  report,
+                  !seenIdsRef.current.has(report.flagId || report.reservationId),
+                )),
+                next,
+              );
+            }
+            if (Array.isArray(pendingReservations)) {
+              next = pendingReservations.reduce(
+                (items, reservation) => {
+                  const notification = pendingReservationNotification(reservation, false);
+                  notification.unread = !seenIdsRef.current.has(notification.id);
+                  return upsertNotification(items, notification);
+                },
+                next,
+              );
+            }
+            return next;
+          });
         })
         .catch((error) => {
           if (error.name !== 'AbortError') setNotifications([]);
@@ -135,7 +172,26 @@ export function NotificationProvider({ children }) {
       if (user.role !== 'admin') return;
       const notification = adminNotification(payload, true);
       setNotifications((current) => upsertNotification(current, notification));
-      setAdminToast(payload);
+      setAdminToast({ type: 'flag', payload });
+    });
+
+    socket.on('reservation_pending_admin_notice', (payload) => {
+      if (user.role !== 'admin') return;
+      const notification = pendingReservationNotification(payload, true);
+      setNotifications((current) => upsertNotification(current, notification));
+      setAdminToast({ type: 'reservation', payload });
+    });
+
+    socket.on('reservation_pending_resolved_admin_notice', ({ reservationId }) => {
+      if (user.role !== 'admin') return;
+      setNotifications((current) => current.filter((item) => (
+        item.id !== `pending:${reservationId}`
+      )));
+      setAdminToast((current) => (
+        current?.type === 'reservation' && current.payload?.reservationId === reservationId
+          ? null
+          : current
+      ));
     });
 
     socket.on('seat_flag_resolved_admin_notice', ({ flagId, reservationId }) => {
@@ -202,25 +258,29 @@ export function NotificationProvider({ children }) {
       />
 
       {adminToast && (
-        <div className="fixed right-4 top-20 z-[70] w-[calc(100%-2rem)] max-w-sm rounded-[8px] border border-red-200 bg-white p-4 shadow-[0_22px_64px_rgba(127,29,29,0.22)]" role="status" aria-live="polite">
+        <div className={`fixed right-4 top-20 z-[70] w-[calc(100%-2rem)] max-w-sm rounded-[8px] border bg-white p-4 shadow-[0_22px_64px_rgba(15,23,42,0.22)] ${adminToast.type === 'reservation' ? 'border-blue-200' : 'border-red-200'}`} role="status" aria-live="polite">
           <div className="flex items-start gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-red-100 text-red-700">
-              <WarningCircle size={22} weight="fill" />
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[8px] ${adminToast.type === 'reservation' ? 'bg-blue-100 text-[#063a64]' : 'bg-red-100 text-red-700'}`}>
+              {adminToast.type === 'reservation'
+                ? <ClockCountdown size={22} weight="fill" />
+                : <WarningCircle size={22} weight="fill" />}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold text-slate-950">New ghost-seat report</p>
+              <p className="font-semibold text-slate-950">{adminToast.type === 'reservation' ? 'New seat reservation' : 'New ghost-seat report'}</p>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                {adminToast.seatLabel || 'A seat'} was reported vacant in {String(adminToast.building || 'the library').replace('_', ' ')}, Floor {adminToast.floor}{adminToast.studentName ? `, reserved by ${adminToast.studentName}` : ''}.
+                {adminToast.type === 'reservation'
+                  ? `${adminToast.payload.studentName || 'A student'} reserved ${adminToast.payload.seatLabel || 'a seat'} in ${String(adminToast.payload.building || 'the library').replace('_', ' ')}, Floor ${adminToast.payload.floor}. Entry approval is pending.`
+                  : `${adminToast.payload.seatLabel || 'A seat'} was reported vacant in ${String(adminToast.payload.building || 'the library').replace('_', ' ')}, Floor ${adminToast.payload.floor}${adminToast.payload.studentName ? `, reserved by ${adminToast.payload.studentName}` : ''}.`}
               </p>
               <button
                 type="button"
                 onClick={() => {
                   setAdminToast(null);
-                  navigate('/admin#ghost-reports');
+                  navigate(adminToast.type === 'reservation' ? '/frontdesk' : '/admin#ghost-reports');
                 }}
-                className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-red-700 hover:text-red-900"
+                className={`mt-3 inline-flex items-center gap-2 text-sm font-semibold ${adminToast.type === 'reservation' ? 'text-[#063a64] hover:text-[#032946]' : 'text-red-700 hover:text-red-900'}`}
               >
-                Review report <ArrowRight size={16} weight="bold" />
+                {adminToast.type === 'reservation' ? 'Open front desk' : 'Review report'} <ArrowRight size={16} weight="bold" />
               </button>
             </div>
             <button type="button" onClick={() => setAdminToast(null)} className="ui-icon-button h-8 w-8 border-transparent" aria-label="Dismiss notification">
@@ -280,7 +340,7 @@ export function NotificationBell() {
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <div>
               <p className="font-semibold text-slate-950">Seat notifications</p>
-              <p className="mt-0.5 text-xs text-slate-500">Active reports that need attention</p>
+              <p className="mt-0.5 text-xs text-slate-500">Pending reservations and active reports</p>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="ui-icon-button h-8 w-8 border-transparent" aria-label="Close notifications">
               <X size={16} weight="bold" />
@@ -299,8 +359,10 @@ export function NotificationBell() {
                   }}
                   className="flex w-full items-start gap-3 px-4 py-4 text-left hover:bg-slate-50"
                 >
-                  <span className="relative mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-red-50 text-red-700">
-                    <WarningCircle size={20} weight="duotone" />
+                  <span className={`relative mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-[8px] ${notification.kind === 'reservation' ? 'bg-blue-50 text-[#063a64]' : 'bg-red-50 text-red-700'}`}>
+                    {notification.kind === 'reservation'
+                      ? <ClockCountdown size={20} weight="duotone" />
+                      : <WarningCircle size={20} weight="duotone" />}
                     {notification.unread && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-600" />}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -315,7 +377,7 @@ export function NotificationBell() {
             <div className="px-5 py-8 text-center">
               <Bell size={24} weight="duotone" className="mx-auto text-slate-400" />
               <p className="mt-3 text-sm font-semibold text-slate-800">No active seat alerts</p>
-              <p className="mt-1 text-xs text-slate-500">New flag reports will appear here.</p>
+              <p className="mt-1 text-xs text-slate-500">New reservations and flag reports will appear here.</p>
             </div>
           )}
         </div>

@@ -16,7 +16,7 @@ export interface PublicSeat {
   status: SeatStatus;
 }
 
-export function getSeatLabel(seat: Seat): string {
+export function getSeatLabel(seat: Pick<Seat, 'currentQrToken' | 'id'>): string {
   return seat.currentQrToken.startsWith('seat:')
     ? seat.currentQrToken.slice('seat:'.length).toUpperCase()
     : seat.id;

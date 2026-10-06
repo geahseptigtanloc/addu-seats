@@ -100,6 +100,7 @@ export function normalizePendingReservation(item) {
   const label = seatLabelFromQrToken(currentQrToken) || item.seatId;
   return {
     reservationId: item.reservationId,
+    createdAt: item.createdAt,
     status: 'pending_entry',
     entryDeadline: new Date(Date.now() + Math.max(0, item.remainingSeconds || 0) * 1000).toISOString(),
     user: normalizeUser({ name: item.studentName, studentIdLast4: item.studentIdLast4 }),
