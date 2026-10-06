@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Buildings, CalendarBlank, ChartBar, CheckCircle, Clock, Coffee, LockKey, MapTrifold, Monitor, TrendUp, WarningCircle } from '@phosphor-icons/react';
+import { ArrowRight, Buildings, ChartBar, CheckCircle, Clock, Coffee, MapTrifold, Monitor, TrendUp, WarningCircle } from '@phosphor-icons/react';
 import { io } from 'socket.io-client';
 import AppDialog from '../components/AppDialog.jsx';
 import Layout from '../components/Layout.jsx';
@@ -43,6 +43,7 @@ const LIBRARIES = {
 const EMPTY_ANALYTICS = {
   utilization: { overallUtilizationPercent: 0, seats: [] },
   peakHours: { hours: [] },
+  forecast: { days: [], hasObservedData: false },
   outcomes: { totalCount: 0, outcomes: [] },
   noShowRate: { totalReservations: 0, cancelledCount: 0, noShowRatePercent: 0 },
   sessionLength: { sessionCount: 0, averageSessionMinutes: 0 },
@@ -120,11 +121,14 @@ export default function AdminDashboard() {
       setLoadError('');
       try {
         const query = params.toString();
-        const [utilization, peakHours, outcomes, noShowRate, sessionLength, breakStats, locationComparison] = await Promise.all([
+        const [utilization, peakHours, forecast, outcomes, noShowRate, sessionLength, breakStats, locationComparison] = await Promise.all([
           apiClient(`/api/analytics/utilization?${query}`, {
             signal: controller.signal,
           }),
           apiClient(`/api/analytics/peak-hours?${query}`, {
+            signal: controller.signal,
+          }),
+          apiClient(`/api/analytics/forecast?${query}`, {
             signal: controller.signal,
           }),
           apiClient(`/api/analytics/outcomes?${query}`, {
@@ -146,6 +150,7 @@ export default function AdminDashboard() {
         setAnalytics({
           utilization,
           peakHours,
+          forecast,
           outcomes,
           noShowRate,
           sessionLength,
@@ -508,23 +513,9 @@ export default function AdminDashboard() {
         </article>
 
         <article className="ui-panel overflow-hidden xl:col-span-2">
-          <PanelHeader icon={LockKey} title="Predictive occupancy" description="Research-target forecasting readiness" />
+          <PanelHeader icon={TrendUp} title="Predictive occupancy" description="Seven-day baseline from the selected period's observed weekday and hourly patterns" />
           <div className="p-5">
-            <div className="rounded-[8px] border border-slate-200 bg-[#f5f9fc] p-5">
-              <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-white text-[#063a64] shadow-sm">
-                  <CalendarBlank size={22} weight="duotone" />
-                </span>
-                <div>
-                  <p className="font-semibold text-slate-950">Waiting for sufficient live data</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">Forecasting activates only after at least two weeks of continuous occupancy logs. Only live reservation data will be used.</p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <ModelNote title="SARIMA" copy="Seven-day hourly forecast with a 95% confidence interval." />
-              <ModelNote title="GBDT / XGBoost" copy="Peak-hour heatmap using calendar, building, and floor context." />
-            </div>
+            <OccupancyForecast forecast={analytics.forecast} loading={loading} />
           </div>
         </article>
       </section>
@@ -724,13 +715,108 @@ function DataPoint({ label, value, loading = false }) {
   );
 }
 
-function ModelNote({ title, copy }) {
+function OccupancyForecast({ forecast, loading }) {
+  if (loading) return <div className="h-80 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading occupancy forecast" />;
+
+  const days = forecast?.days || [];
+  const points = days.flatMap((day) => day.hours.map((hour) => ({ ...hour, date: day.date })));
+  if (!days.length || !forecast?.hasObservedData || !points.some((point) => point.sampleCount > 0)) {
+    return <EmptyState copy="No occupied intervals have been recorded for this selection yet. The seven-day forecast will update automatically after the first live occupancy record." />;
+  }
+
+  const peak = points.reduce((highest, point) => (
+    point.predictedUtilizationPercent > highest.predictedUtilizationPercent ? point : highest
+  ), points[0]);
+  const average = points.reduce((sum, point) => sum + point.predictedUtilizationPercent, 0) / points.length;
+  const observedCells = points.filter((point) => point.sampleCount > 0).length;
+
   return (
-    <div>
-      <p className="text-sm font-semibold text-slate-950">{title}</p>
-      <p className="mt-1 text-sm leading-6 text-slate-600">{copy}</p>
+    <div className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <ForecastMetric label="Forecast average" value={`${formatNumber(average)}%`} />
+        <ForecastMetric label="Forecast peak" value={`${formatNumber(peak.predictedUtilizationPercent)}%`} detail={`${formatForecastDate(peak.date)}, ${formatHour(peak.hour)}`} />
+        <ForecastMetric label="Observed coverage" value={`${observedCells} / ${points.length}`} detail="forecast hour cells" />
+      </div>
+
+      <div>
+        <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-950">Forecast heat map</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Darker cells indicate higher predicted utilization. Times are shown in UTC.</p>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500" aria-label="Heat map legend">
+            <span>Lower</span>
+            {[0, 25, 50, 75, 100].map((value) => (
+              <span key={value} className="h-3.5 w-5 rounded-sm border border-slate-200" style={forecastCellStyle(value)} />
+            ))}
+            <span>Higher</span>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-[8px] border border-slate-200 bg-slate-50/60 p-3 pb-4">
+          <div className="min-w-[760px]">
+            <div className="grid items-end gap-1" style={{ gridTemplateColumns: '7.5rem repeat(24, minmax(1.25rem, 1fr))' }} aria-hidden="true">
+              <span />
+              {Array.from({ length: 24 }, (_, hour) => (
+                <span key={hour} className="text-center text-[9px] font-semibold text-slate-500">
+                  {hour % 3 === 0 ? String(hour).padStart(2, '0') : ''}
+                </span>
+              ))}
+            </div>
+            <div className="mt-1 space-y-1.5" role="img" aria-label="Seven-day predicted occupancy heat map">
+              {days.map((day) => (
+                <div key={day.date} className="grid items-center gap-1" style={{ gridTemplateColumns: '7.5rem repeat(24, minmax(1.25rem, 1fr))' }}>
+                  <span className="truncate pr-2 text-xs font-semibold text-slate-700">{formatForecastDate(day.date)}</span>
+                  {day.hours.map((hour) => (
+                    <span
+                      key={hour.hour}
+                      className="grid aspect-square min-h-5 place-items-center rounded-sm border border-white/60 text-[8px] font-bold"
+                      style={forecastCellStyle(hour.predictedUtilizationPercent)}
+                      title={`${formatForecastDate(day.date)}, ${formatHour(hour.hour)}: ${formatNumber(hour.predictedUtilizationPercent)}% predicted utilization from ${hour.sampleCount} observation${hour.sampleCount === 1 ? '' : 's'}`}
+                    >
+                      <span className="sr-only">{formatForecastDate(day.date)}, {formatHour(hour.hour)}: {formatNumber(hour.predictedUtilizationPercent)}%</span>
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p className="rounded-[8px] border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-950">
+        This live baseline uses real occupancy logs from the selected date range, favoring the same weekday and hour. It works as soon as records exist and becomes more representative as history grows.
+      </p>
     </div>
   );
+}
+
+function ForecastMetric({ label, value, detail }) {
+  return (
+    <div className="rounded-[8px] border border-slate-200 bg-[#f5f9fc] p-4">
+      <p className="ui-label">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
+      {detail && <p className="mt-1 text-xs text-slate-500">{detail}</p>}
+    </div>
+  );
+}
+
+function forecastCellStyle(value) {
+  const percent = Math.max(0, Math.min(100, Number(value) || 0));
+  const opacity = 0.08 + (percent / 100) * 0.84;
+  return {
+    backgroundColor: `rgba(6, 58, 100, ${opacity})`,
+    color: percent >= 48 ? '#ffffff' : '#334155',
+  };
+}
+
+function formatForecastDate(date) {
+  return new Date(`${date}T00:00:00.000Z`).toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 function EmptyState({ copy }) {

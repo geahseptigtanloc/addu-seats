@@ -67,6 +67,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Review ghost-seat reports in a compact newest-first list that reveals five more records at a time.
 - Open a pending, occupied, or on-break seat from a floor map and void its active reservation, immediately releasing the seat.
 - View the responsive occupancy dashboard and open individual floor maps.
+- View an immediate seven-day occupancy baseline and heat map calculated from the selected period's real weekday and hourly occupancy patterns.
 - Switch dashboard analytics between Gisbert Library and Miguel Pro Learning Commons and review active ghost-seat reports with the exact seat label, building, floor, and reservation holder.
 - Confirm a reported reservation as a ghost seat after verification; confirmation voids the reservation, releases the seat, and removes the active report.
 - Access role-protected admin routes.
@@ -110,7 +111,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 ## Analytics And Forecasting Targets
 
 - Record and display peak periods, frequently used areas, and session lengths for administrators.
-- Activate forecasting only after at least two weeks of continuous occupancy logs are available.
+- Show a historical weekday/hour baseline as soon as occupancy logs are available; accuracy and coverage improve as more history is collected.
 - Use SARIMA as the primary model for hourly occupancy forecasts up to seven days ahead, including a 95% confidence interval.
 - Select SARIMA parameters through grid search and AICc.
 - Use GBDT/XGBoost as a secondary model with inputs such as day of week, academic-calendar period, floor, and building.
@@ -126,7 +127,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 | Public legal pages and first-login terms acceptance | Privacy Policy and Terms of Service pages implemented; recorded first-login acceptance remains pending |
 | Admin seat disabling and exceptional release override | Not implemented |
 | Occupancy logging and admin analytics | Implemented: live occupancy logs and seven admin-only reports cover utilization, peak hours, outcomes, no-shows, session length, break behavior, and location comparison; Miguel Pro area-level grouping remains unavailable because the backend groups by building and floor |
-| SARIMA and GBDT/XGBoost forecasting | Not implemented |
+| Occupancy forecasting | Immediate seven-day historical weekday/hour baseline and admin heat map implemented; SARIMA and GBDT/XGBoost research models remain pending |
 | Formal functional, concurrency, and SUS evaluation | Pending |
 
 ## Non-Regression Checklist
