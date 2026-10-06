@@ -52,7 +52,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 ### Staff
 
 - Receive the staff role from configured `STAFF_EMAILS` during Google login.
-- View the real-time pending-entry queue.
+- View the real-time pending-entry queue, which updates immediately when a reservation is created, handled, or expires without requiring a page refresh.
 - See student name, ID suffix, seat location, and entry countdown.
 - Approve or reject entry from the queue.
 - Open an authenticated reservation verification URL and approve or reject the reservation.

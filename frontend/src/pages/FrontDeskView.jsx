@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
 import Layout from '../components/Layout.jsx';
-import { apiClient } from '../api/client.js';
+import { API_URL, apiClient, getToken } from '../api/client.js';
 import { getReceiptCode, normalizePendingReservation } from '../api/normalizers.js';
 import { CheckCircle, ClockCountdown, IdentificationCard, X } from '@phosphor-icons/react';
 import AppDialog from '../components/AppDialog.jsx';
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_URL;
 
 function getCountdown(deadline) {
   if (!deadline) return '';
@@ -48,9 +51,17 @@ export default function FrontDeskView() {
     fetchQueue();
     const pollInterval = setInterval(fetchQueue, 10000);
     const tickInterval = setInterval(() => setTick((tick) => tick + 1), 1000);
+    const token = getToken();
+    const socket = token ? io(SOCKET_URL, { auth: { token } }) : null;
+
+    socket?.on('connect', fetchQueue);
+    socket?.on('reservation_pending_admin_notice', fetchQueue);
+    socket?.on('reservation_pending_resolved_admin_notice', fetchQueue);
+
     return () => {
       clearInterval(pollInterval);
       clearInterval(tickInterval);
+      socket?.disconnect();
     };
   }, [fetchQueue]);
 
