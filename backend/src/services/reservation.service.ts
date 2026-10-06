@@ -861,6 +861,16 @@ export async function returnFromBreak(userId: string, qrToken: string): Promise<
     throw new NotFoundError('No matching reservation found for this seat');
   }
 
+  return completeBreakReturn(userId, seat, reservation);
+}
+
+// Shared by break/return and the verify scan. Callers have already checked
+// that the seat is on break and that `reservation` is the caller's.
+async function completeBreakReturn(
+  userId: string,
+  seat: Seat,
+  reservation: Reservation,
+): Promise<Seat> {
   // Missing key (expired, or lost to the best-effort write in startBreak)
   // is treated as 0 extensions used, fails open, no cooldown applied,
   // consistent with how Redis misses are handled everywhere else here.
@@ -1175,11 +1185,17 @@ export async function flagSeat(flaggingUserId: string, seatId: string): Promise<
   }
 }
 
-// Clears a flag by proving the holder is actually still there (see
-// flagSeat). Seat.status never changed during a flag, so there's nothing
-// to transition back and no OccupancyLog entry; only the scan itself is
-// recorded, via ValidationEvent, atomically with closing the flag.
-export async function reverifyPresence(userId: string, qrToken: string): Promise<void> {
+export type PresenceOutcome = 'flag_cleared' | 'break_ended';
+
+const NOTHING_TO_VERIFY = 'Nothing to verify: your seat is not flagged and no break is running';
+
+// Handles a scan of the seat's verify QR, which proves the holder is physically
+// there. A flagged seat has its flag cleared; a seat on break has its break
+// ended. A seat can't be both (flagging needs an OCCUPIED seat, and breaks are
+// blocked while flagged), so one scan has one meaning. A flag never changed
+// Seat.status, so there is nothing to transition back; the scan is recorded
+// via ValidationEvent, atomically with closing the flag.
+export async function reverifyPresence(userId: string, qrToken: string): Promise<PresenceOutcome> {
   const seat = await seatRepository.findByQrToken(qrToken);
 
   if (!seat) {
@@ -1192,9 +1208,14 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
     throw new NotFoundError('No matching reservation found for this seat');
   }
 
+  if (seat.status === SeatStatus.OCCUPIED_ON_BREAK) {
+    await completeBreakReturn(userId, seat, reservation);
+    return 'break_ended';
+  }
+
   const closedFlag = await prisma.$transaction(async (tx) => {
     if (!(await lockConfirmedReservation(tx, reservation.id))) {
-      throw new ConflictError('No active flag to re-verify');
+      throw new ConflictError(NOTHING_TO_VERIFY);
     }
 
     // The deadline is enforced here, not left to the eviction job's next tick.
@@ -1207,9 +1228,7 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
 
     if (!closed) {
       const lapsed = await seatFlagRepository.findActiveByReservation(tx, reservation.id);
-      throw new ConflictError(
-        lapsed ? 'The verification window has expired' : 'No active flag to re-verify',
-      );
+      throw new ConflictError(lapsed ? 'The verification window has expired' : NOTHING_TO_VERIFY);
     }
 
     await tx.validationEvent.create({
@@ -1223,6 +1242,7 @@ export async function reverifyPresence(userId: string, qrToken: string): Promise
   });
 
   notifyFlagResolved(closedFlag);
+  return 'flag_cleared';
 }
 
 // Called by the entry-timer-expiry background job. Same

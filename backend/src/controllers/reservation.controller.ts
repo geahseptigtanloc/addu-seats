@@ -309,8 +309,8 @@ export async function reverifyPresence(
   }
 
   try {
-    await reservationService.reverifyPresence(req.user.id, parsed.data.qrToken);
-    res.status(204).send();
+    const outcome = await reservationService.reverifyPresence(req.user.id, parsed.data.qrToken);
+    res.json({ outcome });
   } catch (err) {
     next(err);
   }
