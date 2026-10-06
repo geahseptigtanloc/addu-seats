@@ -290,7 +290,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <section className="ui-panel mt-6 overflow-hidden" aria-label="Ghost-seat reports">
+      <section id="ghost-reports" className="ui-panel mt-6 scroll-mt-24 overflow-hidden" aria-label="Ghost-seat reports">
         <div className="flex flex-col justify-between gap-3 border-b border-slate-200 bg-white/95 px-5 py-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-red-50 text-red-700">

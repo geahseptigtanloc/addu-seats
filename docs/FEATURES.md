@@ -45,6 +45,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Receive a 30-minute break cooldown only after consuming the full 15-minute allowance; shorter breaks must not trigger it.
 - See the remaining cooldown as a live countdown before another break becomes available.
 - Receive an immediate warning when another student reports their occupied seat as a possible ghost seat. The report can be cleared only through physical-seat QR re-verification; there is no in-app confirmation shortcut.
+- Receive the warning as an immediate modal and persistent notification-bell item from any signed-in page.
 - Receive real-time reservation, break-expiry, and flagging updates.
 - First-login acceptance of the library terms of use is required by the paper and remains pending.
 
@@ -62,6 +63,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Use all staff/front-desk capabilities.
 - Sign in through Google OAuth from an address configured in `STAFF_EMAILS`.
 - Review live reservations and approve entry only after matching the receipt code and checking the student's name and university ID.
+- Receive new ghost-seat reports as a toast and notification-bell badge from any administrator page.
 - Open a pending, occupied, or on-break seat from a floor map and void its active reservation, immediately releasing the seat.
 - View the responsive occupancy dashboard and open individual floor maps.
 - Switch dashboard analytics between Gisbert Library and Miguel Pro Learning Commons and review active ghost-seat reports with the exact seat label, building, floor, and reservation holder.

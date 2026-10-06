@@ -7,6 +7,7 @@ import { ChartBar, MapTrifold, Monitor, ShieldCheck, SignOut, Ticket } from '@ph
 import { apiClient } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { NotificationBell } from '../context/NotificationContext.jsx';
 import AppDialog from './AppDialog.jsx';
 
 export default function Layout({ children }) {
@@ -45,7 +46,7 @@ export default function Layout({ children }) {
         <div className="mx-auto flex min-h-[72px] max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <Link to="/" className="flex shrink-0 items-center gap-3" aria-label="AdDU Seats home">
             <span className="grid h-10 w-10 place-items-center rounded-[8px] border border-white/25 bg-white text-base font-bold text-[#063a64] shadow-[0_10px_24px_rgba(3,41,70,0.24)]">A</span>
-            <span className="leading-none">
+            <span className="hidden leading-none min-[420px]:block">
               <span className="block text-[15px] font-semibold">AdDU Seats</span>
               <span className="mt-1 hidden text-[11px] font-medium text-blue-100/70 sm:block">University Libraries</span>
             </span>
@@ -77,6 +78,8 @@ export default function Layout({ children }) {
                   </NavLink>
                 )}
               </nav>
+
+              <NotificationBell />
 
               <div className="hidden h-8 w-px bg-white/15 lg:block" />
               <div className="hidden min-w-0 items-center gap-2 rounded-[8px] bg-white/10 px-3 py-2 lg:flex">

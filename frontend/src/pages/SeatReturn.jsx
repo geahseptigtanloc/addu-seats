@@ -5,6 +5,7 @@ import Layout from '../components/Layout.jsx';
 import { apiClient, getGoogleAuthUrl } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNotifications } from '../context/NotificationContext.jsx';
 import { storePendingReverifyToken } from '../utils/pendingReservation.js';
 
 export default function SeatReturn() {
@@ -12,6 +13,7 @@ export default function SeatReturn() {
   const [searchParams] = useSearchParams();
   const qrToken = searchParams.get('token');
   const { user, loading: authLoading } = useAuth();
+  const { clearReservationNotification } = useNotifications();
   const handledScan = useRef(false);
   const [result, setResult] = useState({ state: 'checking', message: 'Checking reservation...' });
 
@@ -56,11 +58,12 @@ export default function SeatReturn() {
             : 'Presence confirmed. The ghost-seat report has been cleared.',
           seatLabel: current.seat?.label,
         });
+        clearReservationNotification(current.reservationId);
       } catch (error) {
         setResult({ state: 'error', message: error.message });
       }
     })();
-  }, [authLoading, seatId, qrToken, user]);
+  }, [authLoading, clearReservationNotification, seatId, qrToken, user]);
 
   function handleSignIn() {
     storePendingReverifyToken(qrToken);

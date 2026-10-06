@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import Layout from '../components/Layout.jsx';
-import { apiClient, getToken } from '../api/client.js';
+import { apiClient } from '../api/client.js';
 import { getReceiptCode, normalizePendingReservation } from '../api/normalizers.js';
-import { io } from 'socket.io-client';
 import { CheckCircle, ClockCountdown, IdentificationCard, X } from '@phosphor-icons/react';
 import AppDialog from '../components/AppDialog.jsx';
-
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
 function getCountdown(deadline) {
   if (!deadline) return '';
@@ -56,21 +53,6 @@ export default function FrontDeskView() {
       clearInterval(tickInterval);
     };
   }, [fetchQueue]);
-
-  useEffect(() => {
-    const token = getToken();
-    if (!token) return undefined;
-
-    const socket = io(SOCKET_URL, { auth: { token } });
-    socket.on('seat_flagged_admin_notice', (data) => {
-      setNotice({
-        tone: 'warning',
-        title: 'Possible ghost seat reported',
-        description: `A student reported a vacant seat on Floor ${data.floor} in ${data.building.replace('_', ' ')}.`,
-      });
-    });
-    return () => socket.disconnect();
-  }, []);
 
   function beginReview(reservationId) {
     setReviewingId(reservationId);
