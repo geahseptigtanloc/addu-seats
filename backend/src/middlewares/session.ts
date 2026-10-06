@@ -22,6 +22,7 @@ export const authSession = session({
     secure: env.NODE_ENV === 'production' || !env.CORS_ORIGIN.includes('localhost'),
     httpOnly: true,
     maxAge: 5 * 60 * 1000,
-    sameSite: (env.NODE_ENV === 'production' || !env.CORS_ORIGIN.includes('localhost')) ? 'none' : 'lax',
+    sameSite:
+      env.NODE_ENV === 'production' || !env.CORS_ORIGIN.includes('localhost') ? 'none' : 'lax',
   },
 });
