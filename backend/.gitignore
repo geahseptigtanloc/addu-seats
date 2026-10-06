@@ -5,3 +5,4 @@ dist/
 *.log
 .DS_Store
 /qr-codes
+/qr-verify-codes
