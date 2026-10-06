@@ -798,10 +798,23 @@ export async function returnFromBreak(userId: string, qrToken: string): Promise<
   const cooldownApplies = extensionsUsed >= BREAK_MAX_EXTENSIONS;
 
   const updatedSeat = await prisma.$transaction(async (tx) => {
-    const s = await tx.seat.update({
-      where: { id: seat.id },
+    // Lock first: a concurrent void, checkout or forfeit has then either fully
+    // happened (this return is rejected) or waits for this one to finish.
+    if (!(await lockConfirmedReservation(tx, reservation.id))) {
+      throw new NotFoundError('No matching reservation found for this seat');
+    }
+
+    // Conditional claim: only a seat still on break returns to OCCUPIED. This
+    // also turns a double-scanned return into a rejection, not a duplicate log.
+    const claimed = await tx.seat.updateMany({
+      where: { id: seat.id, status: SeatStatus.OCCUPIED_ON_BREAK },
       data: { status: SeatStatus.OCCUPIED },
     });
+
+    if (claimed.count !== 1) {
+      throw new ConflictError('This seat is not currently on break');
+    }
+
     await tx.validationEvent.create({
       data: {
         reservationId: reservation.id,
@@ -812,7 +825,8 @@ export async function returnFromBreak(userId: string, qrToken: string): Promise<
     await tx.occupancyLog.create({
       data: { reservationId: reservation.id, eventType: OccupancyEventType.OCCUPIED },
     });
-    return s;
+
+    return tx.seat.findUniqueOrThrow({ where: { id: seat.id } });
   });
 
   try {
@@ -1207,24 +1221,45 @@ export async function expireBreakTimers(): Promise<void> {
         continue;
       }
 
-      // Reservation + seat must change together
-      const updatedSeat = await prisma.$transaction(async (tx) => {
+      // Reservation + seat must change together. Everything above was read
+      // before this transaction, so it is re-checked under the lock.
+      const forfeitedSeat = await prisma.$transaction(async (tx) => {
+        if (!(await lockConfirmedReservation(tx, reservation.id))) {
+          return null; // voided or checked out in the meantime
+        }
+
+        // A break restarted since the check above has a fresh timer.
+        if (await redisClient.exists(breakTimerKey(reservation.id))) {
+          return null;
+        }
+
+        const claimed = await tx.seat.updateMany({
+          where: { id: seat.id, status: SeatStatus.OCCUPIED_ON_BREAK },
+          data: { status: SeatStatus.AVAILABLE },
+        });
+
+        if (claimed.count !== 1) {
+          return null; // the student returned in the meantime
+        }
+
         await tx.reservation.update({
           where: { id: reservation.id },
           data: { status: ReservationStatus.FORFEITED, endedAt: new Date() },
         });
-        return tx.seat.update({
-          where: { id: seat.id },
-          data: { status: SeatStatus.AVAILABLE },
-        });
+
+        return tx.seat.findUniqueOrThrow({ where: { id: seat.id } });
       });
+
+      if (!forfeitedSeat) {
+        continue;
+      }
 
       expiredCount++;
 
       try {
-        broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
-          seatId: updatedSeat.id,
-          status: updatedSeat.status,
+        broadcastSeatStatusUpdate(forfeitedSeat.building, forfeitedSeat.floor, {
+          seatId: forfeitedSeat.id,
+          status: forfeitedSeat.status,
         });
       } catch (err) {
         logger.warn(
