@@ -40,11 +40,6 @@ const addColumn = (floor, seatType, x, startY, count, gap) => {
   }
 };
 
-const skipSeatLabels = (floor, seatType, count) => {
-  const counterKey = `${floor}-${seatType}`;
-  seatCounters.set(counterKey, (seatCounters.get(counterKey) || 0) + count);
-};
-
 const spread = (center, span, count) => {
   if (count <= 0) return [];
   if (count === 1) return [center];
@@ -68,18 +63,6 @@ const addRectTable = (
     addSeat(floor, type, Math.round(cx - width / 2 - offset), Math.round(y)));
   spread(cy, height * 0.65, right).forEach((y) =>
     addSeat(floor, type, Math.round(cx + width / 2 + offset), Math.round(y)));
-};
-
-const addRoundTable = (floor, cx, cy, { radius = 34, count = 4, type = 'table_node' } = {}) => {
-  for (let index = 0; index < count; index += 1) {
-    const angle = -Math.PI / 2 + (index * 2 * Math.PI) / count;
-    addSeat(
-      floor,
-      type,
-      Math.round(cx + Math.cos(angle) * radius),
-      Math.round(cy + Math.sin(angle) * radius),
-    );
-  }
 };
 
 for (const [y, xs] of [
@@ -126,44 +109,65 @@ addColumn(2, 'cubicle', 550, 65, 4, 35);
 addColumn(2, 'cubicle', 550, 380, 5, 36);
 addRow(2, 'cubicle', 305, 535, 9, 28);
 
-[285, 410, 535, 660, 785].forEach((y) =>
-  addRectTable(3, 265, y, { width: 90, height: 54, top: 3, bottom: 3 }));
-[[395, 115], [505, 115], [615, 115], [395, 235], [505, 235], [615, 235]].forEach(([x, y]) =>
-  addRectTable(3, x, y, { width: 38, height: 42 }));
-[[450, 350], [570, 350], [430, 610], [565, 610], [440, 915], [535, 915], [625, 915]].forEach(([x, y]) =>
-  addRoundTable(3, x, y));
-[[380, 745], [470, 745], [560, 745], [650, 745]].forEach(([x, y]) =>
-  addRectTable(3, x, y, { width: 38, height: 38, type: 'table_node' }));
-[[465, 825], [545, 825], [625, 825]].forEach(([x, y]) =>
-  addRectTable(3, x, y, { width: 36, height: 56, top: 0, bottom: 0, left: 2, right: 2 }));
-addRow(3, 'cubicle', 388, 465, 6, 55);
-addColumn(3, 'cubicle', 115, 180, 7, 43);
-addColumn(3, 'cubicle', 95, 555, 6, 56);
-// G3-C020 through G3-C022 are retired because these are front desk staff chairs.
-skipSeatLabels(3, 'cubicle', 3);
-addSeats(3, 'cubicle', [
-  [446, 964], [415, 1004], [477, 1004],
-  [604, 964], [573, 1004], [635, 1004],
-]);
+// These coordinates are measured from the centers of the green chair shapes in
+// the supplied floor-plan SVGs. Green computer counters and lettering are excluded.
+const gisbertThirdFloorChairPoints = [
+  [318, 101], [371, 101], [423, 101], [476, 101], [577, 101], [525, 102],
+  [87, 216], [578, 238], [320, 239], [372, 239], [424, 239], [477, 239],
+  [526, 239], [87, 254], [190, 290], [225, 290], [89, 304], [588, 305],
+  [520, 310], [440, 320], [264, 329], [380, 330], [157, 331], [89, 338],
+  [570, 364], [226, 370], [193, 371], [89, 372], [431, 379], [227, 394],
+  [193, 395], [89, 413], [267, 433], [159, 434], [90, 447], [195, 475],
+  [230, 475], [90, 480], [331, 483], [431, 483], [535, 485], [630, 485],
+  [421, 486], [524, 488], [195, 500], [230, 500], [85, 532], [160, 541],
+  [267, 541], [85, 568], [196, 583], [229, 583], [444, 584], [561, 595],
+  [368, 597], [196, 609], [229, 609], [86, 628], [267, 649], [161, 651],
+  [414, 652], [600, 656], [521, 658], [86, 667], [197, 691], [230, 691],
+  [197, 716], [230, 716], [93, 719], [388, 724], [337, 725], [427, 725],
+  [475, 725], [510, 726], [586, 726], [556, 727], [635, 727], [94, 755],
+  [160, 757], [267, 757], [475, 775], [509, 775], [556, 775], [587, 775],
+  [635, 775], [342, 776], [390, 776], [427, 776], [94, 791], [198, 799],
+  [229, 799], [612, 834], [364, 835], [464, 835], [524, 835], [553, 835],
+  [425, 836], [612, 859], [364, 860], [425, 860], [465, 860], [524, 860],
+  [553, 860], [408, 927], [501, 928], [592, 929], [363, 962], [462, 964],
+  [517, 964], [557, 964], [609, 967], [415, 970], [400, 992], [457, 992],
+  [542, 992], [594, 992], [594, 1033], [400, 1034], [457, 1034], [543, 1034],
+];
 
-// Floor 3's collaborative seats are drawn at their physical chair positions in the supplied plan.
-seatsByFloor[3].forEach((seat) => {
-  if (seat.seatType === 'table_node') seat.displayAsChair = true;
-});
+const gisbertFourthFloorChairPoints = [
+  [166, 283], [203, 283], [131, 284], [302, 284], [523, 289], [599, 289],
+  [230, 311], [99, 313], [262, 316], [345, 316], [66, 334], [165, 347],
+  [202, 347], [128, 348], [402, 359], [301, 360], [65, 361], [128, 368],
+  [164, 368], [202, 368], [66, 388], [441, 392], [345, 393], [362, 393],
+  [262, 394], [99, 401], [230, 403], [66, 415], [402, 425], [302, 427],
+  [202, 436], [128, 437], [164, 437], [164, 459], [202, 459], [128, 460],
+  [67, 474], [98, 496], [231, 496], [66, 502], [66, 529], [164, 535],
+  [204, 535], [127, 536], [127, 551], [164, 551], [204, 551], [314, 552],
+  [350, 552], [385, 553], [66, 555], [97, 588], [230, 588], [280, 588],
+  [415, 588], [66, 622], [348, 624], [385, 624], [204, 625], [314, 625],
+  [128, 626], [164, 626], [314, 642], [349, 642], [385, 642], [127, 643],
+  [164, 643], [203, 643], [66, 650], [98, 678], [230, 678], [281, 678],
+  [413, 678], [66, 679], [66, 706], [349, 715], [386, 715], [313, 716],
+  [128, 717], [164, 717], [202, 717], [313, 737], [349, 737], [386, 737],
+  [165, 738], [202, 738], [128, 739], [279, 774], [416, 774], [98, 776],
+  [232, 776], [65, 778], [65, 808], [165, 815], [204, 815], [312, 815],
+  [349, 815], [387, 815], [128, 816], [388, 835], [128, 836], [165, 836],
+  [204, 836], [312, 836], [349, 836], [65, 837], [65, 868], [97, 872],
+  [280, 872], [234, 873], [418, 873], [128, 910], [166, 910], [204, 910],
+  [348, 910], [387, 910], [310, 911],
+];
 
-[300, 425, 550, 675, 800, 900].forEach((y) =>
-  addRectTable(4, 250, y, { width: 104, height: 54, top: 3, bottom: 3 }));
-[555, 675, 800, 900].forEach((y) =>
-  addRectTable(4, 455, y, { width: 108, height: 54, top: 3, bottom: 3 }));
-[[400, 290], [515, 360], [610, 285]].forEach(([x, y]) =>
-  addRectTable(4, x, y, { width: 52, height: 36 }));
-addSeats(4, 'table_node', [[500, 205], [520, 202], [540, 205], [573, 231], [540, 270], [520, 273], [500, 270]]);
-addColumn(4, 'cubicle', 105, 295, 7, 46);
-addColumn(4, 'cubicle', 95, 650, 6, 46);
-addSeats(4, 'cubicle', [[155, 235], [220, 235], [285, 235], [350, 235], [415, 235], [610, 235], [645, 265]]);
-addRow(4, 'cubicle', 160, 970, 8, 50);
-// The chair at (660, 710) belongs to the front desk, not the study-seat inventory.
-addSeats(4, 'cubicle', [[660, 290]]);
+addSeats(3, 'individual', gisbertThirdFloorChairPoints.slice(0, 76));
+addSeats(3, 'table_node', gisbertThirdFloorChairPoints.slice(76));
+addSeats(4, 'individual', gisbertFourthFloorChairPoints.slice(0, 92));
+addSeats(4, 'table_node', gisbertFourthFloorChairPoints.slice(92, 99));
+addSeats(4, 'cubicle', gisbertFourthFloorChairPoints.slice(99));
+
+for (const floor of [3, 4]) {
+  seatsByFloor[floor].forEach((seat) => {
+    if (seat.seatType === 'table_node') seat.displayAsChair = true;
+  });
+}
 
 export function getGisbertPreviewSeats(floor) {
   return seatsByFloor[Number(floor)]?.map((seat) => ({ ...seat })) ?? [];

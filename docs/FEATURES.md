@@ -78,16 +78,16 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 
 - Gisbert floor 1: 184 mapped seats.
 - Gisbert floor 2: 130 mapped seats.
-- Gisbert floor 3: 145 reservable seats. The three chairs inside the lower-left curved front desk are shown as fixtures, not study seats.
-- Gisbert floor 4: 128 reservable seats. The chair at the curved front desk is shown as a fixture, not a study seat.
-- Total Gisbert capacity: 587 reservable seats.
+- Gisbert floor 3: 120 reservable seats. Chair positions follow the green chair shapes in the supplied SVG reference, while the displayed map uses the app's clean geometric floor-plan style.
+- Gisbert floor 4: 117 reservable seats. Chair positions follow the green chair shapes in the supplied SVG reference, while the displayed map uses the app's clean geometric floor-plan style.
+- Total Gisbert capacity: 551 reservable seats.
 - Miguel Pro uses area tabs instead of floors: Main Area, Research Nook, and Workspace Room. Together they contain 230 frontend preview seats mapped from the supplied reference. Every visible Miguel Pro chair is an individual clickable seat, including the four chairs around each square table, per the current requested UI behavior. Research Nook furniture appears only on its own tab and is excluded from the Main Area.
 - The Main Area includes Collab Hubs 1-7 as interactive rooms. Selecting a hub opens a booking-information modal that links to the official AdDU Library Collab Hub reservation page.
 - Seat states: available, pending, occupied, on break, and disabled.
 - Stable seat labels identify the building, floor, and seat type, such as `G1-S001`, `G1-T001`, and `G1-C001`.
 - Floor-specific Socket.IO namespaces publish `seat_status_update` events.
 - Frontend preview coordinates mirror the database seed coordinates.
-- The backend seed mirrors all 817 reservable seats: 587 Gisbert seats and 230 Miguel Pro seats. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Retired front desk chair tokens `G3-C020` through `G3-C022` and `G4-C030` are rejected by the API, and their prior database rows are made unavailable by migrations.
+- The backend seed mirrors all 781 reservable seats: 551 Gisbert seats and 230 Miguel Pro seats. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Tokens without a matching green chair in the supplied SVG plans are rejected by the API, and their prior database rows are made unavailable by migrations.
 - Before future coordinate changes, preserve the paper's table-level versus seat-level QR assignment rules and its exclusion of informal seating.
 
 ## Reservation Integrity Rules

@@ -1,5 +1,11 @@
 // Keep retired QR tokens blocked even before an existing database receives the retirement migration.
-const retiredSeatTokens = new Set(['seat:g3-c020', 'seat:g3-c021', 'seat:g3-c022', 'seat:g4-c030']);
+const tokenRange = (floor: number, type: string, start: number, end: number): string[] =>
+  Array.from(
+    { length: end - start + 1 },
+    (_, index) => `seat:g${floor}-${type}${String(start + index).padStart(3, '0')}`,
+  );
+
+const retiredSeatTokens = new Set([...tokenRange(3, 'c', 1, 28), ...tokenRange(4, 'c', 19, 30)]);
 
 export function isRetiredSeatToken(token: string): boolean {
   return retiredSeatTokens.has(token);

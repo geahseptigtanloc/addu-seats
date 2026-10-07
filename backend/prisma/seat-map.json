@@ -1892,6 +1892,66 @@
   {
     "building": "gisbert",
     "floor": 3,
+    "currentQrToken": "seat:g3-s065"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s066"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s067"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s068"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s069"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s070"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s071"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s072"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s073"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s074"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s075"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
+    "currentQrToken": "seat:g3-s076"
+  },
+  {
+    "building": "gisbert",
+    "floor": 3,
     "currentQrToken": "seat:g3-t001"
   },
   {
@@ -2108,191 +2168,6 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-t044"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s065"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s066"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s067"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s068"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s069"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s070"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s071"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s072"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s073"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s074"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s075"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-s076"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c001"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c002"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c003"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c004"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c005"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c006"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c007"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c008"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c009"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c010"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c011"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c012"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c013"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c014"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c015"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c016"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c017"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c018"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c019"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c023"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c024"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c025"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c026"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c027"
-  },
-  {
-    "building": "gisbert",
-    "floor": 3,
-    "currentQrToken": "seat:g3-c028"
   },
   {
     "building": "gisbert",
@@ -2878,61 +2753,6 @@
     "building": "gisbert",
     "floor": 4,
     "currentQrToken": "seat:g4-c018"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c019"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c020"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c021"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c022"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c023"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c024"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c025"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c026"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c027"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c028"
-  },
-  {
-    "building": "gisbert",
-    "floor": 4,
-    "currentQrToken": "seat:g4-c029"
   },
   {
     "building": "miguel_pro",
