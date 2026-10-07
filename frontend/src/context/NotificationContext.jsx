@@ -4,6 +4,7 @@ import { ArrowRight, Bell, ClockCountdown, WarningCircle, X } from '@phosphor-ic
 import { io } from 'socket.io-client';
 import AppDialog from '../components/AppDialog.jsx';
 import { API_URL, apiClient, getToken } from '../api/client.js';
+import { formatSeatLocation } from '../data/seatLocations.js';
 import { useAuth } from './AuthContext.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_URL;
@@ -35,6 +36,7 @@ function adminNotification(report, unread) {
     id: report.flagId || report.reservationId,
     reservationId: report.reservationId,
     title: 'Possible ghost seat',
+    location: formatSeatLocation(report),
     message: `${report.seatLabel || 'A seat'} was reported vacant${report.studentName ? ` for ${report.studentName}` : ''}.`,
     seatLabel: report.seatLabel,
     createdAt: report.reportedAt || new Date().toISOString(),
@@ -47,12 +49,12 @@ function adminNotification(report, unread) {
 function pendingReservationNotification(reservation, unread) {
   const reservationId = reservation.reservationId || reservation.id;
   const seatLabel = reservation.seatLabel || reservation.seat?.label || 'A seat';
-  const location = `${String(reservation.building || reservation.seat?.building || 'the library').replace('_', ' ')}${reservation.floor || reservation.seat?.floor ? `, Floor ${reservation.floor || reservation.seat?.floor}` : ''}`;
   return {
     id: `pending:${reservationId}`,
     reservationId,
     title: 'New seat reservation',
-    message: `${reservation.studentName || reservation.user?.name || 'A student'} reserved ${seatLabel} in ${location}. Entry approval is pending.`,
+    location: formatSeatLocation(reservation),
+    message: `${reservation.studentName || reservation.user?.name || 'A student'} reserved ${seatLabel}. Entry approval is pending.`,
     seatLabel,
     createdAt: reservation.createdAt || new Date().toISOString(),
     href: '/frontdesk',
@@ -67,6 +69,7 @@ function studentNotification(flag, seat, reservationId, unread) {
     id: flag.flagId || reservationId,
     reservationId,
     title: 'Your seat was reported vacant',
+    location: formatSeatLocation({ ...flag, seat }),
     message: `${seatLabel} needs a verify QR scan before the report expires.`,
     seatLabel,
     createdAt: flag.flaggedAt || new Date().toISOString(),
@@ -239,6 +242,12 @@ export function NotificationProvider({ children }) {
     clearReservationNotification,
   }), [clearReservationNotification, markAllRead, notifications]);
 
+  const toastNotification = adminToast && (
+    adminToast.type === 'reservation'
+      ? pendingReservationNotification(adminToast.payload, false)
+      : adminNotification(adminToast.payload, false)
+  );
+
   return (
     <NotificationContext.Provider value={value}>
       {children}
@@ -267,10 +276,9 @@ export function NotificationProvider({ children }) {
             </span>
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-slate-950">{adminToast.type === 'reservation' ? 'New seat reservation' : 'New ghost-seat report'}</p>
+              <p className="mt-1 text-xs font-semibold text-[#063a64]">{toastNotification.location}</p>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                {adminToast.type === 'reservation'
-                  ? `${adminToast.payload.studentName || 'A student'} reserved ${adminToast.payload.seatLabel || 'a seat'} in ${String(adminToast.payload.building || 'the library').replace('_', ' ')}, Floor ${adminToast.payload.floor}. Entry approval is pending.`
-                  : `${adminToast.payload.seatLabel || 'A seat'} was reported vacant in ${String(adminToast.payload.building || 'the library').replace('_', ' ')}, Floor ${adminToast.payload.floor}${adminToast.payload.studentName ? `, reserved by ${adminToast.payload.studentName}` : ''}.`}
+                {toastNotification.message}
               </p>
               <button
                 type="button"
@@ -367,6 +375,7 @@ export function NotificationBell() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold text-slate-950">{notification.title}</span>
+                    <span className="mt-1 inline-block rounded-[6px] bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-[#063a64]">{notification.location}</span>
                     <span className="mt-1 block text-xs leading-5 text-slate-600">{notification.message}</span>
                   </span>
                   <ArrowRight size={16} weight="bold" className="mt-2 shrink-0 text-slate-400" />

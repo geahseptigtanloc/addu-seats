@@ -7,6 +7,7 @@ import Layout from '../components/Layout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiClient, getToken } from '../api/client.js';
 import { getGisbertPreviewSeats } from '../data/gisbertPreviewSeats.js';
+import { formatBuildingName, formatSeatLocation, getSeatMapPath } from '../data/seatLocations.js';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -346,7 +347,7 @@ export default function AdminDashboard() {
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${isActive ? 'bg-red-100 text-red-800' : 'bg-slate-200 text-slate-700'}`}>{FLAG_STATUS_LABELS[report.status] || report.status}</span>
                       </div>
                       <p className={`mt-1 text-sm font-medium ${isActive ? 'text-red-900' : 'text-slate-800'}`}>
-                        {formatBuildingName(report.building)}{report.floor ? `, Floor ${report.floor}` : ''}
+                        {formatSeatLocation(report)}
                       </p>
                       <p className={`mt-1 text-sm ${isActive ? 'text-red-800' : 'text-slate-700'}`}>
                         Reserved by {report.studentName || 'Unknown student'}{report.studentIdLast4 ? `, ID ending ${report.studentIdLast4}` : ''}.
@@ -359,8 +360,8 @@ export default function AdminDashboard() {
                       </p>
                     </div>
                     <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-                      {report.building && report.floor && (
-                        <Link to={`/map/${report.building}/${report.floor}`} className="ui-button-secondary py-2 text-xs">
+                      {getSeatMapPath(report) && (
+                        <Link to={getSeatMapPath(report)} className="ui-button-secondary py-2 text-xs">
                           Open map
                         </Link>
                       )}
@@ -417,7 +418,7 @@ export default function AdminDashboard() {
         open={Boolean(selectedGhostReport)}
         tone="danger"
         title={ghostResolutionAction === 'void' ? 'Void this reservation?' : 'Confirm this seat is vacant?'}
-        description={selectedGhostReport ? `This will void ${selectedGhostReport.studentName || 'the student'}'s reservation for ${selectedGhostReport.seatLabel || formatSeatReference(selectedGhostReport.seatId)} at ${formatBuildingName(selectedGhostReport.building)}, Floor ${selectedGhostReport.floor}, and release the seat.` : ''}
+        description={selectedGhostReport ? `This will void ${selectedGhostReport.studentName || 'the student'}'s reservation for ${selectedGhostReport.seatLabel || formatSeatReference(selectedGhostReport.seatId)} at ${formatSeatLocation(selectedGhostReport)}, and release the seat.` : ''}
         confirmLabel="Void reservation"
         cancelLabel="Keep report active"
         busy={voidingGhostReport}
@@ -477,7 +478,7 @@ export default function AdminDashboard() {
         </article>
 
         <article className="ui-panel overflow-hidden">
-          <PanelHeader icon={MapTrifold} title="Location comparison" description="All mapped building and floor groups, ordered by utilization" />
+          <PanelHeader icon={MapTrifold} title="Location comparison" description="Mapped library locations, ordered by utilization" />
           <div className="p-5">
             <LocationComparison rows={comparisonRows} loading={loading} />
           </div>
@@ -557,7 +558,9 @@ function formatComparisonLocation(location, index) {
     ...location,
     id: `${building}-${floor}`,
     rank: index + 1,
-    label: `${formatBuildingName(building)}, Floor ${floor}`,
+    label: building === 'miguel_pro'
+      ? `${formatBuildingName(building)} · All areas`
+      : formatSeatLocation({ building, floor }),
     mapPath: `/map/${building}/${floor}`,
   };
 }
@@ -842,11 +845,6 @@ function formatDuration(minutes) {
   const hours = Math.floor(value / 60);
   const remainder = Math.round(value % 60);
   return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
-}
-
-function formatBuildingName(building) {
-  if (!building) return 'Library location pending';
-  return building.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatSeatReference(seatId) {

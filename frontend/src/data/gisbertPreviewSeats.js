@@ -12,9 +12,15 @@ const addSeat = (floor, seatType, posX, posY) => {
   const counterKey = `${floor}-${seatType}`;
   const sequence = (seatCounters.get(counterKey) || 0) + 1;
   seatCounters.set(counterKey, sequence);
+  // Preserve historical QR identity: the revised third-floor geometry gets
+  // new labels instead of reassigning old tokens to different physical seats.
+  const thirdFloorLabelOffset = { individual: 76, table_node: 44, cubicle: 22 };
+  const labelSequence = floor === 3
+    ? sequence + thirdFloorLabelOffset[seatType] + (seatType === 'cubicle' && sequence > 15 ? 9 : 0)
+    : sequence;
   floorSeats.push({
     seatId: `preview-gisbert-${floor}-${floorSeats.length + 1}`,
-    label: `G${floor}-${seatTypeCodes[seatType]}${String(sequence).padStart(3, '0')}`,
+    label: `G${floor}-${seatTypeCodes[seatType]}${String(labelSequence).padStart(3, '0')}`,
     building: 'gisbert',
     floor,
     seatType,
@@ -109,29 +115,52 @@ addColumn(2, 'cubicle', 550, 65, 4, 35);
 addColumn(2, 'cubicle', 550, 380, 5, 36);
 addRow(2, 'cubicle', 305, 535, 9, 28);
 
-// These coordinates are measured from the centers of the green chair shapes in
-// the supplied floor-plan SVGs. Green computer counters and lettering are excluded.
-const gisbertThirdFloorChairPoints = [
-  [318, 101], [371, 101], [423, 101], [476, 101], [577, 101], [525, 102],
-  [87, 216], [578, 238], [320, 239], [372, 239], [424, 239], [477, 239],
-  [526, 239], [87, 254], [190, 290], [225, 290], [89, 304], [588, 305],
-  [520, 310], [440, 320], [264, 329], [380, 330], [157, 331], [89, 338],
-  [570, 364], [226, 370], [193, 371], [89, 372], [431, 379], [227, 394],
-  [193, 395], [89, 413], [267, 433], [159, 434], [90, 447], [195, 475],
-  [230, 475], [90, 480], [331, 483], [431, 483], [535, 485], [630, 485],
-  [421, 486], [524, 488], [195, 500], [230, 500], [85, 532], [160, 541],
-  [267, 541], [85, 568], [196, 583], [229, 583], [444, 584], [561, 595],
-  [368, 597], [196, 609], [229, 609], [86, 628], [267, 649], [161, 651],
-  [414, 652], [600, 656], [521, 658], [86, 667], [197, 691], [230, 691],
-  [197, 716], [230, 716], [93, 719], [388, 724], [337, 725], [427, 725],
-  [475, 725], [510, 726], [586, 726], [556, 727], [635, 727], [94, 755],
-  [160, 757], [267, 757], [475, 775], [509, 775], [556, 775], [587, 775],
-  [635, 775], [342, 776], [390, 776], [427, 776], [94, 791], [198, 799],
-  [229, 799], [612, 834], [364, 835], [464, 835], [524, 835], [553, 835],
-  [425, 836], [612, 859], [364, 860], [425, 860], [465, 860], [524, 860],
-  [553, 860], [408, 927], [501, 928], [592, 929], [363, 962], [462, 964],
-  [517, 964], [557, 964], [609, 967], [415, 970], [400, 992], [457, 992],
-  [542, 992], [594, 992], [594, 1033], [400, 1034], [457, 1034], [543, 1034],
+// Trace the chair centers from the supplied 1086 x 1448 third-floor sketch.
+// The four chairs around each square table are individually reservable.
+const thirdFloorPoint = ([x, y]) => [
+  Math.round(20 + (x - 86) * 0.75),
+  Math.round(20 + (y - 27) * 0.78),
+];
+const thirdFloorComputerChairs = [523, 665, 801].flatMap((x) => [
+  [x - 37, 103], [x + 37, 103], [x - 37, 289], [x + 37, 289],
+]);
+const thirdFloorLongTableChairs = [411, 552, 695, 841, 985].flatMap((y) => [
+  [315, y - 54], [361, y - 54], [270, y], [417, y],
+  [320, y + 55], [365, y + 55],
+]);
+const thirdFloorRoundTableChairs = [
+  [570, 411], [651, 398], [639, 477],
+  [760, 383], [851, 377], [826, 457],
+  [555, 769], [657, 752], [616, 845],
+  [814, 768], [761, 852], [868, 852],
+  [607, 1215], [547, 1260], [617, 1270],
+  [734, 1216], [681, 1261], [754, 1269],
+  [857, 1215], [788, 1260], [880, 1269],
+];
+const thirdFloorLowerRectangleChairs = [590, 723, 842].flatMap((x) => [
+  [x - 42, 1090], [x + 42, 1090], [x - 42, 1124], [x + 42, 1124],
+]);
+const thirdFloorBenchChairs = [
+  [597, 1302], [675, 1302], [597, 1358], [675, 1358],
+  [789, 1302], [859, 1302], [789, 1358], [859, 1358],
+];
+const thirdFloorSquareTableChairs = [550, 665, 775, 882].flatMap((x) => [
+  [x - 36, 942], [x + 36, 942], [x - 36, 1011], [x + 36, 1011],
+]);
+const gisbertThirdFloorIndividualPoints = [
+  ...thirdFloorComputerChairs,
+  ...thirdFloorLongTableChairs,
+  ...thirdFloorRoundTableChairs,
+  ...thirdFloorLowerRectangleChairs,
+  ...thirdFloorBenchChairs,
+].map(thirdFloorPoint);
+const gisbertThirdFloorWallCubiclePoints =
+  [257, 308, 376, 423, 467, 524, 570, 615, 683, 735, 811, 862, 935, 983, 1033]
+    .map((y) => thirdFloorPoint([176, y]));
+// The reference has six green chairs beside the zigzag dividers. The six
+// outlined boxes between them are equipment/furniture, not seats.
+const gisbertThirdFloorZigzagChairPoints = [
+  [335, 463], [420, 465], [438, 462], [523, 465], [541, 462], [629, 463],
 ];
 
 const gisbertFourthFloorChairPoints = [
@@ -157,17 +186,64 @@ const gisbertFourthFloorChairPoints = [
   [348, 910], [387, 910], [310, 911],
 ];
 
-addSeats(3, 'individual', gisbertThirdFloorChairPoints.slice(0, 76));
-addSeats(3, 'table_node', gisbertThirdFloorChairPoints.slice(76));
-addSeats(4, 'individual', gisbertFourthFloorChairPoints.slice(0, 92));
-addSeats(4, 'table_node', gisbertFourthFloorChairPoints.slice(92, 99));
-addSeats(4, 'cubicle', gisbertFourthFloorChairPoints.slice(99));
+const gisbertFourthFloorIndividualPoints = [
+  [131, 284], [166, 283], [203, 283], [99, 313], [230, 311], [128, 348], [165, 347], [202, 347],
+  [128, 368], [164, 368], [202, 368], [99, 401], [230, 403], [128, 437], [164, 437], [202, 436],
+  [128, 460], [164, 459], [202, 459], [98, 496], [231, 496], [127, 536], [164, 535], [204, 535],
+  [127, 551], [164, 551], [204, 551], [97, 588], [230, 588], [128, 626], [164, 626], [204, 625],
+  [127, 643], [164, 643], [203, 643], [98, 678], [230, 678], [128, 717], [164, 717], [202, 717],
+  [128, 739], [165, 738], [202, 738], [98, 776], [232, 776], [128, 816], [165, 815], [204, 815],
+  [128, 836], [165, 836], [204, 836], [97, 872], [234, 873], [128, 910], [166, 910], [204, 910],
+  [314, 552], [350, 552], [385, 553], [280, 588], [415, 588], [314, 625], [348, 624], [385, 624],
+  [314, 642], [349, 642], [385, 642], [281, 678], [413, 678], [313, 716], [349, 715], [386, 715],
+  [313, 737], [349, 737], [386, 737], [279, 774], [416, 774], [312, 815], [349, 815], [387, 815],
+  [312, 836], [349, 836], [388, 835], [280, 872], [418, 873], [310, 911], [348, 910], [387, 910],
+  [302, 284], [262, 316], [345, 316], [301, 360],
+  // Each green shape beside the smaller upper desks is a chair, not a
+  // shared table booking point.
+  [523, 289], [599, 289], [402, 359], [441, 392], [345, 393], [362, 393], [402, 425],
+];
 
-for (const floor of [3, 4]) {
-  seatsByFloor[floor].forEach((seat) => {
-    if (seat.seatType === 'table_node') seat.displayAsChair = true;
-  });
-}
+const pointKey = ([x, y]) => `${x}:${y}`;
+const addReferenceFloor = (floor, allPoints, individualPoints, tablePoints) => {
+  const individualKeys = new Set(individualPoints.map(pointKey));
+  const tableKeys = new Set(tablePoints.map(pointKey));
+  addSeats(floor, 'individual', individualPoints);
+  addSeats(floor, 'table_node', tablePoints);
+  addSeats(
+    floor,
+    'cubicle',
+    allPoints.filter((point) => !individualKeys.has(pointKey(point)) && !tableKeys.has(pointKey(point))),
+  );
+};
+
+addSeats(3, 'individual', gisbertThirdFloorIndividualPoints);
+addSeats(3, 'individual', thirdFloorSquareTableChairs.map(thirdFloorPoint));
+seatsByFloor[3].slice(-thirdFloorSquareTableChairs.length).forEach((seat) => {
+  seat.squareChair = true;
+  seat.hitWidth = 20;
+  seat.hitHeight = 20;
+});
+addSeats(3, 'cubicle', gisbertThirdFloorWallCubiclePoints);
+addSeats(3, 'cubicle', gisbertThirdFloorZigzagChairPoints);
+seatsByFloor[3].slice(-gisbertThirdFloorZigzagChairPoints.length).forEach((seat) => {
+  seat.zigzagChair = true;
+  seat.hitWidth = 14;
+  seat.hitHeight = 32;
+});
+
+addReferenceFloor(
+  4,
+  gisbertFourthFloorChairPoints,
+  gisbertFourthFloorIndividualPoints,
+  [],
+);
+
+seatsByFloor[4].forEach((seat) => {
+  seat.floorFourChair = true;
+  seat.hitWidth = 18;
+  seat.hitHeight = 18;
+});
 
 export function getGisbertPreviewSeats(floor) {
   return seatsByFloor[Number(floor)]?.map((seat) => ({ ...seat })) ?? [];

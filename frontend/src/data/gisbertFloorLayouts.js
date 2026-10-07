@@ -80,23 +80,47 @@ const gisbertSecondFloorTables = [
   ...rectTables([[425, 405], [500, 405], [425, 480], [500, 480]], 44, 34),
 ];
 
+// Floor 3 is traced from the supplied portrait sketch (1086 x 1448). Keeping
+// the sketch coordinates here makes the furniture and seat groups easy to audit.
+const thirdFloorX = (x) => Math.round(20 + (x - 86) * 0.75);
+const thirdFloorY = (y) => Math.round(20 + (y - 27) * 0.78);
+const thirdFloorRect = (x, y, width, height, options = {}) => ({
+  type: 'desk',
+  x: thirdFloorX(x),
+  y: thirdFloorY(y),
+  width: Math.round(width * 0.75),
+  height: Math.round(height * 0.78),
+  ...options,
+});
+const thirdFloorRound = (x, y, radius) => ({
+  type: 'roundTable', cx: thirdFloorX(x), cy: thirdFloorY(y), radius: Math.round(radius * 0.76),
+});
 const gisbertThirdFloorTables = [
-  ...rectTables([[212, 330], [212, 434], [212, 542], [212, 650], [212, 758]], 72, 44),
-  ...rectTables([[345, 170], [449, 170], [551, 170]], 24, 86),
-  ...rectTables([[348, 486], [443, 486], [538, 486], [633, 486]], 46, 24),
-  ...[[365, 750], [450, 750], [535, 750], [610, 750]].map(([x, y]) =>
-    rectTable(x, y, 38, 38, { rotation: 45 })),
-  ...rectTables([[395, 848], [495, 848], [583, 848]], 34, 52),
-  ...roundTables([[402, 345], [535, 345], [424, 650], [560, 650], [405, 965], [500, 965], [590, 965]], 24),
+  ...[376, 517, 658, 805, 949].map((y) => thirdFloorRect(291, y, 104, 70)),
+  ...[506, 647, 785].flatMap((x) => [
+    thirdFloorRect(x, 81, 37, 43),
+    thirdFloorRect(x + 3, 267, 37, 42),
+    thirdFloorRect(x - 30, 135, 91, 12),
+    thirdFloorRect(x - 30, 239, 91, 12),
+  ]),
+  ...[[616, 432], [807, 410], [608, 794], [815, 822], [589, 1246], [716, 1246], [844, 1246]]
+    .map(([x, y]) => thirdFloorRound(x, y, 30)),
+  ...[550, 665, 775, 882].map((x) => thirdFloorRect(x - 29, 948, 58, 58, { rotation: 45 })),
+  ...[[360, 460], [395, 463], [462, 460], [497, 463], [564, 460], [600, 463]]
+    .map(([x, y]) => rectTable(x, y, 18, 20, { fill: '#ffffff', stroke: '#6f7f90', rx: 1 })),
+  ...[568, 701, 819].map((x) => thirdFloorRect(x, 1053, 47, 94)),
+  thirdFloorRect(559, 1314, 147, 32),
+  thirdFloorRect(758, 1314, 132, 32),
 ];
 
 const gisbertFourthFloorTables = [
-  ...rectTables([[165, 326], [165, 412], [165, 502], [165, 588], [165, 678], [165, 776], [166, 873]], 84, 36),
-  ...rectTables([[350, 588], [350, 678], [350, 774], [350, 873]], 84, 36),
-  rectTable(303, 321, 48, 42),
-  rectTable(435, 392, 52, 38),
-  rectTable(565, 321, 48, 40),
-  ...roundTables([[470, 340]], 25),
+  // These edges sit between the green chair rows in the supplied SVG.
+  ...[313, 397, 489, 588, 678, 776, 873].map((y) => rectTable(162, y, 108, 45)),
+  ...[588, 678, 774, 873].map((y) => rectTable(349, y, 112, 45)),
+  rectTable(299, 311, 60, 42),
+  rectTable(302, 393, 62, 45),
+  rectTable(400, 393, 60, 45),
+  rectTable(555, 289, 50, 34),
 ];
 
 export const FLOOR_LAYOUTS = {
@@ -161,27 +185,26 @@ export const FLOOR_LAYOUTS = {
       width: 720,
       height: 1120,
       features: [
-        room(28, 20, 70, 42, 'DOOR', { fontSize: 11 }),
-        { type: 'quietZone', x: 125, y: 20, width: 145, height: 190, label: 'IT' },
-        bookcase(300, 16, 335, 28, 'BOOKS'),
-        bookcase(682, 78, 24, 390, 'BOOKS', { verticalLabel: true, fontSize: 11 }),
-        bookcase(682, 486, 24, 520, 'BOOKS', { verticalLabel: true, fontSize: 11 }),
-        bookcase(292, 1082, 375, 22, 'BOOKS', { fontSize: 11 }),
-        room(55, 1072, 180, 32, 'STAIRS', { fontSize: 12 }),
-        ...[190, 300, 410, 520, 630, 740, 850].map((y) => bookcase(18, y, 54, 82, '')),
-        couch(333, 126, 24, 88, 'COMPS', { verticalLabel: true, fontSize: 9 }),
-        couch(437, 126, 24, 88, 'COMPS', { verticalLabel: true, fontSize: 9 }),
-        couch(539, 126, 24, 88, 'COMPS', { verticalLabel: true, fontSize: 9 }),
-        { type: 'curve', d: 'M345 400 C360 300, 435 278, 480 340 S592 420, 650 320', strokeWidth: 3 },
-        { type: 'curve', d: 'M342 580 C346 680, 425 714, 494 645 S610 548, 656 628', strokeWidth: 3 },
-        { type: 'curve', d: 'M12 900 C142 914, 142 1030, 12 1058', strokeWidth: 3 },
-        { type: 'curve', d: 'M35 924 C108 934, 108 1008, 35 1033', strokeWidth: 2 },
-        label(126, 980, 'FRONT DESK', { fontSize: 10, verticalLabel: true }),
-        { type: 'chair', x: 78, y: 945, width: 14, height: 18, label: 'Front desk chair' },
-        { type: 'chair', x: 78, y: 974, width: 14, height: 18, label: 'Front desk chair' },
-        { type: 'chair', x: 78, y: 1003, width: 14, height: 18, label: 'Front desk chair' },
-        segmentedCouch(375, 1038, 118, 22, 2),
-        segmentedCouch(535, 1038, 118, 22, 2),
+        room(42, 20, 55, 47, 'DOOR', { fontSize: 11 }),
+        { type: 'quietZone', x: 119, y: 20, width: 137, height: 205, label: '' },
+        bookcase(299, 20, 368, 25, 'BOOKS'),
+        bookcase(678, 77, 25, 441, 'BOOKS', { verticalLabel: true, fontSize: 11 }),
+        bookcase(681, 535, 21, 491, 'BOOKS', { verticalLabel: true, fontSize: 11 }),
+        bookcase(292, 1074, 384, 27, 'BOOKS', { fontSize: 11 }),
+        room(95, 1074, 167, 27, 'STAIRS', { fontSize: 12 }),
+        ...[[219, 346], [352, 496], [500, 635], [640, 764], [769, 899], [904, 1052]]
+          .map(([top, bottom]) => thirdFloorRect(85, top, 69, bottom - top)),
+        ...[523, 665, 801].map((x) => label(thirdFloorX(x), thirdFloorY(196), 'COMPS', { verticalLabel: true, fontSize: 11 })),
+        { type: 'curve', d: 'M337 370 C340 300 415 249 470 318 S590 410 639 261', strokeWidth: 2 },
+        { type: 'curve', d: 'M328 559 C330 660 411 704 475 633 S596 526 651 681', strokeWidth: 2 },
+        { type: 'curve', d: 'M327 482 V439 H378 V483 H430 V439 H481 V483 H533 V439 H584 V483 H637 V439', strokeWidth: 2 },
+        { type: 'quietZone', x: 307, y: 900, width: 376, height: 31, label: '' },
+        { type: 'curve', d: 'M20 858 C140 864 145 1025 20 1055', strokeWidth: 2 },
+        { type: 'curve', d: 'M43 884 C107 903 107 1005 43 1024', strokeWidth: 2 },
+        ...[1182, 1223, 1264].map((y) => ({
+          type: 'chair', x: thirdFloorX(136) - 7, y: thirdFloorY(y) - 6,
+          width: 14, height: 12, label: 'Front desk chair',
+        })),
         ...gisbertThirdFloorTables,
       ],
     },
@@ -190,19 +213,25 @@ export const FLOOR_LAYOUTS = {
       width: 720,
       height: 1120,
       features: [
-        label(360, 48, 'BOOKS', { fontSize: 16 }),
-        { type: 'quietZone', x: 14, y: 82, width: 692, height: 112, label: '' },
-        bookcase(48, 176, 585, 28, ''),
-        bookcase(50, 1068, 470, 22, 'BOOKS', { fontSize: 11 }),
-        bookcase(680, 220, 26, 840, 'BOOKS', { verticalLabel: true, fontSize: 11 }),
-        ...[286, 416, 546, 676, 806].map((y) => bookcase(18, y, 44, 104, '')),
-        room(621, 395, 85, 84, 'STAFF\nDESK', { fontSize: 11 }),
-        room(617, 1060, 88, 44, 'DOOR', { fontSize: 11 }),
-        couch(405, 255, 118, 42, 'COUCH', { curved: true, fontSize: 10 }),
-        { type: 'curve', d: 'M700 610 C605 658, 590 820, 700 882', strokeWidth: 4 },
-        { type: 'curve', d: 'M700 635 C630 686, 622 796, 700 854', strokeWidth: 2 },
-        label(625, 755, 'FRONT DESK', { fontSize: 10, verticalLabel: true }),
-        { type: 'chair', x: 660, y: 752, width: 14, height: 18, label: 'Front desk chair' },
+        room(10, 67, 686, 169, ''),
+        label(360, 124, 'BOOKS', { fontSize: 16 }),
+        { type: 'quietZone', x: 10, y: 178, width: 686, height: 57, label: '' },
+        ...[[43, 119], [176, 121], [326, 113], [475, 150]]
+          .map(([x, width]) => bookcase(x, 236, width, 21, '')),
+        ...[[309, 117], [451, 117], [595, 124], [749, 135]]
+          .map(([y, height]) => room(10, y, 36, height, '')),
+        ...[[426, 25], [568, 27], [719, 30]]
+          .map(([y, height]) => ({ type: 'quietZone', x: 10, y, width: 36, height, label: '' })),
+        bookcase(657, 289, 39, 124, ''),
+        bookcase(676, 539, 20, 405, ''),
+        bookcase(21, 974, 388, 26, ''),
+        label(258, 1031, 'BOOKS', { fontSize: 16 }),
+        room(639, 428, 57, 73, 'STAFF\nDESK', { fontSize: 11 }),
+        room(425, 1011, 158, 42, 'DOOR', { fontSize: 11 }),
+        { type: 'curve', d: 'M376 310 C394 282 422 267 444 277 C469 287 487 317 482 320 C475 324 461 289 437 287 C410 285 390 323 376 310', strokeWidth: 2 },
+        { type: 'curve', d: 'M676 622 C555 632 459 686 459 750 C459 817 552 869 676 881', strokeWidth: 3 },
+        { type: 'curve', d: 'M640 662 C550 685 500 722 500 750 C500 791 558 828 640 844', strokeWidth: 2 },
+        { type: 'chair', x: 563, y: 735, width: 28, height: 30, label: 'Front desk chair' },
         ...gisbertFourthFloorTables,
       ],
     },

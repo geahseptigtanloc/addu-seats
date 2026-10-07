@@ -70,6 +70,7 @@ function getSeatTypeLabel(seatType) {
 }
 
 function getSeatRotation(seat, features) {
+  if (seat.squareChair) return 0;
   if (seat.seatType !== 'individual') return 0;
   const desks = features.filter((feature) => feature.type === 'desk');
   let nearestDesk = null;
@@ -205,9 +206,9 @@ function LayoutFeature({ feature, hatchId, onHubClick, seatStatusByLabel }) {
           y={feature.y}
           width={feature.width}
           height={feature.height}
-          rx="3"
-          fill={MAP_THEME.desk}
-          stroke={MAP_THEME.wall}
+          rx={feature.rx ?? 3}
+          fill={feature.fill || MAP_THEME.desk}
+          stroke={feature.stroke || MAP_THEME.wall}
           strokeWidth="1.5"
           transform={feature.rotation
             ? `rotate(${feature.rotation} ${feature.x + feature.width / 2} ${feature.y + feature.height / 2})`
@@ -422,8 +423,8 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
     : 'seat-marker cursor-pointer';
   const isTableNode = seat.seatType === 'table_node';
   const renderAsTableNode = isTableNode && !seat.displayAsChair;
-  const hitWidth = renderAsTableNode ? seat.hitWidth || 38 : 16;
-  const hitHeight = renderAsTableNode ? seat.hitHeight || 38 : 16;
+  const hitWidth = seat.hitWidth || (renderAsTableNode ? 38 : 16);
+  const hitHeight = seat.hitHeight || (renderAsTableNode ? 38 : 16);
 
   return (
     <g
@@ -443,37 +444,42 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
     >
       <title>{`${seatLabel} - ${statusLabel}`}</title>
       <rect x={-hitWidth / 2} y={-hitHeight / 2} width={hitWidth} height={hitHeight} fill="transparent" />
-      {isOnBreak && !renderAsTableNode && (
-        <circle
-          cx="0"
-          cy="0"
-          r="10"
-          fill="#dbeafe"
-          stroke="#256d9c"
-          strokeWidth="1.5"
-          strokeDasharray="2.5 2"
-          pointerEvents="none"
-        />
-      )}
+      {isOnBreak && !renderAsTableNode && (seat.zigzagChair ? (
+        <rect x="-9" y="-18" width="18" height="36" rx="2" fill="#dbeafe" stroke="#256d9c" strokeWidth="1.5" strokeDasharray="2.5 2" pointerEvents="none" />
+      ) : seat.floorFourChair ? (
+        <rect x={-hitWidth / 2 - 1} y={-hitHeight / 2 - 1} width={hitWidth + 2} height={hitHeight + 2} rx="2" fill="#dbeafe" stroke="#256d9c" strokeWidth="1.5" strokeDasharray="2.5 2" pointerEvents="none" />
+      ) : (
+        <circle cx="0" cy="0" r="10" fill="#dbeafe" stroke="#256d9c" strokeWidth="1.5" strokeDasharray="2.5 2" pointerEvents="none" />
+      ))}
       {renderAsTableNode ? (
-        <rect
-          className="seat-focus-ring"
-          x={-hitWidth / 2}
-          y={-hitHeight / 2}
-          width={hitWidth}
-          height={hitHeight}
-          rx="4"
-          fill="none"
-          stroke="#063a64"
-          strokeWidth="1.5"
-          strokeDasharray="3 2"
-          pointerEvents="none"
-        />
+        <>
+          <rect
+            className="seat-focus-ring"
+            x={-hitWidth / 2}
+            y={-hitHeight / 2}
+            width={hitWidth}
+            height={hitHeight}
+            rx="4"
+            fill="none"
+            stroke="#063a64"
+            strokeWidth="1.5"
+            strokeDasharray="3 2"
+            pointerEvents="none"
+          />
+        </>
       ) : (
         <>
-          <circle className="seat-focus-ring" cx="0" cy="0" r="8.8" fill="none" stroke="#063a64" strokeWidth="1.5" />
+          {seat.floorFourChair ? (
+            <rect className="seat-focus-ring" x={-hitWidth / 2} y={-hitHeight / 2} width={hitWidth} height={hitHeight} rx="2" fill="none" stroke="#063a64" strokeWidth="1.5" />
+          ) : seat.squareChair ? (
+            <rect className="seat-focus-ring" x="-9" y="-8" width="18" height="16" rx="2" fill="none" stroke="#063a64" strokeWidth="1.5" />
+          ) : seat.zigzagChair ? (
+            <rect className="seat-focus-ring" x="-8" y="-17" width="16" height="34" rx="2" fill="none" stroke="#063a64" strokeWidth="1.5" />
+          ) : (
+            <circle className="seat-focus-ring" cx="0" cy="0" r="8.8" fill="none" stroke="#063a64" strokeWidth="1.5" />
+          )}
           <g transform={`rotate(${rotation})`}>
-            {selectedSeatShape(seat.seatType, fill)}
+            {selectedSeatShape(seat.seatType, fill, seat)}
           </g>
         </>
       )}
@@ -481,7 +487,33 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
   );
 }
 
-function selectedSeatShape(seatType, fill) {
+function selectedSeatShape(seatType, fill, seat = {}) {
+  if (seat.floorFourChair) {
+    const width = 12;
+    const height = 12;
+    return (
+      <g pointerEvents="none">
+        <rect x={-width / 2} y={-height / 2} width={width} height={height} rx="1.5" fill="#ffffff" stroke={MAP_THEME.curve} strokeWidth="1.2" />
+        <rect x={-width / 2 + 1.5} y={-height / 2 + 1.5} width={width - 3} height={height - 3} rx="0.75" fill={fill} />
+      </g>
+    );
+  }
+  if (seat.squareChair) {
+    return (
+      <g pointerEvents="none">
+        <rect x="-7" y="-6" width="14" height="12" rx="1.5" fill="#ffffff" stroke={MAP_THEME.curve} strokeWidth="1.2" />
+        <rect x="-5.75" y="-4.75" width="11.5" height="9.5" rx="1" fill={fill} />
+      </g>
+    );
+  }
+  if (seat.zigzagChair) {
+    return (
+      <g pointerEvents="none">
+        <rect x="-6" y="-15" width="12" height="30" rx="1.5" fill="#ffffff" stroke={MAP_THEME.curve} strokeWidth="1.2" />
+        <rect x="-4.75" y="-13.75" width="9.5" height="27.5" rx="1" fill={fill} />
+      </g>
+    );
+  }
   if (seatType === 'cubicle') {
     return (
       <g pointerEvents="none">

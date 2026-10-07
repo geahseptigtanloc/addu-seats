@@ -18,6 +18,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Product pillars: real-time interactive seat mapping, front-desk QR verification with automated break controls, and administrative occupancy analytics.
 - Map formal seating only. Exclude informal movable seating among bookshelf stacks and alcoves.
 - Use a single table-level seat for each collaborative square table that seats four.
+- The current user-requested Gisbert floor 3 map is an explicit exception: its four square tables have four individually reservable chairs each.
 - Use individual seats for long rectangular tables and wall cubicles.
 - Evaluate the completed system through functional testing and the System Usability Scale, with a target mean SUS score of at least 70.
 
@@ -53,7 +54,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 
 - Receive the staff role from configured `STAFF_EMAILS` during Google login.
 - View the real-time pending-entry queue, which updates immediately when a reservation is created, handled, or expires without requiring a page refresh.
-- See student name, ID suffix, seat location, and entry countdown.
+- See student name, ID suffix, seat location (Gisbert floor or Miguel Pro area), and entry countdown.
 - Approve or reject entry from the queue.
 - Open an authenticated reservation verification URL and approve or reject the reservation.
 - Receive silent flagging updates for monitoring.
@@ -63,13 +64,13 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Use all staff/front-desk capabilities.
 - Sign in through Google OAuth from an address configured in `STAFF_EMAILS`.
 - Review live reservations and approve entry only after matching the receipt code and checking the student's name and university ID.
-- Receive each new pending reservation as an immediate toast and notification-bell badge, with the student, seat, floor, and a link to the front-desk queue.
+- Receive each new pending reservation as an immediate toast and notification-bell badge, with the student, seat, library, Gisbert floor or Miguel Pro area, and a link to the front-desk queue.
 - Receive new ghost-seat reports as a toast and notification-bell badge from any administrator page.
 - Review ghost-seat reports in a compact newest-first list that reveals five more records at a time.
 - Open a pending, occupied, or on-break seat from a floor map and void its active reservation, immediately releasing the seat.
 - View the responsive occupancy dashboard and open individual floor maps.
 - View an immediate seven-day occupancy baseline and heat map calculated from the selected period's real weekday and hourly occupancy patterns.
-- Switch dashboard analytics between Gisbert Library and Miguel Pro Learning Commons and review active ghost-seat reports with the exact seat label, building, floor, and reservation holder.
+- Switch dashboard analytics between Gisbert Library and Miguel Pro Learning Commons and review active ghost-seat reports with the exact seat label, library, Gisbert floor or Miguel Pro area, and reservation holder.
 - Confirm a reported reservation as a ghost seat after verification; confirmation voids the reservation, releases the seat, and removes the active report.
 - Access role-protected admin routes.
 - Target capabilities from the paper include disabling seats for maintenance or reclassification and overriding an automated release only for a verified exceptional case; these remain pending unless confirmed in code.
@@ -78,8 +79,8 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 
 - Gisbert floor 1: 184 mapped seats.
 - Gisbert floor 2: 130 mapped seats.
-- Gisbert floor 3: 120 reservable seats. Chair positions follow the green chair shapes in the supplied SVG reference, while the displayed map uses the app's clean geometric floor-plan style.
-- Gisbert floor 4: 117 reservable seats. Chair positions follow the green chair shapes in the supplied SVG reference, while the displayed map uses the app's clean geometric floor-plan style.
+- Gisbert floor 3: 120 reservable seats traced from the supplied October 7 portrait sketch. All 16 chairs around the four square tables have separate availability, details, and QR labels. The zigzag computer row has six reservable green chairs beside the dividers and six non-reservable equipment boxes. The three front-desk chairs are display-only. Revised seats use new QR labels so old labels are not assigned to different chair positions.
+- Gisbert floor 4: 117 individually reservable green chairs traced from the supplied SVG reference. The seven chairs formerly labeled as shared table nodes now have individual-chair QR labels; the old table labels are retired. The long tables, smaller desks, wall shelving, books areas, staff desk, and front desk follow the same reference in the app's geometric floor-plan style.
 - Total Gisbert capacity: 551 reservable seats.
 - Miguel Pro uses area tabs instead of floors: Main Area, Research Nook, and Workspace Room. Together they contain 230 frontend preview seats mapped from the supplied reference. Every visible Miguel Pro chair is an individual clickable seat, including the four chairs around each square table, per the current requested UI behavior. Research Nook furniture appears only on its own tab and is excluded from the Main Area.
 - The Main Area includes Collab Hubs 1-7 as interactive rooms. Selecting a hub opens a booking-information modal that links to the official AdDU Library Collab Hub reservation page.
@@ -87,8 +88,8 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Stable seat labels identify the building, floor, and seat type, such as `G1-S001`, `G1-T001`, and `G1-C001`.
 - Floor-specific Socket.IO namespaces publish `seat_status_update` events.
 - Frontend preview coordinates mirror the database seed coordinates.
-- The backend seed mirrors all 781 reservable seats: 551 Gisbert seats and 230 Miguel Pro seats. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Tokens without a matching green chair in the supplied SVG plans are rejected by the API, and their prior database rows are made unavailable by migrations.
-- Before future coordinate changes, preserve the paper's table-level versus seat-level QR assignment rules and its exclusion of informal seating.
+- The backend seed mirrors all 781 reservable seats: 551 Gisbert seats and 230 Miguel Pro seats. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Tokens retired by revised floor plans are rejected by the API and made unavailable by migrations.
+- Before future coordinate changes, preserve formal-seat exclusions and the current floor-specific table or chair assignment, including the requested per-chair Gisbert floor 3 exception.
 
 ## Reservation Integrity Rules
 

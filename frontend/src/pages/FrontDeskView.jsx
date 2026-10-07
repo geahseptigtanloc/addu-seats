@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import Layout from '../components/Layout.jsx';
 import { API_URL, apiClient, getToken } from '../api/client.js';
 import { getReceiptCode, normalizePendingReservation } from '../api/normalizers.js';
+import { formatSeatLocation } from '../data/seatLocations.js';
 import { CheckCircle, ClockCountdown, IdentificationCard, X } from '@phosphor-icons/react';
 import AppDialog from '../components/AppDialog.jsx';
 
@@ -159,7 +160,7 @@ export default function FrontDeskView() {
                     </div>
                     <div>
                       <p className="font-semibold text-[#063a64]">{seatLabel}</p>
-                      <p className="mt-1 text-sm text-slate-500">{getSeatType(reservation.seat.seatType)} - Floor {reservation.seat.floor}</p>
+                      <p className="mt-1 text-sm text-slate-500">{getSeatType(reservation.seat.seatType)} · {formatSeatLocation(reservation.seat)}</p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Receipt code</p>

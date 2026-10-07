@@ -5,7 +5,11 @@ const tokenRange = (floor: number, type: string, start: number, end: number): st
     (_, index) => `seat:g${floor}-${type}${String(start + index).padStart(3, '0')}`,
   );
 
-const retiredSeatTokens = new Set([...tokenRange(3, 'c', 1, 28), ...tokenRange(4, 'c', 19, 30)]);
+const retiredSeatTokens = new Set([
+  ...tokenRange(3, 'c', 1, 28),
+  ...tokenRange(4, 'c', 19, 30),
+  ...tokenRange(4, 't', 1, 7),
+]);
 
 export function isRetiredSeatToken(token: string): boolean {
   return retiredSeatTokens.has(token);
