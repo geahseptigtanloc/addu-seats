@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout.jsx';
 import AppDialog from '../components/AppDialog.jsx';
@@ -18,7 +18,7 @@ import {
 } from '../data/miguelProMap.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { io } from 'socket.io-client';
-import { ArrowLeft, ArrowSquareOut, Clock, Minus, Plus, QrCode, Ticket, Trash, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowSquareOut, Clock, MagnifyingGlass, Minus, Plus, QrCode, Ticket, Trash, X } from '@phosphor-icons/react';
 
 const DEFAULT_LAYOUT = {
   name: 'Floor Map',
@@ -412,7 +412,7 @@ function LayoutFeature({ feature, hatchId, onHubClick, seatStatusByLabel }) {
   }
 }
 
-function SeatMarker({ seat, index, onClick, rotation = 0 }) {
+function SeatMarker({ seat, index, onClick, rotation = 0, highlighted = false }) {
   const statusLabel = STATUS_LABELS[seat.status] || seat.status.replace('_', ' ');
   const seatLabel = seat.label || `Seat ${index + 1}`;
   const fill = getSeatColor(seat.status);
@@ -440,9 +440,15 @@ function SeatMarker({ seat, index, onClick, rotation = 0 }) {
       tabIndex={isDisabled ? -1 : 0}
       aria-label={`${seatLabel}, ${getSeatTypeLabel(seat.seatType)}, ${statusLabel}`}
       aria-disabled={isDisabled}
-      className={markerClass}
+      className={`${markerClass}${highlighted ? ' seat-marker-search-match' : ''}`}
     >
       <title>{`${seatLabel} - ${statusLabel}`}</title>
+      {highlighted && (
+        <>
+          <circle cx="0" cy="0" r={Math.max(hitWidth, hitHeight) / 2 + 11} fill="none" stroke="#0369a1" strokeWidth="3" pointerEvents="none" />
+          <text x="0" y={-Math.max(hitWidth, hitHeight) / 2 - 16} textAnchor="middle" fontSize="12" fontWeight="700" fill="#063a64" stroke="#fbfdff" strokeWidth="3" paintOrder="stroke" pointerEvents="none">{seatLabel}</text>
+        </>
+      )}
       <rect x={-hitWidth / 2} y={-hitHeight / 2} width={hitWidth} height={hitHeight} fill="transparent" />
       {isOnBreak && !renderAsTableNode && (seat.zigzagChair ? (
         <rect x="-9" y="-18" width="18" height="36" rx="2" fill="#dbeafe" stroke="#256d9c" strokeWidth="1.5" strokeDasharray="2.5 2" pointerEvents="none" />
@@ -553,10 +559,18 @@ export default function SeatMap() {
   const [voidingReservation, setVoidingReservation] = useState(false);
   const [notice, setNotice] = useState(null);
   const [zoom, setZoom] = useState(1);
+  const [seatQuery, setSeatQuery] = useState('');
+  const [highlightedSeatId, setHighlightedSeatId] = useState(null);
+  const mapViewportRef = useRef(null);
   const requestedArea = searchParams.get('area');
   const miguelProArea = MIGUEL_PRO_AREAS.some((area) => area.id === requestedArea)
     ? requestedArea
     : 'main_area';
+
+  useEffect(() => {
+    setSeatQuery('');
+    setHighlightedSeatId(null);
+  }, [building, floor, miguelProArea]);
 
   useEffect(() => {
     const fetchActiveReservation = async () => {
@@ -732,6 +746,16 @@ export default function SeatMap() {
   ));
   const seatStatusByLabel = new Map(visibleSeats.map((seat) => [seat.label, seat.status]));
   const sortedSeats = [...visibleSeats].sort((a, b) => (a.posY - b.posY) || (a.posX - b.posX));
+  const normalizedSeatQuery = seatQuery.toUpperCase().replace(/[\s-]/g, '');
+  const matchingSeats = normalizedSeatQuery
+    ? sortedSeats.filter((seat) => {
+      const label = seat.label?.toUpperCase() || '';
+      const fullLabel = label.replace(/-/g, '');
+      const shortLabel = label.split('-').at(-1) || '';
+      return fullLabel.startsWith(normalizedSeatQuery) || shortLabel.startsWith(normalizedSeatQuery);
+    })
+    : [];
+  const displayedMatches = matchingSeats.slice(0, 6);
   const selectedSeatNumber = selectedSeat
     ? sortedSeats.findIndex((seat) => seat.seatId === selectedSeat.seatId) + 1
     : 0;
@@ -751,6 +775,23 @@ export default function SeatMap() {
     : `${buildingName} Library - Floor ${floor}`;
 
   const setMapZoom = (nextZoom) => setZoom(Math.min(1.8, Math.max(0.8, nextZoom)));
+
+  const findSeatOnMap = (seat) => {
+    if (!seat) return;
+    setSeatQuery(seat.label);
+    setHighlightedSeatId(seat.seatId);
+    const viewport = mapViewportRef.current;
+    const svg = viewport?.querySelector('svg');
+    if (!viewport || !svg) return;
+    const viewportRect = viewport.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    const scale = svgRect.width / layout.width;
+    viewport.scrollTo({
+      left: svgRect.left - viewportRect.left + viewport.scrollLeft + seat.posX * scale - viewport.clientWidth / 2,
+      top: svgRect.top - viewportRect.top + viewport.scrollTop + seat.posY * scale - viewport.clientHeight / 2,
+      behavior: 'smooth',
+    });
+  };
 
   return (
     <Layout>
@@ -818,6 +859,51 @@ export default function SeatMap() {
           </div>
         ) : null}
 
+        <div className="border-b border-slate-200 bg-white px-4 py-4">
+          <form onSubmit={(event) => { event.preventDefault(); findSeatOnMap(matchingSeats[0]); }} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="w-full sm:max-w-sm">
+              <label htmlFor="seat-search" className="ui-label mb-1.5 block">Find a seat on this {building === 'miguel_pro' ? 'room map' : 'floor'}</label>
+              <div className="relative">
+                <MagnifyingGlass size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+                <input
+                  id="seat-search"
+                  type="search"
+                  value={seatQuery}
+                  onChange={(event) => { setSeatQuery(event.target.value); setHighlightedSeatId(null); }}
+                  placeholder={building === 'miguel_pro' ? 'e.g. S001 or M1-S001' : `e.g. S001 or G${floor}-S001`}
+                  autoComplete="off"
+                  className="min-h-10 w-full rounded-[8px] border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400"
+                />
+              </div>
+            </div>
+            <button type="submit" disabled={!matchingSeats.length || loading} className="ui-button-secondary self-start sm:self-auto">Find seat</button>
+          </form>
+          {normalizedSeatQuery && !loading && (
+            <div className="mt-3" aria-live="polite">
+              {matchingSeats.length ? (
+                <>
+                  <p className="mb-2 text-xs text-slate-600">{matchingSeats.length} matching {matchingSeats.length === 1 ? 'seat' : 'seats'}{matchingSeats.length > displayedMatches.length ? ` · Showing first ${displayedMatches.length}` : ''}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {displayedMatches.map((seat) => (
+                      <button
+                        key={seat.seatId}
+                        type="button"
+                        onClick={() => findSeatOnMap(seat)}
+                        className={`rounded-[8px] border px-3 py-2 text-left text-sm hover:border-[#063a64] hover:bg-blue-50 ${highlightedSeatId === seat.seatId ? 'border-[#063a64] bg-blue-50 text-[#063a64]' : 'border-slate-200 bg-slate-50 text-slate-700'}`}
+                        aria-label={`Find ${seat.label}, ${STATUS_LABELS[seat.status] || seat.status}`}
+                      >
+                        <span className="font-semibold">{seat.label}</span>
+                        <span className="ml-2 text-xs">{STATUS_LABELS[seat.status] || seat.status}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {highlightedSeatId && <p className="mt-2 text-xs text-slate-600">Highlighted on the map. Select the marker to view seat details.</p>}
+                </>
+              ) : <p className="text-sm text-slate-600">No seat matches “{seatQuery}” on this {building === 'miguel_pro' ? 'room map' : 'floor'}.</p>}
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-[#f5f9fc] px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">{layout.name}</p>
@@ -849,7 +935,7 @@ export default function SeatMap() {
         ) : error ? (
           <div className="ui-alert-danger m-4">{error}</div>
         ) : (
-          <div className="max-h-[72vh] min-h-[440px] overflow-auto bg-[#dfe8ef] p-3 sm:p-5">
+          <div ref={mapViewportRef} className="max-h-[72vh] min-h-[440px] overflow-auto bg-[#dfe8ef] p-3 sm:p-5">
             <div className="mx-auto origin-top" style={{ width: `${zoom * 100}%`, minWidth: zoom >= 1 ? '680px' : '560px' }}>
               <svg viewBox={`0 0 ${layout.width} ${layout.height}`} className="map-paper block h-auto w-full" role="group" aria-label={`${layout.name} interactive map`}>
                 <defs>
@@ -874,6 +960,7 @@ export default function SeatMap() {
                     index={index}
                     rotation={getSeatRotation(seat, layout.features)}
                     onClick={handleSeatClick}
+                    highlighted={highlightedSeatId === seat.seatId}
                   />
                 ))}
               </svg>

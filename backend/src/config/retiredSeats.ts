@@ -6,6 +6,7 @@ const tokenRange = (floor: number, type: string, start: number, end: number): st
   );
 
 const retiredSeatTokens = new Set([
+  ...tokenRange(1, 'c', 32, 40),
   ...tokenRange(3, 'c', 1, 28),
   ...tokenRange(4, 'c', 19, 30),
   ...tokenRange(4, 't', 1, 7),

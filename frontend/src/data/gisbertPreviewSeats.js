@@ -91,9 +91,6 @@ addSeats(1, 'cubicle', [
 addColumn(1, 'cubicle', 955, 220, 8, 38);
 addColumn(1, 'cubicle', 855, 66, 5, 28);
 addRow(1, 'cubicle', 870, 195, 4, 30);
-addRow(1, 'cubicle', 440, 40, 3, 36);
-addRow(1, 'cubicle', 565, 40, 3, 36);
-addRow(1, 'cubicle', 690, 40, 3, 36);
 
 for (const [y, xs] of [
   [110, [185, 260, 335, 410]],

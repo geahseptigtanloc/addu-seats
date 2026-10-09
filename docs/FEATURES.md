@@ -77,18 +77,19 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 
 ## Floor Maps And Seats
 
-- Gisbert floor 1: 184 mapped seats.
+- Gisbert floor 1: 175 mapped seats. The three upper bookcases have no chair markers or reservable seats inside them.
 - Gisbert floor 2: 130 mapped seats.
 - Gisbert floor 3: 120 reservable seats traced from the supplied October 7 portrait sketch. All 16 chairs around the four square tables have separate availability, details, and QR labels. The zigzag computer row has six reservable green chairs beside the dividers and six non-reservable equipment boxes. The three front-desk chairs are display-only. Revised seats use new QR labels so old labels are not assigned to different chair positions.
 - Gisbert floor 4: 117 individually reservable green chairs traced from the supplied SVG reference. The seven chairs formerly labeled as shared table nodes now have individual-chair QR labels; the old table labels are retired. The long tables, smaller desks, wall shelving, books areas, staff desk, and front desk follow the same reference in the app's geometric floor-plan style.
-- Total Gisbert capacity: 551 reservable seats.
+- Total Gisbert capacity: 542 reservable seats.
 - Miguel Pro uses area tabs instead of floors: Main Area, Research Nook, and Workspace Room. Together they contain 230 frontend preview seats mapped from the supplied reference. Every visible Miguel Pro chair is an individual clickable seat, including the four chairs around each square table, per the current requested UI behavior. Research Nook furniture appears only on its own tab and is excluded from the Main Area.
 - The Main Area includes Collab Hubs 1-7 as interactive rooms. Selecting a hub opens a booking-information modal that links to the official AdDU Library Collab Hub reservation page.
 - Seat states: available, pending, occupied, on break, and disabled.
 - Stable seat labels identify the building, floor, and seat type, such as `G1-S001`, `G1-T001`, and `G1-C001`.
+- Each floor or room map lets visitors search its visible seats by a short label such as `S001` or a full label such as `G1-S001`. Results show seat availability and can highlight and center the matching marker on the map.
 - Floor-specific Socket.IO namespaces publish `seat_status_update` events.
 - Frontend preview coordinates mirror the database seed coordinates.
-- The backend seed mirrors all 781 reservable seats: 551 Gisbert seats and 230 Miguel Pro seats. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Tokens retired by revised floor plans are rejected by the API and made unavailable by migrations.
+- The backend seed mirrors all 772 reservable seats: 542 Gisbert seats and 230 Miguel Pro seats. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Tokens retired by revised floor plans are rejected by the API and made unavailable by migrations.
 - Before future coordinate changes, preserve formal-seat exclusions and the current floor-specific table or chair assignment, including the requested per-chair Gisbert floor 3 exception.
 
 ## Reservation Integrity Rules

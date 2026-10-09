@@ -876,51 +876,6 @@
   },
   {
     "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c032"
-  },
-  {
-    "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c033"
-  },
-  {
-    "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c034"
-  },
-  {
-    "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c035"
-  },
-  {
-    "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c036"
-  },
-  {
-    "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c037"
-  },
-  {
-    "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c038"
-  },
-  {
-    "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c039"
-  },
-  {
-    "building": "gisbert",
-    "floor": 1,
-    "currentQrToken": "seat:g1-c040"
-  },
-  {
-    "building": "gisbert",
     "floor": 2,
     "currentQrToken": "seat:g2-s001"
   },
