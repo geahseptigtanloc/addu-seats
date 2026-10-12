@@ -17,6 +17,6 @@ These 12 prints were made for the previous map but were not attached to chairs. 
 | `gisbert-floor3-seat_g3-s037` | `G3-S099` | Second long table, lower left |
 | `gisbert-floor3-seat_g3-s066` | `G3-S100` | Second long table, lower right |
 
-Only these 12 old codes are reassigned. Other old floor-3 QR codes remain inactive. The QR page will show the **current** seat label after student sign-in; the print's old filename is an inventory identifier. Apply the backend migration and seed the current seat map before placing the prints.
+Only these 12 old codes are reassigned. Other old floor-3 QR codes remain inactive. The QR page will show the **current** seat label after student sign-in; the print's old filename is an inventory identifier. Wait until the live API shows the 120 current third-floor seats before placing the prints. Backend startup adds missing third-floor seats from the checked-in map without changing existing seat statuses or reservations.
 
 The reservation-QR generator skips these 12 seats so a new reservation QR is not printed for the same chair. Presence re-verification uses a separate `/reverify` QR image with the same current seat identity and still needs to be placed according to the existing break workflow.

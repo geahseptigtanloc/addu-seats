@@ -5,6 +5,7 @@ import { env } from './config/env';
 import { logger } from './config/logger';
 import { connectRedis, redisClient } from './config/redis';
 import { prisma } from './config/prisma';
+import { ensureGisbertThirdFloorSeats } from './config/gisbertThirdFloorSeats';
 import { initSocket, getIO } from './config/socket';
 import { scheduleJob, stopAllJobs } from './jobs/scheduler';
 import { entryTimerExpiryJob } from './jobs/entryTimerExpiry.job';
@@ -39,6 +40,8 @@ async function shutdown(signal: string): Promise<void> {
 
 async function main(): Promise<void> {
   await prisma.$connect();
+  const addedSeats = await ensureGisbertThirdFloorSeats();
+  logger.info({ addedSeats }, 'Gisbert third-floor seats checked');
   await connectRedis();
 
   const app = createApp();

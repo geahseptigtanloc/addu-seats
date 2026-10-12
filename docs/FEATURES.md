@@ -89,7 +89,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Each floor or room map lets visitors search its visible seats by a short label such as `S001` or a full label such as `G1-S001`. Results show seat availability and can highlight and center the matching marker on the map.
 - Floor-specific Socket.IO namespaces publish `seat_status_update` events.
 - Frontend preview coordinates mirror the database seed coordinates.
-- The backend seed mirrors all 772 reservable seats: 542 Gisbert seats and 230 Miguel Pro seats. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Tokens retired by revised floor plans are rejected by the API and made unavailable by migrations.
+- The backend seed mirrors all 772 reservable seats: 542 Gisbert seats and 230 Miguel Pro seats. Backend startup adds missing Gisbert third-floor rows from that map while preserving existing statuses and reservation history, so assigned printed QR codes have real seat records. Stable labels are encoded in the development QR tokens so live API records can be joined to the canonical frontend geometry without duplicating map coordinates in the database. Tokens retired by revised floor plans are rejected by the API and made unavailable by earlier migrations.
 - Before future coordinate changes, preserve formal-seat exclusions and the current floor-specific table or chair assignment, including the requested per-chair Gisbert floor 3 exception.
 
 ## Reservation Integrity Rules
