@@ -79,7 +79,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 
 - Gisbert floor 1: 175 mapped seats. The three upper bookcases have no chair markers or reservable seats inside them.
 - Gisbert floor 2: 130 mapped seats.
-- Gisbert floor 3: 120 reservable seats traced from the supplied October 7 portrait sketch. All 16 chairs around the four square tables have separate availability, details, and QR labels. The zigzag computer row has six reservable green chairs beside the dividers and six non-reservable equipment boxes. The three front-desk chairs are display-only. Revised seats use new QR labels so old labels are not assigned to different chair positions.
+- Gisbert floor 3: 120 reservable seats traced from the supplied October 7 portrait sketch. All 16 chairs around the four square tables have separate availability, details, and QR labels. The zigzag computer row has six reservable green chairs beside the dividers and six non-reservable equipment boxes. The three front-desk chairs are display-only. Twelve previously printed but unattached QR codes are assigned one-to-one to current seats `G3-S089` through `G3-S100`; see `docs/GISBERT_FLOOR3_PRINTED_QR_PLACEMENT.md`. All other retired codes remain inactive. Six current wall cubicles use fresh `G3-C053` through `G3-C058` labels to avoid overlapping old QR identities.
 - Gisbert floor 4: 117 individually reservable green chairs traced from the supplied SVG reference. The seven chairs formerly labeled as shared table nodes now have individual-chair QR labels; the old table labels are retired. The long tables, smaller desks, wall shelving, books areas, staff desk, and front desk follow the same reference in the app's geometric floor-plan style.
 - Total Gisbert capacity: 542 reservable seats.
 - Miguel Pro uses area tabs instead of floors: Main Area, Research Nook, and Workspace Room. Together they contain 230 frontend preview seats mapped from the supplied reference. Every visible Miguel Pro chair is an individual clickable seat, including the four chairs around each square table, per the current requested UI behavior. Research Nook furniture appears only on its own tab and is excluded from the Main Area.
@@ -102,7 +102,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Pending-entry reservations expire automatically after five minutes.
 - Front-desk approval changes the reservation to active and the seat to occupied.
 - Front-desk rejection releases the seat.
-- Physical-seat QR values are matched against `Seat.currentQrToken`. Development tokens are deterministic so the supplied maps and seed stay synchronized; secure production token generation and printing remain pending.
+- Physical-seat QR values are matched against `Seat.currentQrToken`. The 12 assigned third-floor printed tokens resolve to their current seat before lookup; each reservation and presence re-verification uses that current seat's identity and status. Development tokens are deterministic so the supplied maps and seed stay synchronized; secure production token generation and printing remain pending.
 - Breaks begin at five minutes and can be extended by five minutes twice.
 - Returning from a break and clearing an active ghost-seat report use one authenticated `POST /reservations/reverify` request with the verify QR's seat token. It returns `flag_cleared` or `break_ended`; production printing remains pending.
 - Missing the break deadline before that scan forfeits the reservation and releases the seat.

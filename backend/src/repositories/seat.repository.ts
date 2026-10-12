@@ -1,5 +1,7 @@
 import type { Seat, SeatStatus } from '@prisma/client';
 import { prisma } from '../config/prisma';
+import { resolveSeatQrToken } from '../config/seatQrAliases';
+import { isRetiredSeatToken } from '../config/retiredSeats';
 
 export interface FindSeatsFilter {
   building?: string;
@@ -23,7 +25,9 @@ export function findMany(filter: FindSeatsFilter = {}): Promise<Seat[]> {
 }
 
 export function findByQrToken(token: string): Promise<Seat | null> {
-  return prisma.seat.findUnique({ where: { currentQrToken: token } });
+  const currentToken = resolveSeatQrToken(token);
+  if (isRetiredSeatToken(currentToken)) return Promise.resolve(null);
+  return prisma.seat.findUnique({ where: { currentQrToken: currentToken } });
 }
 
 export function update(id: string, data: UpdateSeatInput): Promise<Seat> {

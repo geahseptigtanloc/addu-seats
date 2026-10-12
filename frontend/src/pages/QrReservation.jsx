@@ -161,7 +161,7 @@ export default function QrReservation() {
               </div>
             ) : !user ? (
               <>
-                <Message icon={QrCode} title={`${scannedLabel} scanned`} copy="Sign in with Google to continue this physical QR reservation." />
+                <Message icon={QrCode} title="QR code scanned" copy="Sign in with Google to verify the current seat assigned to this physical QR." />
                 <button type="button" onClick={handleSignIn} className="ui-button-primary mt-6 w-full">Continue to sign in</button>
               </>
             ) : user.role !== 'student' ? (

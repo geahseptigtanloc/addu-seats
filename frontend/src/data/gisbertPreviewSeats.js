@@ -16,7 +16,10 @@ const addSeat = (floor, seatType, posX, posY) => {
   // new labels instead of reassigning old tokens to different physical seats.
   const thirdFloorLabelOffset = { individual: 76, table_node: 44, cubicle: 22 };
   const labelSequence = floor === 3
-    ? sequence + thirdFloorLabelOffset[seatType] + (seatType === 'cubicle' && sequence > 15 ? 9 : 0)
+    ? seatType === 'cubicle' && sequence <= 6
+      // C023-C028 were old QR identities; use fresh labels for these wall seats.
+      ? sequence + 52
+      : sequence + thirdFloorLabelOffset[seatType] + (seatType === 'cubicle' && sequence > 15 ? 9 : 0)
     : sequence;
   floorSeats.push({
     seatId: `preview-gisbert-${floor}-${floorSeats.length + 1}`,

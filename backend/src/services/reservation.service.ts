@@ -17,6 +17,7 @@ import { getSeatLabel } from './seat.service';
 import { redisClient } from '../config/redis';
 import { logger } from '../config/logger';
 import { isRetiredSeatToken } from '../config/retiredSeats';
+import { resolveSeatQrToken } from '../config/seatQrAliases';
 import {
   broadcastSeatStatusUpdate,
   notifySeatFlagged,
@@ -90,7 +91,7 @@ export async function createReservation(
     throw new ConflictError('You are on a break cooldown — please try again later');
   }
 
-  if (isRetiredSeatToken(qrToken)) {
+  if (isRetiredSeatToken(resolveSeatQrToken(qrToken))) {
     throw new NotFoundError('This seat QR code is no longer active');
   }
 

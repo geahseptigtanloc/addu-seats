@@ -142,7 +142,7 @@ npm run generate:reservation-qrs
 npm run generate:verify-qrs
 ```
 
-Reservation codes are written to `backend/qr-codes/`. The one shared presence-verification code per seat is written to `backend/qr-verify-codes/`; it handles both a flagged-seat presence check and a break return. Both QR types contain the same seat token on different frontend paths.
+Reservation codes are written to `backend/qr-codes/`. The generator skips the 12 Gisbert floor-3 chairs assigned to existing printed reservation QRs; their placement list is in `docs/GISBERT_FLOOR3_PRINTED_QR_PLACEMENT.md`. The one shared presence-verification code per seat is written to `backend/qr-verify-codes/`; it handles both a flagged-seat presence check and a break return. For those 12 chairs, the printed reservation token and the newly generated verification token resolve to the same current seat.
 
 ## Main API Endpoints
 
@@ -176,7 +176,7 @@ Run through this list to confirm Phase 1 works:
 - [ ] Redis is running and `REDIS_URL` in `backend/.env` is correct
 - [ ] `backend/.env` and `frontend/.env` are filled in (especially Google OAuth + JWT secret)
 - [ ] `cd backend && npx prisma migrate dev --name init` completes without errors
-- [ ] `cd backend && npm run seed` inserts the 821 mapped development seats without creating sample users
+- [ ] `cd backend && npm run seed` inserts the 772 mapped development seats without creating sample users
 - [ ] `cd backend && npm run dev` starts on port 3001
 - [ ] `cd frontend && npm run dev` starts on port 5173
 - [ ] `curl http://localhost:3001/api/health` returns `{ "status": "ok", "timestamp": "..." }`

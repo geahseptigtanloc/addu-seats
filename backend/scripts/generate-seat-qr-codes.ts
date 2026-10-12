@@ -2,6 +2,8 @@ import QRCode from 'qrcode';
 import { readFileSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import 'dotenv/config';
+import { hasAssignedPrintedQr } from '../src/config/seatQrAliases';
+import { isRetiredSeatToken } from '../src/config/retiredSeats';
 
 interface SeatMapEntry {
   building: string;
@@ -26,12 +28,15 @@ const QR_OPTIONS = {
 async function main(): Promise<void> {
   const seatMapPath = join(__dirname, '../prisma/seat-map.json');
   const seatMap = JSON.parse(readFileSync(seatMapPath, 'utf-8')) as SeatMapEntry[];
+  const seatsToPrint = seatMap.filter(
+    (seat) => !isRetiredSeatToken(seat.currentQrToken) && !hasAssignedPrintedQr(seat.currentQrToken),
+  );
 
   const outputDir = join(__dirname, '../qr-codes');
   rmSync(outputDir, { recursive: true, force: true });
   mkdirSync(outputDir, { recursive: true });
 
-  for (const seat of seatMap) {
+  for (const seat of seatsToPrint) {
     const reservationUrl = `${SCAN_BASE_URL}?token=${encodeURIComponent(seat.currentQrToken)}`;
     const safeName = seat.currentQrToken.replace(/[^a-zA-Z0-9-]/g, '_');
     const fileName = `${seat.building}-floor${seat.floor}-${safeName}.png`;
@@ -43,7 +48,8 @@ async function main(): Promise<void> {
     console.log(`Generated reservation QR: ${reservationPath}`);
   }
 
-  console.log(`\nDone — ${seatMap.length} reservation QR codes written to ${outputDir}`);
+  console.log(`\nDone — ${seatsToPrint.length} reservation QR codes written to ${outputDir}`);
+  console.log(`Skipped ${seatMap.length - seatsToPrint.length} seats with retired or already printed QRs.`);
 }
 
 main().catch((err) => {

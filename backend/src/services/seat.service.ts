@@ -1,6 +1,7 @@
 import type { Seat, SeatStatus } from '@prisma/client';
 import * as seatRepository from '../repositories/seat.repository';
 import { isRetiredSeatToken } from '../config/retiredSeats';
+import { resolveSeatQrToken } from '../config/seatQrAliases';
 import { NotFoundError } from '../utils/AppError';
 
 export interface GetSeatsFilter {
@@ -38,7 +39,7 @@ export async function getSeats(filter: GetSeatsFilter): Promise<PublicSeat[]> {
 }
 
 export async function getScannedSeat(qrToken: string): Promise<PublicSeat> {
-  if (isRetiredSeatToken(qrToken)) {
+  if (isRetiredSeatToken(resolveSeatQrToken(qrToken))) {
     throw new NotFoundError('This seat QR code is invalid or no longer active');
   }
   const seat = await seatRepository.findByQrToken(qrToken);

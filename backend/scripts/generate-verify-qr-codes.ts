@@ -7,9 +7,9 @@ import { isRetiredSeatToken } from '../src/config/retiredSeats';
 
 // Writes one verify QR per seat to qr-verify-codes/. Each opens
 // <frontend>/reverify?token=<seat token>, where the holder clears an active
-// seat flag or ends a break. It uses the same seat token as the reservation QR
-// (generate-seat-qr-codes.ts, which is unaffected by this script), on a
-// different page. The output folder is recreated on every run, so images of
+// seat flag or ends a break. It uses the current seat token on a different
+// page. For the 12 reassigned printed reservation QRs, both tokens resolve to
+// the same current seat. The output folder is recreated on every run, so images of
 // removed or retired seats never linger. Changing the page path or the token
 // parameter invalidates every printed label.
 
