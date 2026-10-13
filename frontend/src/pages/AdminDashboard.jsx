@@ -7,7 +7,8 @@ import Layout from '../components/Layout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { apiClient, getToken } from '../api/client.js';
 import { getGisbertPreviewSeats } from '../data/gisbertPreviewSeats.js';
-import { formatBuildingName, formatSeatLocation, getSeatMapPath } from '../data/seatLocations.js';
+import { getMiguelProPreviewSeats, MIGUEL_PRO_AREAS } from '../data/miguelProMap.js';
+import { formatSeatLocation, getSeatMapPath } from '../data/seatLocations.js';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -37,7 +38,11 @@ const LIBRARIES = {
     name: 'Miguel Pro Learning Commons',
     filterLabel: 'Area',
     allLabel: 'All areas',
-    areas: [],
+    areas: MIGUEL_PRO_AREAS.map((area) => ({
+      ...area,
+      capacity: getMiguelProPreviewSeats(1, area.id).length,
+      mapPath: `/map/miguel_pro/1?area=${area.id}`,
+    })),
   },
 };
 
@@ -116,6 +121,7 @@ export default function AdminDashboard() {
     });
     const comparisonParams = new URLSearchParams(dateParams);
     if (buildingFilter === 'gisbert' && areaFilter !== 'all') params.set('floor', areaFilter);
+    if (buildingFilter === 'miguel_pro' && areaFilter !== 'all') params.set('area', areaFilter);
 
     async function loadAnalytics() {
       setLoading(true);
@@ -258,7 +264,9 @@ export default function AdminDashboard() {
 
   const peakHour = useMemo(() => {
     const hours = analytics.peakHours?.hours || [];
-    return hours.reduce((peak, item) => (item.utilizationPercent > peak.utilizationPercent ? item : peak), { hour: 0, utilizationPercent: 0 });
+    return hours.reduce((peak, item) => (
+      Number(item.averageOccupiedSeats || 0) > Number(peak?.averageOccupiedSeats || 0) ? item : peak
+    ), null);
   }, [analytics.peakHours]);
 
   const activeGhostReportCount = ghostReports.filter((report) => report.status === 'ACTIVE').length;
@@ -462,23 +470,23 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Analytics summary">
-        <Metric icon={TrendUp} label="Average utilization" value={`${formatNumber(analytics.utilization?.overallUtilizationPercent)}%`} detail={areaFilter === 'all' ? `Across ${selectedLibrary.name}` : selectedLibrary.areas.find((area) => area.id === areaFilter)?.label} tone="blue" loading={loading} />
-        <Metric icon={Clock} label="Peak usage" value={formatHour(peakHour.hour)} detail={`${formatNumber(peakHour.utilizationPercent)}% utilization`} tone="amber" loading={loading} />
-        <Metric icon={ChartBar} label="Average session" value={formatDuration(analytics.sessionLength?.averageSessionMinutes)} detail={`${analytics.sessionLength?.sessionCount || 0} completed sessions`} tone="green" loading={loading} />
-        <Metric icon={Coffee} label="Recorded breaks" value={analytics.breakStats?.breakCount || 0} detail={`${formatNumber(analytics.breakStats?.averageBreakMinutes)} min average across returned and forfeited breaks`} tone="violet" loading={loading} />
+      <section className="ui-panel grid gap-px overflow-hidden bg-slate-200 sm:grid-cols-2 xl:grid-cols-4" aria-label="Analytics summary">
+        <Metric label="Recorded seat use" value={formatSeatHours(analytics.utilization?.occupiedSeatHours)} detail={`${formatUtilizationPercent(analytics.utilization?.overallUtilizationPercent, analytics.utilization?.occupiedSeatHours)} average utilization`} loading={loading} />
+        <Metric label="Busiest hour" value={peakHour?.averageOccupiedSeats > 0 ? `${formatHour(peakHour.hour)} PHT` : 'No activity yet'} detail={peakHour?.averageOccupiedSeats > 0 ? `${formatSeatEstimate(peakHour.averageOccupiedSeats)} on average` : 'No confirmed seat use in this period'} loading={loading} />
+        <Metric label="Average session" value={analytics.sessionLength?.sessionCount ? formatDuration(analytics.sessionLength.averageSessionMinutes) : 'No sessions yet'} detail={`${analytics.sessionLength?.sessionCount || 0} completed sessions`} loading={loading} />
+        <Metric label="Recorded breaks" value={analytics.breakStats?.breakCount || 0} detail={`${formatNumber(analytics.breakStats?.averageBreakMinutes)} min average duration`} loading={loading} />
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.75fr)]">
+      <section className="mt-6 space-y-6">
         <article className="ui-panel overflow-hidden">
-          <PanelHeader icon={Clock} title="Peak occupancy by hour" description="Average utilization by UTC hour across the selected period" />
+          <PanelHeader icon={Clock} title="Peak occupancy by hour" description="Average seats in use by Philippine Time across the selected period" />
           <div className="p-5">
             <HourlyChart hours={analytics.peakHours?.hours || []} loading={loading} />
           </div>
         </article>
 
         <article className="ui-panel overflow-hidden">
-          <PanelHeader icon={MapTrifold} title="Location comparison" description="Mapped library locations, ordered by utilization" />
+          <PanelHeader icon={MapTrifold} title="Library and area breakdown" description="Gisbert floors and Miguel Pro areas for the selected date range" />
           <div className="p-5">
             <LocationComparison rows={comparisonRows} loading={loading} />
           </div>
@@ -489,10 +497,10 @@ export default function AdminDashboard() {
         <article className="ui-panel overflow-hidden">
           <PanelHeader icon={ChartBar} title="Reservation outcomes" description="Completed sessions and integrity-related releases" />
           <div className="p-5">
-            <OutcomeChart report={analytics.outcomes} />
+            <OutcomeChart report={analytics.outcomes} loading={loading} />
             <div className="mt-6 grid grid-cols-2 gap-4 border-t border-slate-100 pt-5">
-              <DataPoint label="No-show rate" value={`${formatNumber(analytics.noShowRate?.noShowRatePercent)}%`} />
-              <DataPoint label="No-show count" value={analytics.noShowRate?.cancelledCount || 0} />
+              <DataPoint label="No-show rate" value={`${formatNumber(analytics.noShowRate?.noShowRatePercent)}%`} loading={loading} />
+              <DataPoint label="No-show count" value={analytics.noShowRate?.cancelledCount || 0} loading={loading} />
             </div>
             <p className="mt-4 text-xs leading-5 text-slate-500">No-shows are reservations that never reached front-desk confirmation. Student cancellations and entry-window expirations share the same status in the current data.</p>
           </div>
@@ -551,17 +559,17 @@ export default function AdminDashboard() {
   );
 }
 
-function formatComparisonLocation(location, index) {
+function formatComparisonLocation(location) {
   const building = location.building || 'unknown';
   const floor = Number(location.floor) || 1;
+  const area = MIGUEL_PRO_AREAS.find((item) => item.id === location.area);
   return {
     ...location,
-    id: `${building}-${floor}`,
-    rank: index + 1,
+    id: `${building}-${floor}-${location.area || 'all'}`,
     label: building === 'miguel_pro'
-      ? `${formatBuildingName(building)} · All areas`
-      : formatSeatLocation({ building, floor }),
-    mapPath: `/map/${building}/${floor}`,
+      ? area?.label || 'Other Miguel Pro seats'
+      : `Floor ${floor}`,
+    mapPath: getSeatMapPath({ building, floor, area: location.area }) || `/map/${building}/${floor}`,
   };
 }
 
@@ -576,25 +584,12 @@ function FilterSelect({ label, value, onChange, children }) {
   );
 }
 
-function Metric({ icon: Icon, label, value, detail, tone, loading }) {
-  const accents = {
-    blue: 'bg-[#e6f0f7] text-[#063a64]',
-    amber: 'bg-amber-100 text-amber-900',
-    green: 'bg-emerald-100 text-emerald-800',
-    violet: 'bg-violet-100 text-violet-800',
-  };
+function Metric({ label, value, detail, loading }) {
   return (
-    <div className="ui-panel p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="ui-label">{label}</p>
-          {loading ? <div className="mt-3 h-9 w-24 animate-pulse rounded bg-slate-100" /> : <p className="mt-2 text-3xl font-semibold text-slate-950">{value}</p>}
-          <p className="mt-1 text-xs font-medium text-slate-500">{detail}</p>
-        </div>
-        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[8px] ${accents[tone]}`}>
-          <Icon size={22} weight="duotone" />
-        </span>
-      </div>
+    <div className="min-w-0 bg-white px-5 py-4">
+      <p className="ui-label">{label}</p>
+      {loading ? <div className="mt-3 h-9 w-24 animate-pulse rounded bg-slate-100" /> : <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{value}</p>}
+      <p className="mt-1 text-xs text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -615,25 +610,26 @@ function PanelHeader({ icon: Icon, title, description }) {
 
 function HourlyChart({ hours, loading }) {
   if (loading) return <div className="h-56 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading hourly analytics" />;
-  if (!hours.length) return <EmptyState copy="No occupancy logs are available for this period." />;
+  const highest = Math.max(0, ...hours.map((item) => Number(item.averageOccupiedSeats || 0)));
+  if (!hours.length || highest === 0) return <EmptyState copy="No confirmed seat use was recorded in this period. Try a longer date range or another location." />;
   return (
     <div>
-      <div className="flex h-52 items-end gap-1.5 border-b border-slate-200 sm:gap-2" role="img" aria-label="Hourly occupancy utilization bar chart">
+      <div className="mb-3 flex items-baseline justify-between gap-3 text-xs text-slate-600">
+        <span>Average seats occupied</span>
+        <span>Peak: {formatSeatEstimate(highest)}</span>
+      </div>
+      <div className="flex h-44 items-end gap-1 border-b border-slate-300 sm:gap-1.5" role="img" aria-label="Average occupied seats by hour in Philippine Time">
         {hours.map((item) => (
-          <div key={item.hour} className="group flex h-full min-w-0 flex-1 items-end" title={`${formatHour(item.hour)}: ${formatNumber(item.utilizationPercent)}%`}>
-            <div className="relative w-full rounded-t-sm bg-[#0c6097] transition-colors group-hover:bg-[#063a64]" style={{ height: `${Math.max(2, item.utilizationPercent)}%` }}>
-              <span className="sr-only">
-                {formatHour(item.hour)}: {formatNumber(item.utilizationPercent)}%
-              </span>
-            </div>
+          <div key={item.hour} className="group flex h-full min-w-0 flex-1 items-end" title={`${formatHour(item.hour)} PHT: ${formatSeatEstimate(item.averageOccupiedSeats)}`}>
+            <div className="w-full rounded-t-sm bg-[#0c6097] transition-colors group-hover:bg-[#063a64]" style={{ height: item.averageOccupiedSeats > 0 ? `${Math.max(3, (item.averageOccupiedSeats / highest) * 100)}%` : '0%' }} />
+            <span className="sr-only">{formatHour(item.hour)} PHT: {formatSeatEstimate(item.averageOccupiedSeats)}</span>
           </div>
         ))}
       </div>
-      <div className="mt-2 flex justify-between text-[11px] font-medium text-slate-500">
-        <span>{formatHour(hours[0].hour)}</span>
-        <span>UTC</span>
-        <span>{formatHour(hours[hours.length - 1].hour)}</span>
+      <div className="mt-2 grid grid-cols-8 text-[10px] font-medium text-slate-500">
+        {[0, 3, 6, 9, 12, 15, 18, 21].map((hour) => <span key={hour}>{String(hour).padStart(2, '0')}</span>)}
       </div>
+      <p className="mt-3 text-xs text-slate-500">PHT · Each bar averages all matching hours in the selected date range.</p>
     </div>
   );
 }
@@ -648,32 +644,42 @@ function LocationComparison({ rows, loading }) {
       </div>
     );
   }
-  if (!rows.length) return <EmptyState copy="No location utilization is available for this period." />;
+  if (!rows.length) return <EmptyState copy="No mapped locations are available." />;
+
+  const groups = [
+    { building: 'gisbert', title: 'Gisbert Library' },
+    { building: 'miguel_pro', title: 'Miguel Pro Learning Commons' },
+  ];
 
   return (
-    <ol className="space-y-3" aria-label="Locations ordered from busiest to least busy">
-      {rows.map((item) => (
-        <li key={item.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-[8px] border border-slate-200 bg-slate-50/70 p-3">
-          <span className="grid h-8 w-8 place-items-center rounded-[8px] bg-white font-mono text-xs font-bold text-slate-600 shadow-sm" aria-label={`Rank ${item.rank}`}>
-            {item.rank}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-950">{item.label}</p>
-            <p className="mt-1 text-xs text-slate-500">{item.seatCount} mapped seats</p>
-          </div>
-          <div className="text-right">
-            <p className="font-mono text-sm font-bold text-[#063a64]">{formatNumber(item.utilizationPercent)}%</p>
-            <Link to={item.mapPath} className="mt-1 inline-block text-xs font-semibold text-[#063a64] hover:underline">
-              Open map
-            </Link>
-          </div>
-        </li>
-      ))}
-    </ol>
+    <div className="grid gap-6 md:grid-cols-2">
+      {groups.map((group) => {
+        const locations = rows.filter((row) => row.building === group.building);
+        if (!locations.length) return null;
+        return (
+          <section key={group.building} aria-label={group.title}>
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{group.title}</h3>
+            <div className="divide-y divide-slate-200">
+              {locations.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-4 py-2.5">
+                  <div className="min-w-0">
+                    <Link to={item.mapPath} className="text-sm font-semibold text-[#063a64] hover:underline">{item.label}</Link>
+                    <p className="mt-0.5 text-xs text-slate-500">{item.seatCount} mapped seats · {formatSeatHours(item.occupiedSeatHours)} recorded</p>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-800">{formatUtilizationPercent(item.utilizationPercent, item.occupiedSeatHours)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+      <p className="text-xs leading-5 text-slate-500 md:col-span-2">Seat-hours add up occupied time across seats. Utilization compares that time with all mapped seats over the full selected date range.</p>
+    </div>
   );
 }
 
-function OutcomeChart({ report }) {
+function OutcomeChart({ report, loading }) {
+  if (loading) return <div className="h-32 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading reservation outcomes" />;
   const outcomes = report?.outcomes || [];
   const total = report?.totalCount || 0;
   if (!total) return <EmptyState copy="No completed reservation outcomes are available for this period." />;
@@ -780,12 +786,12 @@ function OccupancyForecast({ forecast, loading }) {
 
       <div>
         <h3 className="text-sm font-semibold text-slate-950">Busiest hour each day</h3>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
           {dailyPeaks.map((day) => (
-            <div key={day.date} className="rounded-[8px] border border-slate-200 bg-[#f5f9fc] px-4 py-3">
-              <p className="text-xs font-semibold text-slate-600">{formatForecastDate(day.date)}</p>
-              <p className="mt-1 text-sm font-semibold text-slate-950">{day.peak ? `${formatHour(day.peak.hour)} PHT` : 'No estimate yet'}</p>
-              {day.peak && <p className="mt-0.5 text-xs text-slate-600">{formatApproximateSeats(day.peak.estimatedSeats)}</p>}
+            <div key={day.date} className="grid grid-cols-[minmax(5.5rem,1fr)_auto] items-center gap-2 py-2.5 sm:grid-cols-[minmax(7rem,1fr)_8rem_minmax(11rem,1fr)]">
+              <p className="text-sm font-semibold text-slate-800">{formatForecastDate(day.date)}</p>
+              <p className="text-sm text-slate-700">{day.peak ? `${formatHour(day.peak.hour)} PHT` : 'No estimate'}</p>
+              <p className="col-span-2 text-xs text-slate-500 sm:col-span-1 sm:text-right">{day.peak ? formatApproximateSeats(day.peak.estimatedSeats) : 'No comparable past hour'}</p>
             </div>
           ))}
         </div>
@@ -898,6 +904,17 @@ function formatNumber(value) {
   return Number(value || 0).toLocaleString(undefined, {
     maximumFractionDigits: 1,
   });
+}
+
+function formatSeatHours(value) {
+  const hours = Number(value || 0);
+  if (hours > 0 && hours < 0.1) return '<0.1 seat-hour';
+  return `${formatNumber(hours)} seat-${Number(hours.toFixed(1)) === 1 ? 'hour' : 'hours'}`;
+}
+
+function formatUtilizationPercent(value, occupiedSeatHours) {
+  if (Number(occupiedSeatHours || 0) > 0 && Number(value || 0) === 0) return '<0.1%';
+  return `${formatNumber(value)}%`;
 }
 
 function formatHour(hour) {

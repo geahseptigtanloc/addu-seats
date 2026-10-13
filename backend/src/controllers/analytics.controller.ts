@@ -5,6 +5,7 @@ import * as analyticsService from '../services/analytics.service';
 const analyticsQuerySchema = z.object({
   building: z.string().min(1).optional(),
   floor: z.coerce.number().int().optional(),
+  area: z.enum(['main_area', 'research_nook', 'workspace_room']).optional(),
   from: z.coerce.date(),
   to: z.coerce.date(),
 });

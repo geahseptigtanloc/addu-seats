@@ -114,6 +114,7 @@ export const OUTCOME_STATUSES: ReservationStatus[] = [
 export interface OutcomeFilters {
   building?: string;
   floor?: number;
+  seatIds?: string[];
   from: Date;
   to: Date;
 }
@@ -147,6 +148,7 @@ export async function countByOutcome(filters: OutcomeFilters): Promise<OutcomeCo
       status: { in: OUTCOME_STATUSES },
       createdAt: { gte: filters.from, lt: filters.to },
       ...seatWhereClause(filters.building, filters.floor),
+      ...(filters.seatIds !== undefined && { seatId: { in: filters.seatIds } }),
     },
     _count: { status: true },
   });
@@ -157,6 +159,7 @@ export async function countByOutcome(filters: OutcomeFilters): Promise<OutcomeCo
 export interface CountFilters {
   building?: string;
   floor?: number;
+  seatIds?: string[];
   from: Date;
   to: Date;
   status?: ReservationStatus;
@@ -169,6 +172,7 @@ export function countByFilters(filters: CountFilters): Promise<number> {
       ...(filters.status !== undefined && { status: filters.status }),
       createdAt: { gte: filters.from, lt: filters.to },
       ...seatWhereClause(filters.building, filters.floor),
+      ...(filters.seatIds !== undefined && { seatId: { in: filters.seatIds } }),
     },
   });
 }
@@ -176,6 +180,7 @@ export function countByFilters(filters: CountFilters): Promise<number> {
 export interface SessionFilters {
   building?: string;
   floor?: number;
+  seatIds?: string[];
   from: Date;
   to: Date;
 }
@@ -193,6 +198,7 @@ export async function findCompletedSessions(filters: SessionFilters): Promise<Se
       confirmedAt: { not: null },
       endedAt: { gte: filters.from, lt: filters.to },
       ...seatWhereClause(filters.building, filters.floor),
+      ...(filters.seatIds !== undefined && { seatId: { in: filters.seatIds } }),
     },
     select: { confirmedAt: true, endedAt: true },
   });

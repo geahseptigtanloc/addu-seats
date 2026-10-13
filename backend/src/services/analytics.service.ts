@@ -1,4 +1,5 @@
 import { OccupancyEventType, ReservationStatus } from '@prisma/client';
+import { getMiguelProArea, type MiguelProArea } from '../config/miguelProAreas';
 import * as seatRepository from '../repositories/seat.repository';
 import * as occupancyLogRepository from '../repositories/occupancyLog.repository';
 import * as reservationRepository from '../repositories/reservation.repository';
@@ -13,6 +14,7 @@ import { BREAK_MAX_EXTENSIONS } from './reservation.service';
 export interface UtilizationFilters {
   building?: string;
   floor?: number;
+  area?: MiguelProArea;
   from: Date;
   to: Date;
 }
@@ -29,6 +31,7 @@ export interface UtilizationReport {
   to: Date;
   seatCount: number;
   overallUtilizationPercent: number;
+  occupiedSeatHours: number;
   seats: SeatUtilization[];
 }
 
@@ -36,7 +39,14 @@ export async function getUtilization(filters: UtilizationFilters): Promise<Utili
   const { from, to, seats, eventsBySeat } = await loadOccupancyData(filters);
 
   if (seats.length === 0) {
-    return { from, to, seatCount: 0, overallUtilizationPercent: 0, seats: [] };
+    return {
+      from,
+      to,
+      seatCount: 0,
+      overallUtilizationPercent: 0,
+      occupiedSeatHours: 0,
+      seats: [],
+    };
   }
 
   const rangeMs = to.getTime() - from.getTime();
@@ -61,13 +71,15 @@ export async function getUtilization(filters: UtilizationFilters): Promise<Utili
     overallUtilizationPercent: roundToOneDecimal(
       (totalOccupiedMs / (rangeMs * seats.length)) * 100,
     ),
+    occupiedSeatHours: totalOccupiedMs / 3_600_000,
     seats: seatReports,
   };
 }
 
 export interface HourlyUtilization {
-  hour: number; // 0-23, UTC
+  hour: number; // 0-23, Philippine Time
   utilizationPercent: number;
+  averageOccupiedSeats: number;
 }
 
 export interface PeakHoursReport {
@@ -115,12 +127,9 @@ const FORECAST_REQUIREMENTS = {
   occupiedHourCells: 12,
 } as const;
 
-// Same underlying occupied intervals as getUtilization, but split by
-// hour-of-day and summed across every day in the range, instead of
-// collapsed into one aggregate. Hour-of-day is UTC so the project has no
-// established local-timezone handling anywhere else, so this doesn't
-// introduce one; revisit if the school's local hours need to line up
-// with these buckets.
+// Same occupied intervals as getUtilization, grouped by hour of day in
+// Philippine Time. An occupied-seat count is easier to read than a tiny
+// percentage when pilot activity is sparse.
 export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHoursReport> {
   const { from, to, seats, eventsBySeat } = await loadOccupancyData(filters);
 
@@ -136,11 +145,14 @@ export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHou
     accumulateHourlyMs(from, to, possibleMsByHour);
   }
 
-  const hours: HourlyUtilization[] = occupiedMsByHour.map((occupiedMs, hour) => {
-    const possibleMs = possibleMsByHour[hour] ?? 0;
+  const hours: HourlyUtilization[] = Array.from({ length: 24 }, (_, hour) => {
+    const utcHour = (hour - 8 + 24) % 24;
+    const occupiedMs = occupiedMsByHour[utcHour] ?? 0;
+    const possibleMs = possibleMsByHour[utcHour] ?? 0;
     return {
       hour,
       utilizationPercent: possibleMs > 0 ? roundToOneDecimal((occupiedMs / possibleMs) * 100) : 0,
+      averageOccupiedSeats: possibleMs > 0 ? (occupiedMs * seats.length) / possibleMs : 0,
     };
   });
 
@@ -306,7 +318,7 @@ async function loadOccupancyData(filters: UtilizationFilters): Promise<LoadedOcc
     throw new BadRequestError('from must be before to');
   }
 
-  const seats = await seatRepository.findMany({ building: filters.building, floor: filters.floor });
+  const seats = await findScopedSeats(filters);
 
   if (seats.length === 0) {
     return { from, to, seats, eventsBySeat: new Map() };
@@ -328,6 +340,16 @@ async function loadOccupancyData(filters: UtilizationFilters): Promise<LoadedOcc
   }
 
   return { from, to, seats, eventsBySeat };
+}
+
+async function findScopedSeats(filters: Pick<UtilizationFilters, 'building' | 'floor' | 'area'>) {
+  const seats = await seatRepository.findMany({ building: filters.building, floor: filters.floor });
+  return filters.area
+    ? seats.filter(
+        (seat) =>
+          seat.building === 'miguel_pro' && getMiguelProArea(seat.currentQrToken) === filters.area,
+      )
+    : seats;
 }
 
 interface TimeInterval {
@@ -445,6 +467,7 @@ function resolveDateRange(filters: { from: Date; to: Date }): { from: Date; to: 
 export interface OutcomeBreakdownFilters {
   building?: string;
   floor?: number;
+  area?: MiguelProArea;
   from: Date;
   to: Date;
 }
@@ -468,10 +491,14 @@ export async function getOutcomeBreakdown(
   filters: OutcomeBreakdownFilters,
 ): Promise<OutcomeReport> {
   const { from, to } = resolveDateRange(filters);
+  const seatIds = filters.area
+    ? (await findScopedSeats(filters)).map((seat) => seat.id)
+    : undefined;
 
   const counts = await reservationRepository.countByOutcome({
     building: filters.building,
     floor: filters.floor,
+    seatIds,
     from,
     to,
   });
@@ -494,6 +521,7 @@ export async function getOutcomeBreakdown(
 export interface NoShowRateFilters {
   building?: string;
   floor?: number;
+  area?: MiguelProArea;
   from: Date;
   to: Date;
 }
@@ -510,7 +538,10 @@ export interface NoShowRateReport {
 // CONFIRMED.
 export async function getNoShowRate(filters: NoShowRateFilters): Promise<NoShowRateReport> {
   const { from, to } = resolveDateRange(filters);
-  const scope = { building: filters.building, floor: filters.floor, from, to };
+  const seatIds = filters.area
+    ? (await findScopedSeats(filters)).map((seat) => seat.id)
+    : undefined;
+  const scope = { building: filters.building, floor: filters.floor, seatIds, from, to };
 
   const [totalReservations, cancelledCount] = await Promise.all([
     reservationRepository.countByFilters(scope),
@@ -530,6 +561,7 @@ export async function getNoShowRate(filters: NoShowRateFilters): Promise<NoShowR
 export interface SessionLengthFilters {
   building?: string;
   floor?: number;
+  area?: MiguelProArea;
   from: Date;
   to: Date;
 }
@@ -548,10 +580,14 @@ export async function getAverageSessionLength(
   filters: SessionLengthFilters,
 ): Promise<SessionLengthReport> {
   const { from, to } = resolveDateRange(filters);
+  const seatIds = filters.area
+    ? (await findScopedSeats(filters)).map((seat) => seat.id)
+    : undefined;
 
   const sessions = await reservationRepository.findCompletedSessions({
     building: filters.building,
     floor: filters.floor,
+    seatIds,
     from,
     to,
   });
@@ -576,6 +612,7 @@ export async function getAverageSessionLength(
 export interface BreakStatsFilters {
   building?: string;
   floor?: number;
+  area?: MiguelProArea;
   from: Date;
   to: Date;
 }
@@ -597,7 +634,7 @@ export interface BreakStatsReport {
 export async function getBreakStats(filters: BreakStatsFilters): Promise<BreakStatsReport> {
   const { from, to } = resolveDateRange(filters);
 
-  const seats = await seatRepository.findMany({ building: filters.building, floor: filters.floor });
+  const seats = await findScopedSeats(filters);
 
   if (seats.length === 0) {
     return {
@@ -702,8 +739,10 @@ export interface LocationComparisonFilters {
 export interface LocationDemand {
   building: string;
   floor: number;
+  area?: MiguelProArea;
   seatCount: number;
   utilizationPercent: number;
+  occupiedSeatHours: number;
 }
 
 export interface LocationComparisonReport {
@@ -715,15 +754,13 @@ export interface LocationComparisonReport {
 interface LocationAccumulator {
   building: string;
   floor: number;
+  area?: MiguelProArea;
   seatCount: number;
   occupiedMs: number;
 }
 
-// Same occupied intervals as getUtilization, grouped by (building, floor)
-// instead of per-seat. Answers "which location is busiest" rather than
-// scoping down to one. Sorted busiest-first, since that's the report's
-// whole purpose. No floor filter here,
-// narrowing to one floor would defeat a comparison across locations.
+// Same occupied intervals as getUtilization, grouped by Gisbert floor or
+// Miguel Pro area. No floor/area filter here: this is the full comparison.
 export async function getLocationComparison(
   filters: LocationComparisonFilters,
 ): Promise<LocationComparisonReport> {
@@ -737,7 +774,8 @@ export async function getLocationComparison(
   const groups = new Map<string, LocationAccumulator>();
 
   for (const seat of seats) {
-    const groupKey = `${seat.building}::${seat.floor}`;
+    const area = seat.building === 'miguel_pro' ? getMiguelProArea(seat.currentQrToken) : null;
+    const groupKey = `${seat.building}::${seat.floor}::${area ?? ''}`;
     const occupiedMs = sumIntervalMs(
       extractOccupiedIntervals(eventsBySeat.get(seat.id) ?? [], from, to),
     );
@@ -750,6 +788,7 @@ export async function getLocationComparison(
       groups.set(groupKey, {
         building: seat.building,
         floor: seat.floor,
+        ...(area && { area }),
         seatCount: 1,
         occupiedMs,
       });
@@ -760,8 +799,10 @@ export async function getLocationComparison(
     .map((group) => ({
       building: group.building,
       floor: group.floor,
+      ...(group.area && { area: group.area }),
       seatCount: group.seatCount,
       utilizationPercent: roundToOneDecimal((group.occupiedMs / (rangeMs * group.seatCount)) * 100),
+      occupiedSeatHours: group.occupiedMs / 3_600_000,
     }))
     .sort((a, b) => b.utilizationPercent - a.utilizationPercent);
 
