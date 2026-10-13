@@ -514,7 +514,7 @@ export default function AdminDashboard() {
         </article>
 
         <article className="ui-panel overflow-hidden xl:col-span-2">
-          <PanelHeader icon={TrendUp} title="Occupancy outlook" description="Seven-day historical baseline when enough real seat use has been recorded" />
+          <PanelHeader icon={TrendUp} title="Occupancy outlook" description="Typical seats in use over the next seven days, based on earlier confirmed sessions" />
           <div className="p-5">
             <OccupancyForecast forecast={analytics.forecast} loading={loading} />
           </div>
@@ -720,82 +720,94 @@ function DataPoint({ label, value, loading = false }) {
 
 function OccupancyForecast({ forecast, loading }) {
   if (loading) return <div className="h-80 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading occupancy forecast" />;
-  if (typeof forecast?.hasEnoughHistory !== 'boolean') {
+  if (forecast?.historyScope !== 'ALL_RECORDED') {
     return <EmptyState copy="The occupancy history summary is temporarily unavailable." />;
   }
 
   const days = forecast?.days || [];
-  const points = days.flatMap((day) => day.hours.map((hour) => ({ ...hour, date: day.date })));
+  const activeHours = forecast?.activeHours || [];
+  const firstHour = activeHours.length ? Math.max(0, Math.min(...activeHours) - 1) : 0;
+  const lastHour = activeHours.length ? Math.min(23, Math.max(...activeHours) + 1) : 23;
+  const visibleHours = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => firstHour + index);
+  const visibleHourSet = new Set(visibleHours);
+  const points = days.flatMap((day) => day.hours
+    .filter((hour) => visibleHourSet.has(hour.hour))
+    .map((hour) => ({
+      ...hour,
+      date: day.date,
+      estimatedSeats: forecastSeatEstimate(hour, forecast?.seatCount),
+    })));
   if (!forecast?.hasEnoughHistory || !days.length) {
     const requirements = forecast?.requirements || { activeDays: 5, occupiedHourCells: 12 };
     return (
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-3">
-          <ForecastMetric label="History span" value={`${forecast?.historySpanDays || 0} days`} detail="since the first occupied seat in this range" />
+          <ForecastMetric label="History span" value={`${forecast?.historySpanDays || 0} days`} detail="since the first recorded seat use" />
           <ForecastMetric label="Days with seat use" value={`${forecast?.activeDays || 0} / ${requirements.activeDays} days`} />
           <ForecastMetric label="Hours with seat use" value={`${forecast?.occupiedHourCells || 0} / ${requirements.occupiedHourCells}`} />
         </div>
         <p className="rounded-[8px] border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-950">
-          A seven-day outlook needs enough real occupancy history. The counters above show progress for the selected library and date range. Until then, no forecast is shown; try a longer date range if earlier records exist.
+          This outlook uses all earlier confirmed seat-use records for this library or floor, including records outside the dashboard date range. It will appear after enough real activity is available.
         </p>
       </div>
     );
   }
 
-  const estimatedPoints = points.filter((point) => point.predictedUtilizationPercent !== null && point.sampleCount > 0);
+  const estimatedPoints = points.filter((point) => point.estimatedSeats !== null && point.sampleCount > 0);
   if (!estimatedPoints.length) return <EmptyState copy="No usable hourly occupancy samples were found in this selection." />;
   const peak = estimatedPoints.reduce((highest, point) => (
-    point.predictedUtilizationPercent > highest.predictedUtilizationPercent ? point : highest
+    point.estimatedSeats > highest.estimatedSeats ? point : highest
   ), estimatedPoints[0]);
-  const average = estimatedPoints.reduce((sum, point) => sum + point.predictedUtilizationPercent, 0) / estimatedPoints.length;
+  const average = estimatedPoints.reduce((sum, point) => sum + point.estimatedSeats, 0) / estimatedPoints.length;
+  const highestEstimate = peak.estimatedSeats;
 
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
-        <ForecastMetric label="Estimated average" value={formatForecastPercent(average)} />
-        <ForecastMetric label="Estimated peak" value={formatForecastPercent(peak.predictedUtilizationPercent)} detail={`${formatForecastDate(peak.date)}, ${formatHour(peak.hour)} PHT`} />
-        <ForecastMetric label="Days with seat use" value={`${forecast.activeDays}`} detail={`${forecast.occupiedHourCells} historical hours had occupied seats`} />
+        <ForecastMetric label="Typical seats in use" value={formatSeatEstimate(average)} detail="average across the hours shown" />
+        <ForecastMetric label="Busiest estimate" value={formatSeatEstimate(highestEstimate)} detail={`${formatForecastDate(peak.date)}, ${formatHour(peak.hour)} PHT`} />
+        <ForecastMetric label="Past activity used" value={`${forecast.activeDays} days`} detail={`${forecast.occupiedHourCells} hourly slots had occupied seats`} />
       </div>
 
       <div>
         <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
           <div>
-            <h3 className="text-sm font-semibold text-slate-950">Forecast heat map</h3>
-            <p className="mt-1 text-xs leading-5 text-slate-500">Darker cells indicate higher estimated utilization. Hours are in Philippine Time (PHT, UTC+8).</p>
+            <h3 className="text-sm font-semibold text-slate-950">Estimated seats in use by hour</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Darker cells mean more seats are typically in use. Showing hours around recorded activity in Philippine Time (PHT).</p>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500" aria-label="Heat map legend">
-            <span>Lower</span>
-            {[0, 25, 50, 75, 100].map((value) => (
-              <span key={value} className="h-3.5 w-5 rounded-sm border border-slate-200" style={forecastCellStyle(value)} />
+            <span>0</span>
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+              <span key={ratio} className="h-3.5 w-5 rounded-sm border border-slate-200" style={forecastCellStyle(highestEstimate * ratio, highestEstimate)} />
             ))}
-            <span>Higher</span>
+            <span>{formatSeatEstimate(highestEstimate)}</span>
           </div>
         </div>
 
         <div className="overflow-x-auto rounded-[8px] border border-slate-200 bg-slate-50/60 p-3 pb-4">
-          <div className="min-w-[760px]">
-            <div className="grid items-end gap-1" style={{ gridTemplateColumns: '7.5rem repeat(24, minmax(1.25rem, 1fr))' }} aria-hidden="true">
+          <div style={{ minWidth: `${120 + visibleHours.length * 29}px` }}>
+            <div className="grid items-end gap-1" style={{ gridTemplateColumns: `7.5rem repeat(${visibleHours.length}, minmax(1.25rem, 1fr))` }} aria-hidden="true">
               <span />
-              {Array.from({ length: 24 }, (_, hour) => (
+              {visibleHours.map((hour) => (
                 <span key={hour} className="text-center text-[9px] font-semibold text-slate-500">
-                  {hour % 3 === 0 ? String(hour).padStart(2, '0') : ''}
+                  {hour === firstHour || hour === lastHour || hour % 3 === 0 ? String(hour).padStart(2, '0') : ''}
                 </span>
               ))}
             </div>
-            <div className="mt-1 space-y-1.5" role="img" aria-label="Seven-day estimated occupancy heat map in Philippine Time">
+            <div className="mt-1 space-y-1.5" role="img" aria-label="Seven-day estimate of seats in use by hour in Philippine Time">
               {days.map((day) => (
-                <div key={day.date} className="grid items-center gap-1" style={{ gridTemplateColumns: '7.5rem repeat(24, minmax(1.25rem, 1fr))' }}>
+                <div key={day.date} className="grid items-center gap-1" style={{ gridTemplateColumns: `7.5rem repeat(${visibleHours.length}, minmax(1.25rem, 1fr))` }}>
                   <span className="truncate pr-2 text-xs font-semibold text-slate-700">{formatForecastDate(day.date)}</span>
-                  {day.hours.map((hour) => (
+                  {day.hours.filter((hour) => visibleHourSet.has(hour.hour)).map((hour) => (
                     <span
                       key={hour.hour}
                       className="grid aspect-square min-h-5 place-items-center rounded-sm border border-white/60 text-[8px] font-bold"
-                      style={hour.sampleCount > 0 ? forecastCellStyle(hour.predictedUtilizationPercent) : undefined}
+                      style={hour.sampleCount > 0 ? forecastCellStyle(forecastSeatEstimate(hour, forecast.seatCount), highestEstimate) : undefined}
                       title={hour.sampleCount > 0
-                        ? `${formatForecastDate(day.date)}, ${formatHour(hour.hour)} PHT: ${formatForecastPercent(hour.predictedUtilizationPercent)} estimated utilization from ${hour.sampleCount} historical hour slot${hour.sampleCount === 1 ? '' : 's'}`
+                        ? `${formatForecastDate(day.date)}, ${formatHour(hour.hour)} PHT: ${formatSeatEstimate(forecastSeatEstimate(hour, forecast.seatCount))} estimated from ${hour.sampleCount} earlier hour slot${hour.sampleCount === 1 ? '' : 's'}`
                         : `${formatForecastDate(day.date)}, ${formatHour(hour.hour)} PHT: no historical sample`}
                     >
-                      <span className="sr-only">{formatForecastDate(day.date)}, {formatHour(hour.hour)} PHT: {hour.sampleCount > 0 ? formatForecastPercent(hour.predictedUtilizationPercent) : 'no sample'}</span>
+                      <span className="sr-only">{formatForecastDate(day.date)}, {formatHour(hour.hour)} PHT: {hour.sampleCount > 0 ? formatSeatEstimate(forecastSeatEstimate(hour, forecast.seatCount)) : 'no sample'}</span>
                     </span>
                   ))}
                 </div>
@@ -805,9 +817,10 @@ function OccupancyForecast({ forecast, loading }) {
         </div>
       </div>
 
-      <p className="rounded-[8px] border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-950">
-        This is a historical weekday and hour average from real occupancy logs, not a trained prediction model. It favors matching weekdays and uses other days at the same hour when needed. Low activity can still produce a low estimate.
-      </p>
+      <div className="space-y-1 rounded-[8px] border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-950">
+        <p>Each square estimates average seats in use at that hour from all confirmed occupancy logs since {formatHistoryDate(forecast.from)}, including records outside the dashboard date range. Matching weekdays count first; other days at the same hour fill gaps.</p>
+        <p>Colors are relative to the busiest estimate shown, so a dark square does not mean the library is full. A value of 0.5 seats means one seat was occupied for about half of a similar past hour. This is a planning guide, not live availability or a trained prediction model.</p>
+      </div>
     </div>
   );
 }
@@ -822,19 +835,32 @@ function ForecastMetric({ label, value, detail }) {
   );
 }
 
-function forecastCellStyle(value) {
-  const percent = Math.max(0, Math.min(100, Number(value) || 0));
-  const opacity = 0.08 + (percent / 100) * 0.84;
+function forecastCellStyle(value, peakValue) {
+  const relativeUse = peakValue > 0 ? Math.max(0, Math.min(1, Number(value) / peakValue)) : 0;
+  const opacity = 0.08 + relativeUse * 0.84;
   return {
     backgroundColor: `rgba(6, 58, 100, ${opacity})`,
-    color: percent >= 48 ? '#ffffff' : '#334155',
   };
 }
 
-function formatForecastPercent(value) {
+function forecastSeatEstimate(hour, seatCount) {
+  if (hour?.predictedOccupiedSeats !== undefined) return hour.predictedOccupiedSeats;
+  return hour?.predictedUtilizationPercent === null
+    ? null
+    : (Number(hour?.predictedUtilizationPercent || 0) * Number(seatCount || 0)) / 100;
+}
+
+function formatSeatEstimate(value) {
   if (value === null || !Number.isFinite(Number(value))) return '—';
-  if (value > 0 && value < 0.1) return '<0.1%';
-  return `${formatNumber(value)}%`;
+  if (value > 0 && value < 0.1) return '<0.1 seat';
+  return `${formatNumber(value)} ${value === 1 ? 'seat' : 'seats'}`;
+}
+
+function formatHistoryDate(date) {
+  if (!date) return 'when records began';
+  return new Date(date).toLocaleDateString([], {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila',
+  });
 }
 
 function formatForecastDate(date) {

@@ -80,6 +80,7 @@ export interface PeakHoursReport {
 export interface OccupancyForecastHour {
   hour: number; // 0-23, Philippine Time
   predictedUtilizationPercent: number | null;
+  predictedOccupiedSeats: number | null;
   sampleCount: number;
 }
 
@@ -97,7 +98,9 @@ export interface OccupancyForecastReport {
   hasEnoughHistory: boolean;
   historySpanDays: number;
   activeDays: number;
+  activeHours: number[];
   occupiedHourCells: number;
+  historyScope: 'ALL_RECORDED';
   requirements: {
     activeDays: number;
     occupiedHourCells: number;
@@ -144,20 +147,32 @@ export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHou
   return { from, to, seatCount: seats.length, hours };
 }
 
-// Produces a seven-day historical baseline only when the selected window has
-// enough actual seat use. A matching weekday/hour is preferred; when it is
-// absent, samples for that hour on other weekdays are used. This is distinct
-// from the pending SARIMA/XGBoost research models.
+// Produces a seven-day historical baseline from all prior occupancy logs for
+// the selected library/floor. The dashboard date filter still applies to the
+// other reports; a narrow date range must not discard earlier training data.
+// A matching weekday/hour is preferred, then observations at the same hour
+// on other weekdays. This is distinct from the pending SARIMA/XGBoost models.
 export async function getOccupancyForecast(
   filters: UtilizationFilters,
 ): Promise<OccupancyForecastReport> {
   const { from, to, seats, eventsBySeat } = await loadOccupancyData(filters);
+  let firstRecordedOccupancyMs = Number.POSITIVE_INFINITY;
+  for (const events of eventsBySeat.values()) {
+    for (const event of events) {
+      if (event.eventType === OccupancyEventType.OCCUPIED) {
+        firstRecordedOccupancyMs = Math.min(firstRecordedOccupancyMs, event.createdAt.getTime());
+      }
+    }
+  }
+  const historyFrom = Number.isFinite(firstRecordedOccupancyMs)
+    ? new Date(firstRecordedOccupancyMs)
+    : from;
   const occupiedMsByBucket = new Map<string, number>();
   const possibleMsByBucket = new Map<string, number>();
   let firstOccupiedAtMs = Number.POSITIVE_INFINITY;
 
   for (const seat of seats) {
-    const intervals = extractOccupiedIntervals(eventsBySeat.get(seat.id) ?? [], from, to);
+    const intervals = extractOccupiedIntervals(eventsBySeat.get(seat.id) ?? [], historyFrom, to);
     for (const interval of intervals) {
       firstOccupiedAtMs = Math.min(firstOccupiedAtMs, interval.start.getTime());
       accumulateDatedHourlyMs(
@@ -183,6 +198,7 @@ export async function getOccupancyForecast(
   const samplesByHour = new Map<number, number[]>();
   let totalOccupiedMs = 0;
   const activeDates = new Set<string>();
+  const activeHours = new Set<number>();
   let occupiedHourCells = 0;
 
   for (const [bucket, possibleMs] of possibleMsByBucket) {
@@ -193,6 +209,7 @@ export async function getOccupancyForecast(
     const utilizationPercent = (occupiedMs / possibleMs) * 100;
     if (occupiedMs > 0) {
       activeDates.add(date ?? '');
+      activeHours.add(hour);
       occupiedHourCells += 1;
     }
     const weekday = new Date(`${date}T00:00:00.000Z`).getUTCDay();
@@ -239,6 +256,10 @@ export async function getOccupancyForecast(
             return {
               hour,
               predictedUtilizationPercent,
+              predictedOccupiedSeats:
+                predictedUtilizationPercent === null
+                  ? null
+                  : (predictedUtilizationPercent * seats.length) / 100,
               sampleCount: samples.length,
             };
           }),
@@ -247,7 +268,7 @@ export async function getOccupancyForecast(
     : [];
 
   return {
-    from,
+    from: historyFrom,
     to,
     generatedAt: new Date(),
     seatCount: seats.length,
@@ -255,7 +276,9 @@ export async function getOccupancyForecast(
     hasEnoughHistory,
     historySpanDays,
     activeDays: activeDates.size,
+    activeHours: [...activeHours].sort((left, right) => left - right),
     occupiedHourCells,
+    historyScope: 'ALL_RECORDED',
     requirements: FORECAST_REQUIREMENTS,
     method: 'HISTORICAL_WEEKDAY_HOURLY_BASELINE',
     days,
