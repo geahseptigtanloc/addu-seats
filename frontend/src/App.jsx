@@ -1,8 +1,8 @@
 /**
  * Root application component — routing and auth provider.
  */
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext.jsx';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { NotificationProvider } from './context/NotificationContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
@@ -17,12 +17,22 @@ import SeatReturn from './pages/SeatReturn.jsx';
 import QrReservation from './pages/QrReservation.jsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import TermsOfService from './pages/TermsOfService.jsx';
+import LegalAgreement from './pages/LegalAgreement.jsx';
 
 function AppRoutes() {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  const legalPaths = ['/login', '/auth/callback', '/agree', '/privacy', '/terms', '/privacy-policy', '/terms-of-service'];
+  if (!loading && user && !user.legalAcceptedAt && !legalPaths.includes(location.pathname)) {
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/agree?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+  }
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/auth/callback" element={<Login />} />
+      <Route path="/agree" element={<LegalAgreement />} />
 
       <Route path="/" element={<BuildingFloorSelector />} />
 

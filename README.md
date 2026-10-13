@@ -153,6 +153,7 @@ Reservation codes are written to `backend/qr-codes/`. The generator skips the 12
 | GET | `/api/auth/google/callback` | OAuth callback (redirects with a one-time exchange code) |
 | POST | `/api/auth/exchange` | Exchange the one-time OAuth code for a JWT |
 | GET | `/api/auth/me` | Current user profile (requires Bearer token) |
+| POST | `/api/auth/accept-legal` | Record acceptance of the Privacy Policy and Terms of Service |
 | GET | `/api/seats` | Public live seat list, optionally filtered by building and floor |
 | POST | `/api/seats/scan` | Validate a physical-seat QR token and return safe seat details |
 | POST | `/api/seats/:id/flag` | Report an apparently vacant occupied seat |
@@ -165,6 +166,8 @@ Reservation codes are written to `backend/qr-codes/`. The generator skips the 12
 | POST | `/api/reservations/:id/break/start` | Start the five-minute break timer |
 | POST | `/api/reservations/:id/break/extend` | Extend a break up to 15 minutes |
 | POST | `/api/reservations/reverify` | Verify physical presence with `{ "qrToken": string }`; returns `200 { "outcome": "flag_cleared" }` or `200 { "outcome": "break_ended" }` |
+
+The backend `npm start` command applies pending Prisma migrations before serving requests. The legal acceptance gate needs the `users.legal_accepted_at` migration to run before the updated API starts.
 
 `POST /api/reservations/reverify` is the frontend's single verification endpoint. Only the reservation holder can use the seat's verify QR. A `404` means the seat or matching holder reservation was not found. A `409` means the flag window expired, the break just ended, or there is nothing to verify. The user-facing empty-state message is **“Nothing to verify right now.”** The older `/api/reservations/break/return` route remains available for compatibility, but the frontend does not call it.
 

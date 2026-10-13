@@ -73,8 +73,10 @@ export default function Login() {
         ? `/reverify?token=${encodeURIComponent(pendingReverifyToken)}`
         : pendingReservationToken
           ? `/scan?token=${encodeURIComponent(pendingReservationToken)}`
-          : user.role === 'admin' ? '/admin' : '/';
-      navigate(destination, { replace: true });
+          : user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/frontdesk' : '/';
+      navigate(user.legalAcceptedAt
+        ? destination
+        : `/agree?returnTo=${encodeURIComponent(destination)}`, { replace: true });
     }
   }, [user, loading, navigate]);
 

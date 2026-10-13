@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { env } from '../config/env';
 import { createExchangeCode, redeemExchangeCode } from '../services/auth.service';
 import { UnauthorizedError } from '../utils/AppError';
+import * as userRepository from '../repositories/user.repository';
 
 export async function googleCallbackSuccess(
   user: User,
@@ -53,4 +54,20 @@ export function getCurrentUser(req: Request, res: Response, next: NextFunction):
   }
 
   res.json({ user: req.user });
+}
+
+export async function acceptLegal(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  try {
+    const user = req.user.legalAcceptedAt
+      ? req.user
+      : await userRepository.acceptLegal(req.user.id);
+    res.json({ user });
+  } catch (err) {
+    next(err);
+  }
 }

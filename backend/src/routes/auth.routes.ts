@@ -44,5 +44,6 @@ router.get('/google/callback', (req: Request, res: Response, next: NextFunction)
 
 router.post('/exchange', authController.exchangeCode);
 router.get('/me', requireAuth, authController.getCurrentUser);
+router.post('/accept-legal', requireAuth, authController.acceptLegal);
 
 export default router;

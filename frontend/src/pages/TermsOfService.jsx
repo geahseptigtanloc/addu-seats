@@ -26,7 +26,7 @@ export default function TermsOfService() {
     >
       <LegalSection id="service" title="Using the service">
         <p>AdDU Seats is a library seat reservation and occupancy service for Ateneo de Davao University. Public visitors may browse floor maps. Reserving a seat and using other protected features requires an eligible Google account and a valid AdDU Seats session.</p>
-        <p>By signing in or using a protected feature, you agree to follow these terms and applicable University Library rules. Keep your account access private and provide accurate information during verification.</p>
+        <p>Before using protected features, you must review and accept these terms and the Privacy Policy. Keep your account access private and provide accurate information during verification.</p>
       </LegalSection>
 
       <LegalSection id="reservations" title="Reservation rules">

@@ -100,7 +100,7 @@ export function NotificationProvider({ children }) {
     setHolderAlert(null);
     setAdminToast(null);
 
-    if (!user) return undefined;
+    if (!user?.legalAcceptedAt) return undefined;
 
     const controller = new AbortController();
     const token = getToken();
@@ -215,7 +215,7 @@ export function NotificationProvider({ children }) {
       controller.abort();
       socket.disconnect();
     };
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, user?.legalAcceptedAt]);
 
   useEffect(() => {
     if (!adminToast) return undefined;

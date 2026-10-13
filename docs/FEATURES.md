@@ -48,7 +48,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Receive an immediate warning when another student reports their occupied seat as a possible ghost seat. The report can be cleared only through the same physical verify QR used for break return; there is no in-app confirmation shortcut.
 - Receive the warning as an immediate modal and persistent notification-bell item from any signed-in page.
 - Receive real-time reservation, break-expiry, and flagging updates.
-- First-login acceptance of the library terms of use is required by the paper and remains pending.
+- On first login, review and accept the Privacy Policy and Terms of Service before opening protected pages; the acceptance time is saved to the account.
 
 ### Staff
 
@@ -128,7 +128,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 | Foundation, schema, auth, environment, and frontend API wiring | Implemented |
 | Public map browsing and reservation lifecycle | QR-first reservation flow implemented; production physical QR provisioning and printing remain pending |
 | Front-desk entry verification, break timer, cooldown, and flagging | Live authenticated workflow is implemented, including persistent admin report details and confirmed ghost-seat voiding; production physical-QR token provisioning still remains |
-| Public legal pages and first-login terms acceptance | Privacy Policy and Terms of Service pages implemented; recorded first-login acceptance remains pending |
+| Public legal pages and first-login terms acceptance | Privacy Policy and Terms of Service pages implemented; first-login acceptance is recorded on the account and gates protected pages and API actions |
 | Admin seat disabling and exceptional release override | Not implemented |
 | Occupancy logging and admin analytics | Implemented: live occupancy logs and seven admin-only reports cover utilization, peak hours, outcomes, no-shows, session length, break behavior, and location comparison; Miguel Pro area-level grouping remains unavailable because the backend groups by building and floor |
 | Occupancy forecasting | Immediate seven-day historical weekday/hour baseline and admin heat map implemented; SARIMA and GBDT/XGBoost research models remain pending |

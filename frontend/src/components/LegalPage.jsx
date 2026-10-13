@@ -82,7 +82,7 @@ export default function LegalPage({
                 <CalendarBlank size={18} weight="duotone" className="text-[#063a64]" />
                 Effective date
               </div>
-              <p className="mt-2 text-sm text-slate-600">October 6, 2026</p>
+              <p className="mt-2 text-sm text-slate-600">October 13, 2026</p>
               <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-slate-800">
                 <EnvelopeSimple size={18} weight="duotone" className="text-[#063a64]" />
                 Questions

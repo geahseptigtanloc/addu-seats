@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
 import * as userRepository from '../repositories/user.repository';
-import { UnauthorizedError } from '../utils/AppError';
+import { ForbiddenError, UnauthorizedError } from '../utils/AppError';
 
 /**
  * Verifies the Bearer JWT and attaches the current User to req.user.
@@ -32,6 +32,13 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
     if (!user) {
       next(new UnauthorizedError('User no longer exists'));
+      return;
+    }
+
+    // Allow profile lookup and the acceptance action, but gate every other
+    // authenticated API action until the user has accepted both legal pages.
+    if (!user.legalAcceptedAt && !['/api/auth', '/auth'].includes(req.baseUrl)) {
+      next(new ForbiddenError('Accept the Privacy Policy and Terms of Service to continue'));
       return;
     }
 

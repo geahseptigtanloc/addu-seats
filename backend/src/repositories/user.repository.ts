@@ -29,3 +29,10 @@ export function update(id: string, data: UpdateUserInput): Promise<User> {
 export function findById(id: string): Promise<User | null> {
   return prisma.user.findUnique({ where: { id } });
 }
+
+export function acceptLegal(id: string): Promise<User> {
+  return prisma.user.update({
+    where: { id },
+    data: { legalAcceptedAt: new Date() },
+  });
+}

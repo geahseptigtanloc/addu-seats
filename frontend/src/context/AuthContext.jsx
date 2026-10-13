@@ -51,12 +51,18 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const acceptLegal = useCallback(async () => {
+    const data = await apiClient('/api/auth/accept-legal', { method: 'POST' });
+    setUser(normalizeUser(data.user));
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
         loginWithToken,
+        acceptLegal,
         logout,
         refreshUser: fetchUser,
       }}

@@ -31,6 +31,7 @@ export default function PrivacyPolicy() {
           <li><strong className="text-slate-800">University identification:</strong> the last four characters of your student ID when this is recorded for front-desk verification.</li>
           <li><strong className="text-slate-800">Reservation activity:</strong> selected seat, building, floor, reservation status, entry verification, breaks, QR re-verification, reports, and check-out timestamps.</li>
           <li><strong className="text-slate-800">Technical information:</strong> temporary OAuth session data, browser-stored sign-in and QR handoff data, and operational logs used to keep the service reliable and secure.</li>
+          <li><strong className="text-slate-800">Agreement record:</strong> the date and time you accept the Privacy Policy and Terms of Service.</li>
         </LegalList>
       </LegalSection>
 

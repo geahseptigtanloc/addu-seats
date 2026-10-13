@@ -58,6 +58,7 @@ model User {
   name           String
   role           UserRole @default(STUDENT)
   studentIdLast4 String?  @map("student_id_last4") // set during post-OAuth registration step
+  legalAcceptedAt DateTime? @map("legal_accepted_at")
   reservations Reservation[]
   flagsRaised SeatFlag[]
 
