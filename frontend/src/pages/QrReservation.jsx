@@ -45,7 +45,10 @@ export default function QrReservation() {
       body: JSON.stringify({ qrToken }),
       signal: controller.signal,
     })
-      .then((response) => setScannedSeat(normalizeSeat(response?.seat)))
+      .then((response) => setScannedSeat(normalizeSeat({
+        ...response?.seat,
+        currentQrToken: qrToken,
+      })))
       .catch((error) => {
         if (error.name !== 'AbortError') setScanFailure(error.message || 'The scanned seat could not be verified.');
       })
@@ -73,7 +76,7 @@ export default function QrReservation() {
       const receiptSeat = normalizeSeat(source.seat, {
         ...scannedSeat,
         seatId: source.seatId || scannedSeat?.seatId,
-        label: source.seat?.label || scannedSeat?.label || source.seatId,
+        label: scannedSeat?.label || source.seat?.label || source.seatId,
         building: source.building || scannedSeat?.building,
         floor: source.floor || scannedSeat?.floor,
         status: 'pending_entry',

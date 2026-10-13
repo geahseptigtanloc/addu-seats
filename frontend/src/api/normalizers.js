@@ -47,8 +47,7 @@ export function seatLabelFromQrToken(token) {
 export function normalizeSeat(seat, canonical = {}) {
   if (!seat && !canonical) return null;
   const source = seat || {};
-  const sourceLabel = source.label && (DISPLAY_LABEL_BY_CANONICAL_LABEL.get(source.label) || source.label);
-  const label = sourceLabel || canonical.label || seatLabelFromQrToken(source.currentQrToken);
+  const label = canonical.label || seatLabelFromQrToken(source.currentQrToken) || source.label;
   const mappedSeat = CANONICAL_SEATS.get(label) || {};
   return {
     ...mappedSeat,
@@ -99,7 +98,7 @@ export function normalizeReservation(payload, fallback = {}) {
 
 export function normalizePendingReservation(item) {
   const currentQrToken = item.currentQrToken;
-  const label = item.seatLabel || seatLabelFromQrToken(currentQrToken) || item.seatId;
+  const label = seatLabelFromQrToken(currentQrToken) || item.seatLabel || item.seatId;
   return {
     reservationId: item.reservationId,
     createdAt: item.createdAt,

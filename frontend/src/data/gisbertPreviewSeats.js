@@ -251,7 +251,9 @@ const otherThirdFloorLabels = Array.from({ length: seatsByFloor[3].length }, (_,
   .map((number) => `G3-S${String(number).padStart(3, '0')}`);
 let nextOtherLabel = 0;
 seatsByFloor[3].forEach((seat) => {
-  const displayLabel = printedLabelByCanonical.get(seat.label) || otherThirdFloorLabels[nextOtherLabel++];
+  const printedLabel = printedLabelByCanonical.get(seat.label);
+  const displayLabel = printedLabel || otherThirdFloorLabels[nextOtherLabel++];
+  if (printedLabel) seat.printedQr = true;
   if (displayLabel !== seat.label) {
     seat.canonicalLabel = seat.label;
     seat.label = displayLabel;

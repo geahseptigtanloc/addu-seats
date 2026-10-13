@@ -107,9 +107,17 @@ function applyCanonicalPositions(seats, building, floor, area) {
   const liveByLabel = new Map(
     seats.map((seat) => [seat.label || seatLabelFromQrToken(seat.currentQrToken), seat]),
   );
+  // During deployment the API may still return the earlier canonical labels.
+  // Those can overlap today's visible S numbers, so match one scheme for the
+  // entire floor instead of mixing display and canonical lookups per chair.
+  const usesLegacyThirdFloorLabels = building === 'gisbert' && Number(floor) === 3
+    && seats.some((seat) => /^G3-C\d{3}$/.test(seat.label || ''));
 
   return canonicalSeats.map((canonical) => {
-    const live = liveByLabel.get(canonical.label) || liveByLabel.get(canonical.canonicalLabel);
+    const lookupLabel = usesLegacyThirdFloorLabels && !canonical.printedQr
+      ? canonical.canonicalLabel || canonical.label
+      : canonical.label;
+    const live = liveByLabel.get(lookupLabel);
     return live ? normalizeSeat(live, canonical) : canonical;
   });
 }
