@@ -514,7 +514,7 @@ export default function AdminDashboard() {
         </article>
 
         <article className="ui-panel overflow-hidden xl:col-span-2">
-          <PanelHeader icon={TrendUp} title="Predictive occupancy" description="Seven-day baseline from the selected period's observed weekday and hourly patterns" />
+          <PanelHeader icon={TrendUp} title="Occupancy outlook" description="Seven-day historical baseline when enough real seat use has been recorded" />
           <div className="p-5">
             <OccupancyForecast forecast={analytics.forecast} loading={loading} />
           </div>
@@ -720,32 +720,48 @@ function DataPoint({ label, value, loading = false }) {
 
 function OccupancyForecast({ forecast, loading }) {
   if (loading) return <div className="h-80 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading occupancy forecast" />;
+  if (typeof forecast?.hasEnoughHistory !== 'boolean') {
+    return <EmptyState copy="The occupancy history summary is temporarily unavailable." />;
+  }
 
   const days = forecast?.days || [];
   const points = days.flatMap((day) => day.hours.map((hour) => ({ ...hour, date: day.date })));
-  if (!days.length || !forecast?.hasObservedData || !points.some((point) => point.sampleCount > 0)) {
-    return <EmptyState copy="No occupied intervals have been recorded for this selection yet. The seven-day forecast will update automatically after the first live occupancy record." />;
+  if (!forecast?.hasEnoughHistory || !days.length) {
+    const requirements = forecast?.requirements || { activeDays: 5, occupiedHourCells: 12 };
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <ForecastMetric label="History span" value={`${forecast?.historySpanDays || 0} days`} detail="since the first occupied seat in this range" />
+          <ForecastMetric label="Days with seat use" value={`${forecast?.activeDays || 0} / ${requirements.activeDays} days`} />
+          <ForecastMetric label="Hours with seat use" value={`${forecast?.occupiedHourCells || 0} / ${requirements.occupiedHourCells}`} />
+        </div>
+        <p className="rounded-[8px] border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-950">
+          A seven-day outlook needs enough real occupancy history. The counters above show progress for the selected library and date range. Until then, no forecast is shown; try a longer date range if earlier records exist.
+        </p>
+      </div>
+    );
   }
 
-  const peak = points.reduce((highest, point) => (
+  const estimatedPoints = points.filter((point) => point.predictedUtilizationPercent !== null && point.sampleCount > 0);
+  if (!estimatedPoints.length) return <EmptyState copy="No usable hourly occupancy samples were found in this selection." />;
+  const peak = estimatedPoints.reduce((highest, point) => (
     point.predictedUtilizationPercent > highest.predictedUtilizationPercent ? point : highest
-  ), points[0]);
-  const average = points.reduce((sum, point) => sum + point.predictedUtilizationPercent, 0) / points.length;
-  const observedCells = points.filter((point) => point.sampleCount > 0).length;
+  ), estimatedPoints[0]);
+  const average = estimatedPoints.reduce((sum, point) => sum + point.predictedUtilizationPercent, 0) / estimatedPoints.length;
 
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-3">
-        <ForecastMetric label="Forecast average" value={`${formatNumber(average)}%`} />
-        <ForecastMetric label="Forecast peak" value={`${formatNumber(peak.predictedUtilizationPercent)}%`} detail={`${formatForecastDate(peak.date)}, ${formatHour(peak.hour)}`} />
-        <ForecastMetric label="Observed coverage" value={`${observedCells} / ${points.length}`} detail="forecast hour cells" />
+        <ForecastMetric label="Estimated average" value={formatForecastPercent(average)} />
+        <ForecastMetric label="Estimated peak" value={formatForecastPercent(peak.predictedUtilizationPercent)} detail={`${formatForecastDate(peak.date)}, ${formatHour(peak.hour)} PHT`} />
+        <ForecastMetric label="Days with seat use" value={`${forecast.activeDays}`} detail={`${forecast.occupiedHourCells} historical hours had occupied seats`} />
       </div>
 
       <div>
         <div className="mb-3 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
           <div>
             <h3 className="text-sm font-semibold text-slate-950">Forecast heat map</h3>
-            <p className="mt-1 text-xs leading-5 text-slate-500">Darker cells indicate higher predicted utilization. Times are shown in UTC.</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Darker cells indicate higher estimated utilization. Hours are in Philippine Time (PHT, UTC+8).</p>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500" aria-label="Heat map legend">
             <span>Lower</span>
@@ -766,7 +782,7 @@ function OccupancyForecast({ forecast, loading }) {
                 </span>
               ))}
             </div>
-            <div className="mt-1 space-y-1.5" role="img" aria-label="Seven-day predicted occupancy heat map">
+            <div className="mt-1 space-y-1.5" role="img" aria-label="Seven-day estimated occupancy heat map in Philippine Time">
               {days.map((day) => (
                 <div key={day.date} className="grid items-center gap-1" style={{ gridTemplateColumns: '7.5rem repeat(24, minmax(1.25rem, 1fr))' }}>
                   <span className="truncate pr-2 text-xs font-semibold text-slate-700">{formatForecastDate(day.date)}</span>
@@ -774,10 +790,12 @@ function OccupancyForecast({ forecast, loading }) {
                     <span
                       key={hour.hour}
                       className="grid aspect-square min-h-5 place-items-center rounded-sm border border-white/60 text-[8px] font-bold"
-                      style={forecastCellStyle(hour.predictedUtilizationPercent)}
-                      title={`${formatForecastDate(day.date)}, ${formatHour(hour.hour)}: ${formatNumber(hour.predictedUtilizationPercent)}% predicted utilization from ${hour.sampleCount} observation${hour.sampleCount === 1 ? '' : 's'}`}
+                      style={hour.sampleCount > 0 ? forecastCellStyle(hour.predictedUtilizationPercent) : undefined}
+                      title={hour.sampleCount > 0
+                        ? `${formatForecastDate(day.date)}, ${formatHour(hour.hour)} PHT: ${formatForecastPercent(hour.predictedUtilizationPercent)} estimated utilization from ${hour.sampleCount} historical hour slot${hour.sampleCount === 1 ? '' : 's'}`
+                        : `${formatForecastDate(day.date)}, ${formatHour(hour.hour)} PHT: no historical sample`}
                     >
-                      <span className="sr-only">{formatForecastDate(day.date)}, {formatHour(hour.hour)}: {formatNumber(hour.predictedUtilizationPercent)}%</span>
+                      <span className="sr-only">{formatForecastDate(day.date)}, {formatHour(hour.hour)} PHT: {hour.sampleCount > 0 ? formatForecastPercent(hour.predictedUtilizationPercent) : 'no sample'}</span>
                     </span>
                   ))}
                 </div>
@@ -788,7 +806,7 @@ function OccupancyForecast({ forecast, loading }) {
       </div>
 
       <p className="rounded-[8px] border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-950">
-        This live baseline uses real occupancy logs from the selected date range, favoring the same weekday and hour. It works as soon as records exist and becomes more representative as history grows.
+        This is a historical weekday and hour average from real occupancy logs, not a trained prediction model. It favors matching weekdays and uses other days at the same hour when needed. Low activity can still produce a low estimate.
       </p>
     </div>
   );
@@ -811,6 +829,12 @@ function forecastCellStyle(value) {
     backgroundColor: `rgba(6, 58, 100, ${opacity})`,
     color: percent >= 48 ? '#ffffff' : '#334155',
   };
+}
+
+function formatForecastPercent(value) {
+  if (value === null || !Number.isFinite(Number(value))) return '—';
+  if (value > 0 && value < 0.1) return '<0.1%';
+  return `${formatNumber(value)}%`;
 }
 
 function formatForecastDate(date) {
