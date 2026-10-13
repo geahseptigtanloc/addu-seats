@@ -73,7 +73,7 @@ const LIBRARIES = {
 
 const EMPTY_ANALYTICS = {
   utilization: { overallUtilizationPercent: 0, seats: [] },
-  peakHours: { hours: [] },
+  peakHours: { hours: [], totalCheckIns: 0, dailyCheckIns: [], peakConcurrentSeats: 0, peakAt: null },
   forecast: { days: [], hasObservedData: false },
   outcomes: { totalCount: 0, outcomes: [] },
   noShowRate: { totalReservations: 0, cancelledCount: 0, noShowRatePercent: 0 },
@@ -287,13 +287,6 @@ export default function AdminDashboard() {
 
   const comparisonRows = useMemo(() => (analytics.locationComparison?.locations || []).map(formatComparisonLocation), [analytics.locationComparison]);
 
-  const peakHour = useMemo(() => {
-    const hours = analytics.peakHours?.hours || [];
-    return hours.reduce((peak, item) => (
-      Number(item.occupiedSeatHours || 0) > Number(peak?.occupiedSeatHours || 0) ? item : peak
-    ), null);
-  }, [analytics.peakHours]);
-
   const activeGhostReportCount = ghostReports.filter((report) => report.status === 'ACTIVE').length;
   const visibleGhostReports = ghostReports.slice(0, visibleGhostReportCount);
   const hiddenGhostReportCount = Math.max(0, ghostReports.length - visibleGhostReportCount);
@@ -496,8 +489,8 @@ export default function AdminDashboard() {
       </section>
 
       <section className="ui-panel grid gap-px overflow-hidden bg-slate-200 sm:grid-cols-2 xl:grid-cols-4" aria-label="Analytics summary">
-        <Metric label="Recorded seat use" value={formatSeatHours(analytics.utilization?.occupiedSeatHours)} detail={`${formatUtilizationPercent(analytics.utilization?.overallUtilizationPercent, analytics.utilization?.occupiedSeatHours)} average utilization`} loading={loading} />
-        <Metric label="Busiest time of day" value={peakHour?.occupiedSeatHours > 0 ? `${formatHour(peakHour.hour)} PHT` : 'No activity yet'} detail={peakHour?.occupiedSeatHours > 0 ? `${formatSeatHours(peakHour.occupiedSeatHours)} recorded` : 'No confirmed seat use in this period'} loading={loading} />
+        <Metric label="Confirmed check-ins" value={analytics.peakHours?.totalCheckIns ?? '—'} detail="Front-desk approvals in this period" loading={loading} />
+        <Metric label="Most seats marked occupied" value={analytics.peakHours?.peakConcurrentSeats === undefined ? '—' : analytics.peakHours.peakConcurrentSeats ? `${analytics.peakHours.peakConcurrentSeats} ${analytics.peakHours.peakConcurrentSeats === 1 ? 'seat' : 'seats'}` : 'No activity yet'} detail={analytics.peakHours?.peakAt ? `At ${formatPeakDateTime(analytics.peakHours.peakAt)} PHT` : 'Based on app records'} loading={loading} />
         <Metric label="Average session" value={analytics.sessionLength?.sessionCount ? formatDuration(analytics.sessionLength.averageSessionMinutes) : 'No sessions yet'} detail={`${analytics.sessionLength?.sessionCount || 0} completed sessions`} loading={loading} />
         <Metric label="Recorded breaks" value={analytics.breakStats?.breakCount || 0} detail={`${formatNumber(analytics.breakStats?.averageBreakMinutes)} min average duration`} loading={loading} />
       </section>
@@ -506,12 +499,12 @@ export default function AdminDashboard() {
         <article className="ui-panel overflow-hidden">
           <PanelHeader
             icon={Clock}
-            title="Seat use by hour"
+            title="Confirmed check-ins"
             description={`${DATE_RANGES.find((range) => range.value === period)?.label} · ${analyticsPeriodDates(period)} · Philippine Time`}
             action={<button type="button" onClick={() => setRefreshCount((count) => count + 1)} disabled={loading} className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50" aria-label="Refresh analytics"><ArrowClockwise size={14} />Refresh</button>}
           />
           <div className="p-5">
-            <HourlyChart hours={analytics.peakHours?.hours || []} loading={loading} period={period} />
+            <CheckInChart days={analytics.peakHours?.dailyCheckIns} peakSeats={analytics.peakHours?.peakConcurrentSeats || 0} loading={loading} period={period} />
           </div>
         </article>
 
@@ -639,32 +632,48 @@ function PanelHeader({ icon: Icon, title, description, action }) {
   );
 }
 
-function HourlyChart({ hours, loading, period }) {
-  if (loading) return <div className="h-56 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading hourly analytics" />;
-  const highest = Math.max(0, ...hours.map((item) => Number(item.occupiedSeatHours || 0)));
-  if (!hours.length || highest === 0) return <EmptyState copy="No confirmed seat use was recorded in this period. Choose another period or location." />;
-  const scaleMax = Math.max(1, Math.ceil(highest));
+function formatCheckInDate(date) {
+  return new Date(`${date}T00:00:00.000Z`).toLocaleDateString('en-PH', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
+  });
+}
+
+function formatPeakDateTime(value) {
+  return new Date(value).toLocaleString('en-PH', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila',
+  });
+}
+
+function CheckInChart({ days, peakSeats, loading, period }) {
+  if (loading) return <div className="h-56 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading check-ins" />;
+  if (!Array.isArray(days)) return <EmptyState copy="The check-in report is still updating. Refresh after the backend finishes deploying." />;
+  if (!days.some((day) => day.count > 0)) return <EmptyState copy={peakSeats ? 'No new check-ins were recorded in this period. Seats checked in earlier may still have been in use.' : 'No front-desk check-ins were recorded in this period. Choose another period or location.'} />;
+
+  const weekly = period === 'last_30_days' || period === 'last_90_days';
+  const rows = weekly
+    ? days.reduce((groups, day, index) => {
+      if (index % 7 === 0) groups.push({ first: day.date, last: day.date, count: 0 });
+      const group = groups[groups.length - 1];
+      group.last = day.date;
+      group.count += day.count;
+      return groups;
+    }, [])
+    : days.map((day) => ({ first: day.date, last: day.date, count: day.count }));
+  const maxCount = Math.max(...rows.map((row) => row.count));
+
   return (
     <div>
-      <div className="mb-3 flex items-baseline justify-between gap-3 text-xs text-slate-600">
-        <span>Recorded seat-hours</span>
-        <span>Peak: {formatSeatHours(highest)}</span>
+      <p className="mb-4 text-sm text-slate-600">{weekly ? 'Check-ins grouped into seven-day blocks' : 'Check-ins on each day'} · one approval counts once</p>
+      <div className="space-y-3" role="list" aria-label="Confirmed check-ins by date">
+        {rows.map((row) => (
+          <div key={row.first} className="grid grid-cols-[7.5rem_minmax(0,1fr)_3.5rem] items-center gap-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)_5rem]" role="listitem">
+            <span className="font-medium text-slate-700">{row.first === row.last ? formatCheckInDate(row.first) : `${formatCheckInDate(row.first)}–${formatCheckInDate(row.last)}`}</span>
+            <span className="h-3 overflow-hidden rounded-sm bg-slate-100"><span className="block h-full rounded-sm bg-[#0c6097]" style={{ width: `${(row.count / maxCount) * 100}%` }} /></span>
+            <strong className="text-right font-semibold tabular-nums text-slate-900">{row.count}</strong>
+          </div>
+        ))}
       </div>
-      <div className="flex gap-2" role="img" aria-label="Recorded seat-hours by hour in Philippine Time">
-        <div className="flex h-44 w-9 shrink-0 flex-col justify-between text-right text-[10px] text-slate-500"><span>{scaleMax}</span><span>0</span></div>
-        <div className="flex h-44 min-w-0 flex-1 items-end gap-1 border-b border-slate-300 sm:gap-1.5">
-          {hours.map((item) => (
-            <div key={item.hour} className="group flex h-full min-w-0 flex-1 items-end" title={`${formatHour(item.hour)} PHT: ${formatSeatHours(item.occupiedSeatHours)}`}>
-              <div className="w-full rounded-t-sm bg-[#0c6097] transition-colors group-hover:bg-[#063a64]" style={{ height: item.occupiedSeatHours > 0 ? `${Math.max(1, (item.occupiedSeatHours / scaleMax) * 100)}%` : '0%' }} />
-              <span className="sr-only">{formatHour(item.hour)} PHT: {formatSeatHours(item.occupiedSeatHours)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="ml-11 mt-2 grid grid-cols-8 text-[10px] font-medium text-slate-500">
-        {[0, 3, 6, 9, 12, 15, 18, 21].map((hour) => <span key={hour}>{String(hour).padStart(2, '0')}</span>)}
-      </div>
-      <p className="mt-3 text-xs text-slate-500">One seat-hour means one seat occupied for one hour. Each bar totals that hour across the selected period.{period === 'this_week' ? ' This week is still in progress.' : ''}</p>
+      <p className="mt-5 text-xs text-slate-500">Each check-in is one front-desk approval. This chart shows new arrivals, not how long people stayed. Break returns are not counted again.{period === 'this_week' ? ' This week is still in progress.' : ''}</p>
     </div>
   );
 }

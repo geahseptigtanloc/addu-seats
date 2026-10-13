@@ -88,6 +88,10 @@ export interface PeakHoursReport {
   to: Date;
   seatCount: number;
   hours: HourlyUtilization[];
+  totalCheckIns: number;
+  dailyCheckIns: Array<{ date: string; count: number }>;
+  peakConcurrentSeats: number;
+  peakAt: Date | null;
 }
 
 export interface OccupancyForecastHour {
@@ -133,14 +137,52 @@ const FORECAST_REQUIREMENTS = {
 // stretching a tiny average across a long date range into a full-height bar.
 export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHoursReport> {
   const { from, to, seats, eventsBySeat } = await loadOccupancyData(filters);
+  const checkIns = seats.length
+    ? await reservationRepository.findConfirmedCheckInsForSeats(
+        seats.map((seat) => seat.id),
+        from,
+        to,
+      )
+    : [];
+  const checkInsByDate = new Map<string, number>();
+  for (const { confirmedAt } of checkIns) {
+    if (!confirmedAt) continue;
+    const date = new Date(confirmedAt.getTime() + PHILIPPINE_TIME_OFFSET_MS)
+      .toISOString()
+      .slice(0, 10);
+    checkInsByDate.set(date, (checkInsByDate.get(date) ?? 0) + 1);
+  }
+
+  const firstLocal = new Date(from.getTime() + PHILIPPINE_TIME_OFFSET_MS);
+  const lastLocal = new Date(to.getTime() - 1 + PHILIPPINE_TIME_OFFSET_MS);
+  const dailyCheckIns: PeakHoursReport['dailyCheckIns'] = [];
+  const firstDay = Date.UTC(
+    firstLocal.getUTCFullYear(),
+    firstLocal.getUTCMonth(),
+    firstLocal.getUTCDate(),
+  );
+  const lastDay = Date.UTC(
+    lastLocal.getUTCFullYear(),
+    lastLocal.getUTCMonth(),
+    lastLocal.getUTCDate(),
+  );
+  for (let day = firstDay; day <= lastDay; day += 24 * 60 * 60 * 1000) {
+    const date = new Date(day).toISOString().slice(0, 10);
+    dailyCheckIns.push({ date, count: checkInsByDate.get(date) ?? 0 });
+  }
 
   const occupiedMsByHour = new Array<number>(24).fill(0);
   const possibleMsByHour = new Array<number>(24).fill(0);
+  const occupancyTransitions: Array<{ at: number; change: number }> = [];
 
   for (const seat of seats) {
     const intervals = extractOccupiedIntervals(eventsBySeat.get(seat.id) ?? [], from, to);
     for (const interval of intervals) {
       accumulateHourlyMs(interval.start, interval.end, occupiedMsByHour);
+      if (interval.start < interval.end) {
+        occupancyTransitions.push({ at: interval.start.getTime(), change: 1 });
+        occupancyTransitions.push({ at: interval.end.getTime(), change: -1 });
+      }
     }
     // This seat's entire range counts as "possible" time
     accumulateHourlyMs(from, to, possibleMsByHour);
@@ -158,7 +200,28 @@ export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHou
     };
   });
 
-  return { from, to, seatCount: seats.length, hours };
+  occupancyTransitions.sort((a, b) => a.at - b.at || a.change - b.change);
+  let currentSeats = 0;
+  let peakConcurrentSeats = 0;
+  let peakAt: Date | null = null;
+  for (const transition of occupancyTransitions) {
+    currentSeats += transition.change;
+    if (currentSeats > peakConcurrentSeats) {
+      peakConcurrentSeats = currentSeats;
+      peakAt = new Date(transition.at);
+    }
+  }
+
+  return {
+    from,
+    to,
+    seatCount: seats.length,
+    hours,
+    totalCheckIns: checkIns.length,
+    dailyCheckIns,
+    peakConcurrentSeats,
+    peakAt,
+  };
 }
 
 // Produces a seven-day historical baseline from all prior occupancy logs for

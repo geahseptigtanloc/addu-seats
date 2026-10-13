@@ -59,6 +59,19 @@ export function findActiveDetailsBySeat(seatId: string) {
   });
 }
 
+// Front-desk approvals are a clear, countable measure of new seat use.
+// Unlike occupancy intervals, a check-in is counted once even if the
+// reservation remains active or the student returns from a break.
+export function findConfirmedCheckInsForSeats(seatIds: string[], from: Date, to: Date) {
+  return prisma.reservation.findMany({
+    where: {
+      seatId: { in: seatIds },
+      confirmedAt: { gte: from, lt: to },
+    },
+    select: { confirmedAt: true },
+  });
+}
+
 export function findDetailsById(id: string) {
   return prisma.reservation.findUnique({
     where: { id },
