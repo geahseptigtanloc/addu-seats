@@ -1528,7 +1528,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s077",
-    "displayLabel": "G3-S007"
+    "displayLabel": "G3-S004"
   },
   {
     "building": "gisbert",
@@ -1600,73 +1600,73 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s089",
-    "displayLabel": "G3-S001"
+    "displayLabel": "G3-S060"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s090",
-    "displayLabel": "G3-S002"
+    "displayLabel": "G3-S101"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s091",
-    "displayLabel": "G3-S003"
+    "displayLabel": "G3-S030"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s092",
-    "displayLabel": "G3-S004"
+    "displayLabel": "G3-S007"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s093",
-    "displayLabel": "G3-S005"
+    "displayLabel": "G3-S063"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s094",
-    "displayLabel": "G3-S006"
+    "displayLabel": "G3-S048"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s095",
-    "displayLabel": "G3-S026"
+    "displayLabel": "G3-S078"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s096",
-    "displayLabel": "G3-S029"
+    "displayLabel": "G3-S021"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s097",
-    "displayLabel": "G3-S035"
+    "displayLabel": "G3-S096"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s098",
-    "displayLabel": "G3-S036"
+    "displayLabel": "G3-S113"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s099",
-    "displayLabel": "G3-S037"
+    "displayLabel": "G3-S045"
   },
   {
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s100",
-    "displayLabel": "G3-S066"
+    "displayLabel": "G3-S041"
   },
   {
     "building": "gisbert",
@@ -1684,7 +1684,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s103",
-    "displayLabel": "G3-S021"
+    "displayLabel": "G3-S029"
   },
   {
     "building": "gisbert",
@@ -1726,7 +1726,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s110",
-    "displayLabel": "G3-S030"
+    "displayLabel": "G3-S003"
   },
   {
     "building": "gisbert",
@@ -1774,7 +1774,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s118",
-    "displayLabel": "G3-S041"
+    "displayLabel": "G3-S066"
   },
   {
     "building": "gisbert",
@@ -1798,7 +1798,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s122",
-    "displayLabel": "G3-S045"
+    "displayLabel": "G3-S037"
   },
   {
     "building": "gisbert",
@@ -1816,7 +1816,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s125",
-    "displayLabel": "G3-S048"
+    "displayLabel": "G3-S006"
   },
   {
     "building": "gisbert",
@@ -1888,7 +1888,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s137",
-    "displayLabel": "G3-S060"
+    "displayLabel": "G3-S001"
   },
   {
     "building": "gisbert",
@@ -1906,7 +1906,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s140",
-    "displayLabel": "G3-S063"
+    "displayLabel": "G3-S005"
   },
   {
     "building": "gisbert",
@@ -1990,7 +1990,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s154",
-    "displayLabel": "G3-S078"
+    "displayLabel": "G3-S026"
   },
   {
     "building": "gisbert",
@@ -2098,7 +2098,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-s172",
-    "displayLabel": "G3-S096"
+    "displayLabel": "G3-S035"
   },
   {
     "building": "gisbert",
@@ -2128,7 +2128,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-c054",
-    "displayLabel": "G3-S101"
+    "displayLabel": "G3-S002"
   },
   {
     "building": "gisbert",
@@ -2200,7 +2200,7 @@
     "building": "gisbert",
     "floor": 3,
     "currentQrToken": "seat:g3-c036",
-    "displayLabel": "G3-S113"
+    "displayLabel": "G3-S036"
   },
   {
     "building": "gisbert",

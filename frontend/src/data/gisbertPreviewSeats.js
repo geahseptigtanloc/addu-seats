@@ -232,18 +232,35 @@ seatsByFloor[3].slice(-gisbertThirdFloorZigzagChairPoints.length).forEach((seat)
   seat.hitHeight = 32;
 });
 
-// Keep the 12 printed QR labels on their assigned chairs. Number every other
-// reservable chair and cubicle in one compact S001-S120 display sequence.
-// Canonical labels remain unchanged so existing QR tokens and history survive.
+// Keep the previous 001-120 labels on all other seats while moving the 12
+// unattached printed QRs to widely separated chairs. Each move swaps display
+// labels with its destination; canonical seat identities and history stay put.
 const printedThirdFloorLabels = [
   'G3-S001', 'G3-S002', 'G3-S003', 'G3-S004', 'G3-S005', 'G3-S006',
   'G3-S026', 'G3-S029', 'G3-S035', 'G3-S036', 'G3-S037', 'G3-S066',
 ];
-const printedLabelByCanonical = new Map(
+const previousPrintedLabelByCanonical = new Map(
   printedThirdFloorLabels.map((label, index) => [`G3-S${String(index + 89).padStart(3, '0')}`, label]),
 );
+// Deliberately nonsequential so neighboring chairs do not receive neighboring
+// printed codes. Positions are documented in GISBERT_FLOOR3_PRINTED_QR_PLACEMENT.md.
+const spreadPrintedThirdFloorLabels = new Map([
+  ['G3-S001', 'G3-S137'], // bottom-right round table
+  ['G3-S002', 'G3-C054'], // upper-left wall cubicle
+  ['G3-S003', 'G3-S110'], // fourth long table, right side
+  ['G3-S004', 'G3-S077'], // upper computer row
+  ['G3-S005', 'G3-S140'], // leftmost lower rectangular table
+  ['G3-S006', 'G3-S125'], // middle-left round table
+  ['G3-S026', 'G3-S154'], // lower-left bench
+  ['G3-S029', 'G3-S103'], // third long table, left side
+  ['G3-S035', 'G3-S172'], // rightmost square table
+  ['G3-S036', 'G3-C036'], // lower-left wall cubicle
+  ['G3-S037', 'G3-S122'], // upper-right round table
+  ['G3-S066', 'G3-S118'], // fifth long table, lower-right chair
+]);
 const printedNumbers = new Set(printedThirdFloorLabels.map((label) => Number(label.slice(-3))));
-if (seatsByFloor[3].length !== 120 || printedNumbers.size !== printedThirdFloorLabels.length) {
+if (seatsByFloor[3].length !== 120 || printedNumbers.size !== printedThirdFloorLabels.length
+  || spreadPrintedThirdFloorLabels.size !== printedThirdFloorLabels.length) {
   throw new Error('Gisbert floor 3 seat count or printed QR assignments changed.');
 }
 const otherThirdFloorLabels = Array.from({ length: seatsByFloor[3].length }, (_, index) => index + 1)
@@ -251,9 +268,8 @@ const otherThirdFloorLabels = Array.from({ length: seatsByFloor[3].length }, (_,
   .map((number) => `G3-S${String(number).padStart(3, '0')}`);
 let nextOtherLabel = 0;
 seatsByFloor[3].forEach((seat) => {
-  const printedLabel = printedLabelByCanonical.get(seat.label);
+  const printedLabel = previousPrintedLabelByCanonical.get(seat.label);
   const displayLabel = printedLabel || otherThirdFloorLabels[nextOtherLabel++];
-  if (printedLabel) seat.printedQr = true;
   if (displayLabel !== seat.label) {
     seat.canonicalLabel = seat.label;
     seat.label = displayLabel;
@@ -261,6 +277,34 @@ seatsByFloor[3].forEach((seat) => {
 });
 if (nextOtherLabel !== otherThirdFloorLabels.length) {
   throw new Error('Gisbert floor 3 display labels were not assigned one-to-one.');
+}
+
+const thirdFloorSeatByCanonical = new Map(
+  seatsByFloor[3].map((seat) => [seat.canonicalLabel || seat.label, seat]),
+);
+const targetCanonicalLabels = new Set();
+for (const [printedLabel, targetCanonical] of spreadPrintedThirdFloorLabels) {
+  const source = seatsByFloor[3].find((seat) => seat.label === printedLabel);
+  const target = thirdFloorSeatByCanonical.get(targetCanonical);
+  if (!printedThirdFloorLabels.includes(printedLabel) || !source || !target
+    || source === target || targetCanonicalLabels.has(targetCanonical)
+    || printedThirdFloorLabels.includes(target.label)) {
+    throw new Error(`Invalid Gisbert floor 3 printed QR placement: ${printedLabel}`);
+  }
+  targetCanonicalLabels.add(targetCanonical);
+  const displacedLabel = target.label;
+  target.label = printedLabel;
+  source.label = displacedLabel;
+}
+seatsByFloor[3].forEach((seat) => {
+  const canonicalLabel = seat.canonicalLabel || seat.label;
+  if (seat.label !== canonicalLabel) seat.canonicalLabel = canonicalLabel;
+  else delete seat.canonicalLabel;
+  seat.printedQr = printedThirdFloorLabels.includes(seat.label);
+});
+if (new Set(seatsByFloor[3].map((seat) => seat.label)).size !== 120
+  || seatsByFloor[3].filter((seat) => seat.printedQr).length !== 12) {
+  throw new Error('Gisbert floor 3 labels must be unique after spreading printed QRs.');
 }
 
 addReferenceFloor(
