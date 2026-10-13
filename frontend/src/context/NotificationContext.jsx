@@ -4,7 +4,7 @@ import { ArrowRight, Bell, ClockCountdown, WarningCircle, X } from '@phosphor-ic
 import { io } from 'socket.io-client';
 import AppDialog from '../components/AppDialog.jsx';
 import { API_URL, apiClient, getToken } from '../api/client.js';
-import { formatSeatLocation } from '../data/seatLocations.js';
+import { formatSeatLocation, getSeatLocation } from '../data/seatLocations.js';
 import { useAuth } from './AuthContext.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_URL;
@@ -36,6 +36,7 @@ function adminNotification(report, unread) {
     id: report.flagId || report.reservationId,
     reservationId: report.reservationId,
     title: 'Possible ghost seat',
+    building: getSeatLocation(report).building,
     location: formatSeatLocation(report),
     message: `${report.seatLabel || 'A seat'} was reported vacant${report.studentName ? ` for ${report.studentName}` : ''}.`,
     seatLabel: report.seatLabel,
@@ -53,6 +54,7 @@ function pendingReservationNotification(reservation, unread) {
     id: `pending:${reservationId}`,
     reservationId,
     title: 'New seat reservation',
+    building: getSeatLocation(reservation).building,
     location: formatSeatLocation(reservation),
     message: `${reservation.studentName || reservation.user?.name || 'A student'} reserved ${seatLabel}. Entry approval is pending.`,
     seatLabel,
@@ -303,9 +305,20 @@ export function NotificationProvider({ children }) {
 
 export function NotificationBell() {
   const context = useNotifications();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const panelRef = useRef(null);
   const [open, setOpen] = useState(false);
+  const [buildingFilter, setBuildingFilter] = useState('all');
+  const isAdmin = user?.role === 'admin';
+  const visibleNotifications = isAdmin && buildingFilter !== 'all'
+    ? context.notifications.filter((notification) => notification.building === buildingFilter)
+    : context.notifications;
+  const buildingFilters = [
+    { id: 'all', label: 'All' },
+    { id: 'gisbert', label: 'Gisbert' },
+    { id: 'miguel_pro', label: 'Miguel Pro' },
+  ];
 
   useEffect(() => {
     if (!open) return undefined;
@@ -355,9 +368,30 @@ export function NotificationBell() {
             </button>
           </div>
 
-          {context.notifications.length ? (
+          {isAdmin && (
+            <div className="flex gap-1 overflow-x-auto border-b border-slate-200 px-3 py-2" aria-label="Filter notifications by library">
+              {buildingFilters.map((filter) => {
+                const count = filter.id === 'all'
+                  ? context.notifications.length
+                  : context.notifications.filter((notification) => notification.building === filter.id).length;
+                return (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    onClick={() => setBuildingFilter(filter.id)}
+                    aria-pressed={buildingFilter === filter.id}
+                    className={`shrink-0 rounded-[6px] px-2.5 py-1.5 text-xs font-semibold transition-colors ${buildingFilter === filter.id ? 'bg-[#063a64] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                  >
+                    {filter.label} <span className="tabular-nums">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {visibleNotifications.length ? (
             <div className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
-              {context.notifications.map((notification) => (
+              {visibleNotifications.map((notification) => (
                 <button
                   key={notification.id}
                   type="button"
@@ -385,8 +419,8 @@ export function NotificationBell() {
           ) : (
             <div className="px-5 py-8 text-center">
               <Bell size={24} weight="duotone" className="mx-auto text-slate-400" />
-              <p className="mt-3 text-sm font-semibold text-slate-800">No active seat alerts</p>
-              <p className="mt-1 text-xs text-slate-500">New reservations and flag reports will appear here.</p>
+              <p className="mt-3 text-sm font-semibold text-slate-800">{isAdmin && buildingFilter !== 'all' ? 'No alerts for this library' : 'No active seat alerts'}</p>
+              <p className="mt-1 text-xs text-slate-500">{isAdmin && buildingFilter !== 'all' ? 'Choose another library or All to see other alerts.' : 'New reservations and flag reports will appear here.'}</p>
             </div>
           )}
         </div>

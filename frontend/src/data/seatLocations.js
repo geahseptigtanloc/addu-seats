@@ -12,7 +12,7 @@ export function formatBuildingName(building) {
     : 'Library location unavailable';
 }
 
-function getSeatLocation(location = {}) {
+export function getSeatLocation(location = {}) {
   const seatLabel = location.seatLabel || location.seat?.label || location.label;
   const building = location.building || location.seat?.building
     || (/^G\d+-/.test(String(seatLabel || '')) ? 'gisbert' : null)

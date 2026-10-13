@@ -66,6 +66,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Review live reservations and approve entry only after matching the receipt code and checking the student's name and university ID.
 - Receive each new pending reservation as an immediate toast and notification-bell badge, with the student, seat, library, Gisbert floor or Miguel Pro area, and a link to the front-desk queue.
 - Receive new ghost-seat reports as a toast and notification-bell badge from any administrator page.
+- Filter notification-bell items by All, Gisbert Library, or Miguel Pro Learning Commons while retaining the overall unread badge.
 - Review ghost-seat reports in a compact newest-first list that reveals five more records at a time.
 - Open a pending, occupied, or on-break seat from a floor map and void its active reservation, immediately releasing the seat.
 - View the responsive occupancy dashboard and open individual floor maps.
