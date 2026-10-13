@@ -20,6 +20,13 @@ const DATE_RANGES = [
 ];
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PHT_OFFSET_MS = 8 * 60 * 60 * 1000;
+const LIBRARY_OPEN_HOUR = 8;
+const LIBRARY_CLOSE_HOUR = 20;
+const FORECAST_HOURS = Array.from(
+  { length: LIBRARY_CLOSE_HOUR - LIBRARY_OPEN_HOUR },
+  (_, index) => LIBRARY_OPEN_HOUR + index,
+);
+const FORECAST_HOUR_SET = new Set(FORECAST_HOURS);
 
 function analyticsDateRange(period, now = new Date()) {
   if (period === 'last_30_days' || period === 'last_90_days') {
@@ -777,13 +784,8 @@ function OccupancyForecast({ forecast, loading }) {
   }
 
   const days = forecast?.days || [];
-  const activeHours = forecast?.activeHours || [];
-  const firstHour = activeHours.length ? Math.max(0, Math.min(...activeHours) - 1) : 0;
-  const lastHour = activeHours.length ? Math.min(23, Math.max(...activeHours) + 1) : 23;
-  const visibleHours = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => firstHour + index);
-  const visibleHourSet = new Set(visibleHours);
   const points = days.flatMap((day) => day.hours
-    .filter((hour) => visibleHourSet.has(hour.hour))
+    .filter((hour) => FORECAST_HOUR_SET.has(hour.hour))
     .map((hour) => ({
       ...hour,
       date: day.date,
@@ -808,6 +810,7 @@ function OccupancyForecast({ forecast, loading }) {
   const highestEstimate = peak.estimatedSeats;
   const dailyPeaks = days.map((day) => {
     const dayPoints = day.hours
+      .filter((hour) => FORECAST_HOUR_SET.has(hour.hour))
       .map((hour) => ({ ...hour, estimatedSeats: forecastSeatEstimate(hour, forecast.seatCount) }))
       .filter((hour) => hour.sampleCount > 0 && hour.estimatedSeats !== null);
     return {
@@ -851,7 +854,7 @@ function OccupancyForecast({ forecast, loading }) {
       <details className="group rounded-[8px] border border-slate-200">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[#063a64]">See hourly heatmap</summary>
         <div className="border-t border-slate-200 px-4 py-4">
-          <p className="mb-3 text-xs leading-5 text-slate-600">Darker squares mean more estimated seats in use compared with the other hours shown. A dark square does not mean the library is full. Times are in Philippine Time (PHT).</p>
+          <p className="mb-3 text-xs leading-5 text-slate-600">Hourly slots run from 8 AM to 8 PM Philippine Time (PHT). Darker squares mean more estimated seats in use compared with the other hours shown. A dark square does not mean the library is full.</p>
           <div className="mb-3 flex items-center gap-2 text-xs text-slate-600" aria-label="Heatmap scale from zero to the busiest estimate">
             <span>0</span>
             {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
@@ -860,20 +863,20 @@ function OccupancyForecast({ forecast, loading }) {
             <span>{formatSeatEstimate(highestEstimate)}</span>
           </div>
           <div className="overflow-x-auto rounded-[8px] border border-slate-200 bg-slate-50/60 p-3 pb-4">
-            <div style={{ minWidth: `${120 + visibleHours.length * 29}px` }}>
-              <div className="grid items-end gap-1" style={{ gridTemplateColumns: `7.5rem repeat(${visibleHours.length}, minmax(1.25rem, 1fr))` }} aria-hidden="true">
+            <div style={{ minWidth: `${120 + FORECAST_HOURS.length * 29}px` }}>
+              <div className="grid items-end gap-1" style={{ gridTemplateColumns: `7.5rem repeat(${FORECAST_HOURS.length}, minmax(1.25rem, 1fr))` }} aria-hidden="true">
                 <span />
-                {visibleHours.map((hour) => (
+                {FORECAST_HOURS.map((hour) => (
                   <span key={hour} className="text-center text-[9px] font-semibold text-slate-500">
-                    {hour === firstHour || hour === lastHour || hour % 3 === 0 ? String(hour).padStart(2, '0') : ''}
+                    {hour === LIBRARY_OPEN_HOUR || hour === LIBRARY_CLOSE_HOUR - 1 || hour % 3 === 0 ? String(hour).padStart(2, '0') : ''}
                   </span>
                 ))}
               </div>
               <div className="mt-1 space-y-1.5" role="img" aria-label="Seven-day estimate of seats in use by hour in Philippine Time">
                 {days.map((day) => (
-                  <div key={day.date} className="grid items-center gap-1" style={{ gridTemplateColumns: `7.5rem repeat(${visibleHours.length}, minmax(1.25rem, 1fr))` }}>
+                  <div key={day.date} className="grid items-center gap-1" style={{ gridTemplateColumns: `7.5rem repeat(${FORECAST_HOURS.length}, minmax(1.25rem, 1fr))` }}>
                     <span className="truncate pr-2 text-xs font-semibold text-slate-700">{formatForecastDate(day.date)}</span>
-                    {day.hours.filter((hour) => visibleHourSet.has(hour.hour)).map((hour) => (
+                    {day.hours.filter((hour) => FORECAST_HOUR_SET.has(hour.hour)).map((hour) => (
                       <span
                         key={hour.hour}
                         className="grid aspect-square min-h-5 place-items-center rounded-sm border border-white/60 text-[8px] font-bold"
