@@ -819,7 +819,7 @@ function OccupancyForecast({ forecast, loading }) {
 
       <div className="space-y-1 rounded-[8px] border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-950">
         <p>Each square estimates average seats in use at that hour from all confirmed occupancy logs since {formatHistoryDate(forecast.from)}, including records outside the dashboard date range. Matching weekdays count first; other days at the same hour fill gaps.</p>
-        <p>Colors are relative to the busiest estimate shown, so a dark square does not mean the library is full. A value of 0.5 seats means one seat was occupied for about half of a similar past hour. This is a planning guide, not live availability or a trained prediction model.</p>
+        <p>Colors are relative to the busiest estimate shown, so a dark square does not mean the library is full. A value of 0.5 seats means one seat was occupied for about half of a similar past hour. Only sessions confirmed through this app are counted; untracked library visitors are not. This is a planning guide, not live availability or a trained prediction model.</p>
       </div>
     </div>
   );
