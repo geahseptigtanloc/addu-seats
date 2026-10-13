@@ -453,38 +453,40 @@ export default function AdminDashboard() {
         onClose={() => setSelectedGhostReport(null)}
       />
 
-      <section className="flex flex-col gap-4 border-b border-slate-200 py-5 lg:flex-row lg:items-end lg:justify-between" aria-label="Analytics filters">
-        <div>
-          <h2 className="ui-section-title">Usage patterns</h2>
-          <p className="mt-1 text-sm text-slate-500">Historical occupancy logs, not current seat availability.</p>
-        </div>
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3 lg:w-auto lg:grid-cols-[9rem_11.5rem_10rem]">
-          <FilterSelect label="Period" value={period} onChange={(event) => setPeriod(event.target.value)}>
-            {DATE_RANGES.map((range) => (
-              <option key={range.value} value={range.value}>
-                {range.label}
-              </option>
-            ))}
-          </FilterSelect>
-          <FilterSelect
-            label="Library"
-            value={buildingFilter}
-            onChange={(event) => {
-              setBuildingFilter(event.target.value);
-              setAreaFilter('all');
-            }}
-          >
-            <option value="gisbert">Gisbert Library</option>
-            <option value="miguel_pro">Miguel Pro</option>
-          </FilterSelect>
-          <FilterSelect label={selectedLibrary.filterLabel} value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
-            <option value="all">{selectedLibrary.allLabel}</option>
-            {selectedLibrary.areas.map((area) => (
-              <option key={area.id} value={area.id}>
-                {area.label}
-              </option>
-            ))}
-          </FilterSelect>
+      <section className="mt-6 mb-4 rounded-[8px] border border-slate-200 bg-white px-4 py-4 shadow-[0_4px_18px_rgba(14,35,56,0.04)] sm:px-5" aria-label="Analytics filters">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between xl:gap-8">
+          <div className="shrink-0">
+            <h2 className="ui-section-title">Usage patterns</h2>
+            <p className="mt-0.5 text-xs text-slate-500">Past activity for the period and location below.</p>
+          </div>
+          <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:max-w-[35rem] sm:grid-cols-3">
+            <FilterSelect label="Period" value={period} onChange={(event) => setPeriod(event.target.value)}>
+              {DATE_RANGES.map((range) => (
+                <option key={range.value} value={range.value}>
+                  {range.label}
+                </option>
+              ))}
+            </FilterSelect>
+            <FilterSelect
+              label="Library"
+              value={buildingFilter}
+              onChange={(event) => {
+                setBuildingFilter(event.target.value);
+                setAreaFilter('all');
+              }}
+            >
+              <option value="gisbert">Gisbert Library</option>
+              <option value="miguel_pro">Miguel Pro</option>
+            </FilterSelect>
+            <FilterSelect label={selectedLibrary.filterLabel} value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
+              <option value="all">{selectedLibrary.allLabel}</option>
+              {selectedLibrary.areas.map((area) => (
+                <option key={area.id} value={area.id}>
+                  {area.label}
+                </option>
+              ))}
+            </FilterSelect>
+          </div>
         </div>
       </section>
 
@@ -598,9 +600,9 @@ function formatComparisonLocation(location) {
 
 function FilterSelect({ label, value, onChange, children }) {
   return (
-    <label className="block min-w-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+    <label className="block min-w-0 text-xs font-medium text-slate-600">
       <span className="block">{label}</span>
-      <select value={value} onChange={onChange} className="mt-1.5 block h-10 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium normal-case tracking-normal text-slate-900 shadow-sm outline-none focus:border-blue-700 focus:ring-2 focus:ring-blue-100">
+      <select value={value} onChange={onChange} className="mt-1 block h-9 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-900 outline-none hover:border-slate-400 focus:border-blue-700 focus:ring-2 focus:ring-blue-100">
         {children}
       </select>
     </label>
