@@ -80,6 +80,7 @@ export interface HourlyUtilization {
   hour: number; // 0-23, Philippine Time
   utilizationPercent: number;
   averageOccupiedSeats: number;
+  occupiedSeatHours: number;
 }
 
 export interface PeakHoursReport {
@@ -128,8 +129,8 @@ const FORECAST_REQUIREMENTS = {
 } as const;
 
 // Same occupied intervals as getUtilization, grouped by hour of day in
-// Philippine Time. An occupied-seat count is easier to read than a tiny
-// percentage when pilot activity is sparse.
+// Philippine Time. Raw seat-hours keep sparse pilot activity visible without
+// stretching a tiny average across a long date range into a full-height bar.
 export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHoursReport> {
   const { from, to, seats, eventsBySeat } = await loadOccupancyData(filters);
 
@@ -153,6 +154,7 @@ export async function getPeakHours(filters: UtilizationFilters): Promise<PeakHou
       hour,
       utilizationPercent: possibleMs > 0 ? roundToOneDecimal((occupiedMs / possibleMs) * 100) : 0,
       averageOccupiedSeats: possibleMs > 0 ? (occupiedMs * seats.length) / possibleMs : 0,
+      occupiedSeatHours: occupiedMs / 3_600_000,
     };
   });
 

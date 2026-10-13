@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Buildings, ChartBar, CheckCircle, Clock, Coffee, MapTrifold, Monitor, TrendUp, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, ArrowRight, Buildings, ChartBar, CheckCircle, Clock, Coffee, MapTrifold, Monitor, TrendUp, WarningCircle } from '@phosphor-icons/react';
 import { io } from 'socket.io-client';
 import AppDialog from '../components/AppDialog.jsx';
 import Layout from '../components/Layout.jsx';
@@ -13,10 +13,35 @@ import { formatSeatLocation, getSeatMapPath } from '../data/seatLocations.js';
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
 const DATE_RANGES = [
-  { value: 7, label: 'Last 7 days' },
-  { value: 30, label: 'Last 30 days' },
-  { value: 90, label: 'Last 90 days' },
+  { value: 'this_week', label: 'This week' },
+  { value: 'last_week', label: 'Last week' },
+  { value: 'last_30_days', label: 'Last 30 days' },
+  { value: 'last_90_days', label: 'Last 90 days' },
 ];
+const DAY_MS = 24 * 60 * 60 * 1000;
+const PHT_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function analyticsDateRange(period, now = new Date()) {
+  if (period === 'last_30_days' || period === 'last_90_days') {
+    const days = period === 'last_30_days' ? 30 : 90;
+    return { from: new Date(now.getTime() - days * DAY_MS), to: now };
+  }
+
+  // Shift to PHT before finding Monday, then convert local midnight back to UTC.
+  const pht = new Date(now.getTime() + PHT_OFFSET_MS);
+  const daysSinceMonday = (pht.getUTCDay() + 6) % 7;
+  const thisMonday = Date.UTC(pht.getUTCFullYear(), pht.getUTCMonth(), pht.getUTCDate() - daysSinceMonday) - PHT_OFFSET_MS;
+  return period === 'last_week'
+    ? { from: new Date(thisMonday - 7 * DAY_MS), to: new Date(thisMonday) }
+    : { from: new Date(thisMonday), to: now };
+}
+
+function analyticsPeriodDates(period) {
+  const { from, to } = analyticsDateRange(period);
+  const date = new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric', timeZone: 'Asia/Manila' });
+  const lastIncludedDay = period === 'last_week' ? new Date(to.getTime() - 1) : to;
+  return `${date.format(from)}–${date.format(lastIncludedDay)}`;
+}
 
 const GHOST_REPORT_PAGE_SIZE = 5;
 
@@ -91,7 +116,8 @@ function normalizeGhostReport(report) {
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [rangeDays, setRangeDays] = useState(30);
+  const [period, setPeriod] = useState('this_week');
+  const [refreshCount, setRefreshCount] = useState(0);
   const [buildingFilter, setBuildingFilter] = useState('gisbert');
   const [areaFilter, setAreaFilter] = useState('all');
   const [analytics, setAnalytics] = useState(EMPTY_ANALYTICS);
@@ -109,8 +135,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const to = new Date();
-    const from = new Date(to.getTime() - rangeDays * 24 * 60 * 60 * 1000);
+    const { from, to } = analyticsDateRange(period);
     const dateParams = {
       from: from.toISOString(),
       to: to.toISOString(),
@@ -175,7 +200,7 @@ export default function AdminDashboard() {
 
     loadAnalytics();
     return () => controller.abort();
-  }, [areaFilter, buildingFilter, rangeDays]);
+  }, [areaFilter, buildingFilter, period, refreshCount]);
 
   const loadGhostReports = useCallback(async ({ signal, showLoading = false } = {}) => {
     if (showLoading) setGhostReportsLoading(true);
@@ -265,7 +290,7 @@ export default function AdminDashboard() {
   const peakHour = useMemo(() => {
     const hours = analytics.peakHours?.hours || [];
     return hours.reduce((peak, item) => (
-      Number(item.averageOccupiedSeats || 0) > Number(peak?.averageOccupiedSeats || 0) ? item : peak
+      Number(item.occupiedSeatHours || 0) > Number(peak?.occupiedSeatHours || 0) ? item : peak
     ), null);
   }, [analytics.peakHours]);
 
@@ -441,7 +466,7 @@ export default function AdminDashboard() {
           <p className="mt-1 text-sm text-slate-500">Historical occupancy logs, not current seat availability.</p>
         </div>
         <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3 lg:w-auto lg:grid-cols-[9rem_11.5rem_10rem]">
-          <FilterSelect label="Date range" value={rangeDays} onChange={(event) => setRangeDays(Number(event.target.value))}>
+          <FilterSelect label="Period" value={period} onChange={(event) => setPeriod(event.target.value)}>
             {DATE_RANGES.map((range) => (
               <option key={range.value} value={range.value}>
                 {range.label}
@@ -472,16 +497,21 @@ export default function AdminDashboard() {
 
       <section className="ui-panel grid gap-px overflow-hidden bg-slate-200 sm:grid-cols-2 xl:grid-cols-4" aria-label="Analytics summary">
         <Metric label="Recorded seat use" value={formatSeatHours(analytics.utilization?.occupiedSeatHours)} detail={`${formatUtilizationPercent(analytics.utilization?.overallUtilizationPercent, analytics.utilization?.occupiedSeatHours)} average utilization`} loading={loading} />
-        <Metric label="Busiest hour" value={peakHour?.averageOccupiedSeats > 0 ? `${formatHour(peakHour.hour)} PHT` : 'No activity yet'} detail={peakHour?.averageOccupiedSeats > 0 ? `${formatSeatEstimate(peakHour.averageOccupiedSeats)} on average` : 'No confirmed seat use in this period'} loading={loading} />
+        <Metric label="Busiest time of day" value={peakHour?.occupiedSeatHours > 0 ? `${formatHour(peakHour.hour)} PHT` : 'No activity yet'} detail={peakHour?.occupiedSeatHours > 0 ? `${formatSeatHours(peakHour.occupiedSeatHours)} recorded` : 'No confirmed seat use in this period'} loading={loading} />
         <Metric label="Average session" value={analytics.sessionLength?.sessionCount ? formatDuration(analytics.sessionLength.averageSessionMinutes) : 'No sessions yet'} detail={`${analytics.sessionLength?.sessionCount || 0} completed sessions`} loading={loading} />
         <Metric label="Recorded breaks" value={analytics.breakStats?.breakCount || 0} detail={`${formatNumber(analytics.breakStats?.averageBreakMinutes)} min average duration`} loading={loading} />
       </section>
 
       <section className="mt-6 space-y-6">
         <article className="ui-panel overflow-hidden">
-          <PanelHeader icon={Clock} title="Peak occupancy by hour" description="Average seats in use by Philippine Time across the selected period" />
+          <PanelHeader
+            icon={Clock}
+            title="Seat use by hour"
+            description={`${DATE_RANGES.find((range) => range.value === period)?.label} · ${analyticsPeriodDates(period)} · Philippine Time`}
+            action={<button type="button" onClick={() => setRefreshCount((count) => count + 1)} disabled={loading} className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50" aria-label="Refresh analytics"><ArrowClockwise size={14} />Refresh</button>}
+          />
           <div className="p-5">
-            <HourlyChart hours={analytics.peakHours?.hours || []} loading={loading} />
+            <HourlyChart hours={analytics.peakHours?.hours || []} loading={loading} period={period} />
           </div>
         </article>
 
@@ -594,42 +624,47 @@ function Metric({ label, value, detail, loading }) {
   );
 }
 
-function PanelHeader({ icon: Icon, title, description }) {
+function PanelHeader({ icon: Icon, title, description, action }) {
   return (
     <div className="flex items-start gap-3 border-b border-slate-200 bg-white/95 px-5 py-4">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-[#e6f0f7] text-[#063a64]">
         <Icon size={20} weight="duotone" />
       </span>
-      <div>
+      <div className="min-w-0 flex-1">
         <h2 className="ui-section-title">{title}</h2>
         <p className="mt-1 text-xs text-slate-500">{description}</p>
       </div>
+      {action}
     </div>
   );
 }
 
-function HourlyChart({ hours, loading }) {
+function HourlyChart({ hours, loading, period }) {
   if (loading) return <div className="h-56 animate-pulse rounded-[8px] bg-slate-100" aria-label="Loading hourly analytics" />;
-  const highest = Math.max(0, ...hours.map((item) => Number(item.averageOccupiedSeats || 0)));
-  if (!hours.length || highest === 0) return <EmptyState copy="No confirmed seat use was recorded in this period. Try a longer date range or another location." />;
+  const highest = Math.max(0, ...hours.map((item) => Number(item.occupiedSeatHours || 0)));
+  if (!hours.length || highest === 0) return <EmptyState copy="No confirmed seat use was recorded in this period. Choose another period or location." />;
+  const scaleMax = Math.max(1, Math.ceil(highest));
   return (
     <div>
       <div className="mb-3 flex items-baseline justify-between gap-3 text-xs text-slate-600">
-        <span>Average seats occupied</span>
-        <span>Peak: {formatSeatEstimate(highest)}</span>
+        <span>Recorded seat-hours</span>
+        <span>Peak: {formatSeatHours(highest)}</span>
       </div>
-      <div className="flex h-44 items-end gap-1 border-b border-slate-300 sm:gap-1.5" role="img" aria-label="Average occupied seats by hour in Philippine Time">
-        {hours.map((item) => (
-          <div key={item.hour} className="group flex h-full min-w-0 flex-1 items-end" title={`${formatHour(item.hour)} PHT: ${formatSeatEstimate(item.averageOccupiedSeats)}`}>
-            <div className="w-full rounded-t-sm bg-[#0c6097] transition-colors group-hover:bg-[#063a64]" style={{ height: item.averageOccupiedSeats > 0 ? `${Math.max(3, (item.averageOccupiedSeats / highest) * 100)}%` : '0%' }} />
-            <span className="sr-only">{formatHour(item.hour)} PHT: {formatSeatEstimate(item.averageOccupiedSeats)}</span>
-          </div>
-        ))}
+      <div className="flex gap-2" role="img" aria-label="Recorded seat-hours by hour in Philippine Time">
+        <div className="flex h-44 w-9 shrink-0 flex-col justify-between text-right text-[10px] text-slate-500"><span>{scaleMax}</span><span>0</span></div>
+        <div className="flex h-44 min-w-0 flex-1 items-end gap-1 border-b border-slate-300 sm:gap-1.5">
+          {hours.map((item) => (
+            <div key={item.hour} className="group flex h-full min-w-0 flex-1 items-end" title={`${formatHour(item.hour)} PHT: ${formatSeatHours(item.occupiedSeatHours)}`}>
+              <div className="w-full rounded-t-sm bg-[#0c6097] transition-colors group-hover:bg-[#063a64]" style={{ height: item.occupiedSeatHours > 0 ? `${Math.max(1, (item.occupiedSeatHours / scaleMax) * 100)}%` : '0%' }} />
+              <span className="sr-only">{formatHour(item.hour)} PHT: {formatSeatHours(item.occupiedSeatHours)}</span>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="mt-2 grid grid-cols-8 text-[10px] font-medium text-slate-500">
+      <div className="ml-11 mt-2 grid grid-cols-8 text-[10px] font-medium text-slate-500">
         {[0, 3, 6, 9, 12, 15, 18, 21].map((hour) => <span key={hour}>{String(hour).padStart(2, '0')}</span>)}
       </div>
-      <p className="mt-3 text-xs text-slate-500">PHT · Each bar averages all matching hours in the selected date range.</p>
+      <p className="mt-3 text-xs text-slate-500">One seat-hour means one seat occupied for one hour. Each bar totals that hour across the selected period.{period === 'this_week' ? ' This week is still in progress.' : ''}</p>
     </div>
   );
 }
