@@ -232,19 +232,34 @@ seatsByFloor[3].slice(-gisbertThirdFloorZigzagChairPoints.length).forEach((seat)
   seat.hitHeight = 32;
 });
 
-// These 12 existing QR prints are assigned to the first two long tables.
-// Keep the database's current tokens for reservation history, while showing
-// the printed numbers on the map, search, receipts, and scan result.
+// Keep the 12 printed QR labels on their assigned chairs. Number every other
+// reservable chair and cubicle in one compact S001-S120 display sequence.
+// Canonical labels remain unchanged so existing QR tokens and history survive.
 const printedThirdFloorLabels = [
   'G3-S001', 'G3-S002', 'G3-S003', 'G3-S004', 'G3-S005', 'G3-S006',
   'G3-S026', 'G3-S029', 'G3-S035', 'G3-S036', 'G3-S037', 'G3-S066',
 ];
+const printedLabelByCanonical = new Map(
+  printedThirdFloorLabels.map((label, index) => [`G3-S${String(index + 89).padStart(3, '0')}`, label]),
+);
+const printedNumbers = new Set(printedThirdFloorLabels.map((label) => Number(label.slice(-3))));
+if (seatsByFloor[3].length !== 120 || printedNumbers.size !== printedThirdFloorLabels.length) {
+  throw new Error('Gisbert floor 3 seat count or printed QR assignments changed.');
+}
+const otherThirdFloorLabels = Array.from({ length: seatsByFloor[3].length }, (_, index) => index + 1)
+  .filter((number) => !printedNumbers.has(number))
+  .map((number) => `G3-S${String(number).padStart(3, '0')}`);
+let nextOtherLabel = 0;
 seatsByFloor[3].forEach((seat) => {
-  const index = Number(seat.label.slice(-3)) - 89;
-  if (seat.seatType !== 'individual' || index < 0 || index >= printedThirdFloorLabels.length) return;
-  seat.canonicalLabel = seat.label;
-  seat.label = printedThirdFloorLabels[index];
+  const displayLabel = printedLabelByCanonical.get(seat.label) || otherThirdFloorLabels[nextOtherLabel++];
+  if (displayLabel !== seat.label) {
+    seat.canonicalLabel = seat.label;
+    seat.label = displayLabel;
+  }
 });
+if (nextOtherLabel !== otherThirdFloorLabels.length) {
+  throw new Error('Gisbert floor 3 display labels were not assigned one-to-one.');
+}
 
 addReferenceFloor(
   4,

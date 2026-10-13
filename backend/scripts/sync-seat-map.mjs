@@ -22,6 +22,7 @@ const seats = mappedSeats.map((seat) => ({
   building: seat.building,
   floor: seat.floor,
   currentQrToken: `seat:${(seat.canonicalLabel || seat.label).toLowerCase()}`,
+  ...(seat.canonicalLabel ? { displayLabel: seat.label } : {}),
 }));
 
 writeFileSync(outputPath, `${JSON.stringify(seats, null, 2)}\n`);

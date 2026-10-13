@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 // These printed floor-three QR images were never attached to the old seats.
 // Keep their physical tokens usable by assigning each print to one current seat.
 // The target token remains the seat's canonical identity for maps and history.
@@ -18,7 +21,6 @@ const printedThirdFloorAssignments = [
 
 const assignedQrTokens = new Map<string, string>();
 const assignedSeats = new Set<string>();
-const printedTokenBySeat = new Map<string, string>();
 
 for (const [printedToken, currentToken] of printedThirdFloorAssignments) {
   if (
@@ -34,7 +36,39 @@ for (const [printedToken, currentToken] of printedThirdFloorAssignments) {
   }
   assignedQrTokens.set(printedToken, currentToken);
   assignedSeats.add(currentToken);
-  printedTokenBySeat.set(currentToken, printedToken);
+}
+
+// Display labels come from the same checked-in seat map used to seed the
+// backend. Only the 12 assignments above resolve older printed QR values;
+// renaming the other chairs must not reactivate retired QR tokens.
+const seatMapPath = join(__dirname, '../../prisma/seat-map.json');
+const seatMap = JSON.parse(readFileSync(seatMapPath, 'utf-8')) as Array<{
+  building: string;
+  floor: number;
+  currentQrToken: string;
+  displayLabel?: string;
+}>;
+const displayTokenBySeat = new Map<string, string>();
+const usedDisplayTokens = new Set<string>();
+
+for (const seat of seatMap) {
+  if (seat.building !== 'gisbert' || seat.floor !== 3 || !seat.displayLabel) continue;
+  const displayToken = `seat:${seat.displayLabel.toLowerCase()}`;
+  if (
+    !/^seat:g3-s\d{3}$/.test(displayToken) ||
+    displayTokenBySeat.has(seat.currentQrToken) ||
+    usedDisplayTokens.has(displayToken)
+  ) {
+    throw new Error(`Invalid third-floor display label: ${seat.displayLabel}`);
+  }
+  displayTokenBySeat.set(seat.currentQrToken, displayToken);
+  usedDisplayTokens.add(displayToken);
+}
+
+for (const [printedToken, currentToken] of printedThirdFloorAssignments) {
+  if (displayTokenBySeat.get(currentToken) !== printedToken) {
+    throw new Error(`Printed QR label does not match current seat: ${printedToken}`);
+  }
 }
 
 export function resolveSeatQrToken(token: string): string {
@@ -46,5 +80,5 @@ export function hasAssignedPrintedQr(token: string): boolean {
 }
 
 export function getDisplayQrToken(currentToken: string): string {
-  return printedTokenBySeat.get(currentToken) ?? currentToken;
+  return displayTokenBySeat.get(currentToken) ?? currentToken;
 }

@@ -9,6 +9,7 @@ interface SeatMapEntry {
   building: string;
   floor: number;
   currentQrToken: string;
+  displayLabel?: string;
 }
 
 const CORS_ORIGIN = process.env.CORS_ORIGIN;
@@ -38,7 +39,8 @@ async function main(): Promise<void> {
 
   for (const seat of seatsToPrint) {
     const reservationUrl = `${SCAN_BASE_URL}?token=${encodeURIComponent(seat.currentQrToken)}`;
-    const safeName = seat.currentQrToken.replace(/[^a-zA-Z0-9-]/g, '_');
+    const visibleToken = seat.displayLabel ? `seat:${seat.displayLabel.toLowerCase()}` : seat.currentQrToken;
+    const safeName = visibleToken.replace(/[^a-zA-Z0-9-]/g, '_');
     const fileName = `${seat.building}-floor${seat.floor}-${safeName}.png`;
     const reservationPath = join(outputDir, fileName);
 

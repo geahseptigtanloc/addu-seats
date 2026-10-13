@@ -19,4 +19,6 @@ These 12 prints were made for the previous map but were not attached to chairs. 
 
 Only these 12 old codes are reassigned. Other old floor-3 QR codes remain inactive. The map, seat search, scan page, and receipts show the same label printed on each QR. The database still uses its existing seat identities internally so reservation history stays attached to the right chair. Wait until the live API shows the 120 current third-floor seats before placing the prints. Backend startup adds missing third-floor seats from the checked-in map without changing existing seat statuses or reservations.
 
+The other third-floor chairs and cubicles use the remaining numbers in the `G3-S001` to `G3-S120` display sequence. Their existing database QR tokens are unchanged; new QR image filenames use the visible label while the encoded scan URL still points to the correct existing seat.
+
 The reservation-QR generator skips these 12 seats so a new reservation QR is not printed for the same chair. Presence re-verification uses a separate `/reverify` QR image labeled with the same visible seat number and still needs to be placed according to the existing break workflow.
