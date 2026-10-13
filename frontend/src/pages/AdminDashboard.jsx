@@ -435,12 +435,12 @@ export default function AdminDashboard() {
         onClose={() => setSelectedGhostReport(null)}
       />
 
-      <section className="flex flex-col gap-3 py-6 sm:flex-row sm:items-end sm:justify-between" aria-label="Analytics filters">
+      <section className="flex flex-col gap-4 border-b border-slate-200 py-5 lg:flex-row lg:items-end lg:justify-between" aria-label="Analytics filters">
         <div>
           <h2 className="ui-section-title">Usage patterns</h2>
           <p className="mt-1 text-sm text-slate-500">Historical occupancy logs, not current seat availability.</p>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:flex">
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-3 lg:w-auto lg:grid-cols-[9rem_11.5rem_10rem]">
           <FilterSelect label="Date range" value={rangeDays} onChange={(event) => setRangeDays(Number(event.target.value))}>
             {DATE_RANGES.map((range) => (
               <option key={range.value} value={range.value}>
@@ -575,9 +575,9 @@ function formatComparisonLocation(location) {
 
 function FilterSelect({ label, value, onChange, children }) {
   return (
-    <label className="block text-xs font-semibold text-slate-600">
-      {label}
-      <select value={value} onChange={onChange} className="mt-1 block w-full min-w-32 rounded-[8px] border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none focus:border-blue-700 focus:ring-2 focus:ring-blue-100">
+    <label className="block min-w-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <span className="block">{label}</span>
+      <select value={value} onChange={onChange} className="mt-1.5 block h-10 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium normal-case tracking-normal text-slate-900 shadow-sm outline-none focus:border-blue-700 focus:ring-2 focus:ring-blue-100">
         {children}
       </select>
     </label>
