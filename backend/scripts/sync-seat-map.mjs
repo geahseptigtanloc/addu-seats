@@ -21,7 +21,7 @@ if (labels.size !== mappedSeats.length) {
 const seats = mappedSeats.map((seat) => ({
   building: seat.building,
   floor: seat.floor,
-  currentQrToken: `seat:${seat.label.toLowerCase()}`,
+  currentQrToken: `seat:${(seat.canonicalLabel || seat.label).toLowerCase()}`,
 }));
 
 writeFileSync(outputPath, `${JSON.stringify(seats, null, 2)}\n`);

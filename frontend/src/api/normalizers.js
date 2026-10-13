@@ -40,13 +40,15 @@ export function normalizeSeatStatus(status) {
 
 export function seatLabelFromQrToken(token) {
   if (typeof token !== 'string' || !token.startsWith('seat:')) return null;
-  return token.slice('seat:'.length).toUpperCase();
+  const label = token.slice('seat:'.length).toUpperCase();
+  return DISPLAY_LABEL_BY_CANONICAL_LABEL.get(label) || label;
 }
 
 export function normalizeSeat(seat, canonical = {}) {
   if (!seat && !canonical) return null;
   const source = seat || {};
-  const label = source.label || canonical.label || seatLabelFromQrToken(source.currentQrToken);
+  const sourceLabel = source.label && (DISPLAY_LABEL_BY_CANONICAL_LABEL.get(source.label) || source.label);
+  const label = sourceLabel || canonical.label || seatLabelFromQrToken(source.currentQrToken);
   const mappedSeat = CANONICAL_SEATS.get(label) || {};
   return {
     ...mappedSeat,
@@ -97,7 +99,7 @@ export function normalizeReservation(payload, fallback = {}) {
 
 export function normalizePendingReservation(item) {
   const currentQrToken = item.currentQrToken;
-  const label = seatLabelFromQrToken(currentQrToken) || item.seatId;
+  const label = item.seatLabel || seatLabelFromQrToken(currentQrToken) || item.seatId;
   return {
     reservationId: item.reservationId,
     createdAt: item.createdAt,
@@ -121,3 +123,9 @@ const CANONICAL_SEATS = new Map([
   ...[1, 2, 3, 4].flatMap((floor) => getGisbertPreviewSeats(floor)),
   ...getMiguelProPreviewSeats(1),
 ].map((seat) => [seat.label, seat]));
+
+const DISPLAY_LABEL_BY_CANONICAL_LABEL = new Map(
+  [...CANONICAL_SEATS.values()]
+    .filter((seat) => seat.canonicalLabel)
+    .map((seat) => [seat.canonicalLabel, seat.label]),
+);

@@ -232,6 +232,20 @@ seatsByFloor[3].slice(-gisbertThirdFloorZigzagChairPoints.length).forEach((seat)
   seat.hitHeight = 32;
 });
 
+// These 12 existing QR prints are assigned to the first two long tables.
+// Keep the database's current tokens for reservation history, while showing
+// the printed numbers on the map, search, receipts, and scan result.
+const printedThirdFloorLabels = [
+  'G3-S001', 'G3-S002', 'G3-S003', 'G3-S004', 'G3-S005', 'G3-S006',
+  'G3-S026', 'G3-S029', 'G3-S035', 'G3-S036', 'G3-S037', 'G3-S066',
+];
+seatsByFloor[3].forEach((seat) => {
+  const index = Number(seat.label.slice(-3)) - 89;
+  if (seat.seatType !== 'individual' || index < 0 || index >= printedThirdFloorLabels.length) return;
+  seat.canonicalLabel = seat.label;
+  seat.label = printedThirdFloorLabels[index];
+});
+
 addReferenceFloor(
   4,
   gisbertFourthFloorChairPoints,

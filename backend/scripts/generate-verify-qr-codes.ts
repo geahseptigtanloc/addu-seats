@@ -4,6 +4,7 @@ import { join } from 'path';
 import QRCode from 'qrcode';
 import { z } from 'zod';
 import { isRetiredSeatToken } from '../src/config/retiredSeats';
+import { getDisplayQrToken } from '../src/config/seatQrAliases';
 
 // Writes one verify QR per seat to qr-verify-codes/. Each opens
 // <frontend>/reverify?token=<seat token>, where the holder clears an active
@@ -75,7 +76,7 @@ function safePart(value: string): string {
 }
 
 function fileName(seat: SeatMapEntry): string {
-  return `verify-${safePart(seat.building)}-floor${seat.floor}-${safePart(seat.currentQrToken)}.png`;
+  return `verify-${safePart(seat.building)}-floor${seat.floor}-${safePart(getDisplayQrToken(seat.currentQrToken))}.png`;
 }
 
 // One readable line per problem instead of a raw validation dump.

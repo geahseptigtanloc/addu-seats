@@ -109,7 +109,7 @@ function applyCanonicalPositions(seats, building, floor, area) {
   );
 
   return canonicalSeats.map((canonical) => {
-    const live = liveByLabel.get(canonical.label);
+    const live = liveByLabel.get(canonical.label) || liveByLabel.get(canonical.canonicalLabel);
     return live ? normalizeSeat(live, canonical) : canonical;
   });
 }

@@ -1,7 +1,7 @@
 import type { Seat, SeatStatus } from '@prisma/client';
 import * as seatRepository from '../repositories/seat.repository';
 import { isRetiredSeatToken } from '../config/retiredSeats';
-import { resolveSeatQrToken } from '../config/seatQrAliases';
+import { getDisplayQrToken, resolveSeatQrToken } from '../config/seatQrAliases';
 import { NotFoundError } from '../utils/AppError';
 
 export interface GetSeatsFilter {
@@ -19,7 +19,7 @@ export interface PublicSeat {
 
 export function getSeatLabel(seat: Pick<Seat, 'currentQrToken' | 'id'>): string {
   return seat.currentQrToken.startsWith('seat:')
-    ? seat.currentQrToken.slice('seat:'.length).toUpperCase()
+    ? getDisplayQrToken(seat.currentQrToken).slice('seat:'.length).toUpperCase()
     : seat.id;
 }
 

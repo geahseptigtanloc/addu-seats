@@ -18,6 +18,7 @@ const printedThirdFloorAssignments = [
 
 const assignedQrTokens = new Map<string, string>();
 const assignedSeats = new Set<string>();
+const printedTokenBySeat = new Map<string, string>();
 
 for (const [printedToken, currentToken] of printedThirdFloorAssignments) {
   if (
@@ -33,6 +34,7 @@ for (const [printedToken, currentToken] of printedThirdFloorAssignments) {
   }
   assignedQrTokens.set(printedToken, currentToken);
   assignedSeats.add(currentToken);
+  printedTokenBySeat.set(currentToken, printedToken);
 }
 
 export function resolveSeatQrToken(token: string): string {
@@ -41,4 +43,8 @@ export function resolveSeatQrToken(token: string): string {
 
 export function hasAssignedPrintedQr(token: string): boolean {
   return assignedSeats.has(token);
+}
+
+export function getDisplayQrToken(currentToken: string): string {
+  return printedTokenBySeat.get(currentToken) ?? currentToken;
 }
