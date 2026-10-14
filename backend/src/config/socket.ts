@@ -6,6 +6,16 @@ import { corsOrigins } from './env';
 import { logger } from './logger';
 import { verifyToken } from '../utils/jwt';
 
+export type ReservationVoidReason = 'staff' | 'ghost_seat' | 'bulk' | 'midnight';
+
+export interface ReservationVoidedPayload {
+  reservationId: string;
+  seatId: string;
+  reason: ReservationVoidReason;
+  message: string;
+  endedAt: string;
+}
+
 /**
  * Floor rooms carry deltas only.
  * clients load the initial full state via
@@ -86,6 +96,7 @@ interface ServerToClientEvents {
   reservation_pending_admin_notice: (payload: ReservationPendingAdminPayload) => void;
   reservation_pending_resolved_admin_notice: (payload: ReservationPendingResolvedPayload) => void;
   reservation_evicted: (payload: ReservationEvictedPayload) => void;
+  reservation_voided: (payload: ReservationVoidedPayload) => void;
   socket_error: (payload: { message: string }) => void;
 }
 
@@ -245,6 +256,12 @@ export function notifyAdminsReservationPendingResolved(
 // page can leave the "active reservation" state without a refresh.
 export function notifyReservationEvicted(userId: string, payload: ReservationEvictedPayload): void {
   getIO().to(getUserRoom(userId)).emit('reservation_evicted', payload);
+}
+
+// Tells the reservation holder their reservation was ended by staff, a bulk
+// void or the midnight cutoff. A no-op if they aren't currently connected.
+export function notifyReservationVoided(userId: string, payload: ReservationVoidedPayload): void {
+  getIO().to(getUserRoom(userId)).emit('reservation_voided', payload);
 }
 
 export function getIO(): AppSocketServer {

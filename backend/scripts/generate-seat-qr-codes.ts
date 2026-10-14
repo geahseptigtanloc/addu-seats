@@ -29,7 +29,8 @@ async function main(): Promise<void> {
   const seatMapPath = join(__dirname, '../prisma/seat-map.json');
   const seatMap = JSON.parse(readFileSync(seatMapPath, 'utf-8')) as SeatMapEntry[];
   const seatsToPrint = seatMap.filter(
-    (seat) => !isRetiredSeatToken(seat.currentQrToken) && !hasAssignedPrintedQr(seat.currentQrToken),
+    (seat) =>
+      !isRetiredSeatToken(seat.currentQrToken) && !hasAssignedPrintedQr(seat.currentQrToken),
   );
 
   const outputDir = join(__dirname, '../qr-codes');
@@ -49,7 +50,9 @@ async function main(): Promise<void> {
   }
 
   console.log(`\nDone — ${seatsToPrint.length} reservation QR codes written to ${outputDir}`);
-  console.log(`Skipped ${seatMap.length - seatsToPrint.length} seats with retired or already printed QRs.`);
+  console.log(
+    `Skipped ${seatMap.length - seatsToPrint.length} seats with retired or already printed QRs.`,
+  );
 }
 
 main().catch((err) => {

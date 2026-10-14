@@ -38,6 +38,18 @@ enum ReservationStatus {
   COMPLETED
 }
 
+// Why a reservation was VOIDED; null for every other status.
+//   STAFF_VOID      — front desk voided a single reservation
+//   GHOST_CONFIRMED — front desk confirmed a ghost-seat report
+//   BULK_VOID       — admin cleared a building or floor
+//   MIDNIGHT_SWEEP  — automatic 12:00 AM (Asia/Manila) cutoff
+enum ReservationEndReason {
+  STAFF_VOID
+  GHOST_CONFIRMED
+  BULK_VOID
+  MIDNIGHT_SWEEP
+}
+
 // A student re-validating their presence via QR scan. 
 enum ValidationEventType {
   BREAK_RETURN
@@ -58,7 +70,8 @@ model User {
   name           String
   role           UserRole @default(STUDENT)
   studentIdLast4 String?  @map("student_id_last4") // set during post-OAuth registration step
-  reservations Reservation[]
+  reservations Reservation[] @relation("ReservationHolder")
+  endedReservations Reservation[] @relation("ReservationEndedBy")
   flagsRaised SeatFlag[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -94,12 +107,17 @@ model Reservation {
   // Deleting a user/seat should never silently
   // wipe reservation history that occupancy analytics depends on. Seats
   // are meant to be retired via status = UNAVAILABLE, not deleted.
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user User @relation("ReservationHolder", fields: [userId], references: [id], onDelete: Restrict)
   seat Seat @relation(fields: [seatId], references: [id], onDelete: Restrict)
 
   createdAt   DateTime  @default(now()) @map("created_at")
   confirmedAt DateTime? @map("confirmed_at") // set when front desk approves; null = never occupied
   endedAt     DateTime? @map("ended_at") // set on any terminal status
+    // Set only when status is VOIDED. endedById is the admin who ended it, or
+  // null for the automatic midnight sweep.
+  endReason ReservationEndReason? @map("end_reason")
+  endedById String?               @map("ended_by_id")
+  endedBy   User?                 @relation("ReservationEndedBy", fields: [endedById], references: [id], onDelete: Restrict)
 
   validationEvents ValidationEvent[]
   occupancyLogs OccupancyLog[]
