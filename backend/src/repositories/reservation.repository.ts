@@ -1,4 +1,4 @@
-import { ReservationStatus, type Reservation } from '@prisma/client';
+import { ReservationEndReason, ReservationStatus, type Reservation } from '@prisma/client';
 import { prisma } from '../config/prisma';
 
 // Must match the partial unique index in the reservations migration (one
@@ -114,6 +114,30 @@ export function findStalePendingReservations(olderThan: Date) {
   });
 }
 
+export interface ReservationScope {
+  building: string;
+  floor?: number; // omitted = every floor of the building
+}
+
+// Active reservations on seats in a building, optionally narrowed to one floor.
+export function findActiveInScope(scope: ReservationScope): Promise<Reservation[]> {
+  return prisma.reservation.findMany({
+    where: {
+      status: { in: ACTIVE_STATUSES },
+      ...seatWhereClause(scope.building, scope.floor),
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+// Active reservations created before `cutoff`, for the midnight sweep.
+export function findActiveCreatedBefore(cutoff: Date): Promise<Reservation[]> {
+  return prisma.reservation.findMany({
+    where: { status: { in: ACTIVE_STATUSES }, createdAt: { lt: cutoff } },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
 // The 5 terminal, "outcome" statuses, excludes PENDING and
 // CONFIRMED, which are still in progress, not an outcome yet.
 export const OUTCOME_STATUSES: ReservationStatus[] = [
@@ -210,6 +234,16 @@ export async function findCompletedSessions(filters: SessionFilters): Promise<Se
     where: {
       confirmedAt: { not: null },
       endedAt: { gte: filters.from, lt: filters.to },
+      // Forced end-of-day voids aren't real session lengths. The explicit
+      // null branch is needed: SQL's NOT IN drops rows where end_reason is NULL.
+      OR: [
+        { endReason: null },
+        {
+          endReason: {
+            notIn: [ReservationEndReason.MIDNIGHT_SWEEP, ReservationEndReason.BULK_VOID],
+          },
+        },
+      ],
       ...seatWhereClause(filters.building, filters.floor),
       ...(filters.seatIds !== undefined && { seatId: { in: filters.seatIds } }),
     },

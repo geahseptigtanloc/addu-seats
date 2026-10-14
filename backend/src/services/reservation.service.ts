@@ -8,6 +8,7 @@ import {
   type Reservation,
   type Seat,
   type SeatFlag,
+  ReservationEndReason,
 } from '@prisma/client';
 import { prisma } from '../config/prisma';
 import * as reservationRepository from '../repositories/reservation.repository';
@@ -27,6 +28,8 @@ import {
   notifyAdminsReservationPendingResolved,
   notifyReservationEvicted,
   type SeatFlagResolution,
+  notifyReservationVoided,
+  type ReservationVoidReason,
 } from '../config/socket';
 import { NotFoundError, ConflictError } from '../utils/AppError';
 
@@ -623,13 +626,41 @@ export async function checkoutReservation(
 
 const GHOST_REPORT_INACTIVE = 'This ghost-seat report is no longer active';
 
-// Shared by manual void and ghost-seat confirmation. With requireActiveFlag,
-// the reservation is ended only if its flag is still open, all in one
-// transaction: a flag resolved in the meantime rolls the whole void back.
-async function endReservationAsStaff(
+// What the student is told when their reservation is voided, keyed by cause.
+const VOID_NOTICE: Record<
+  ReservationEndReason,
+  { reason: ReservationVoidReason; message: string }
+> = {
+  STAFF_VOID: { reason: 'staff', message: 'Your reservation was ended by library staff.' },
+  GHOST_CONFIRMED: {
+    reason: 'ghost_seat',
+    message: 'Your reservation ended: front desk confirmed the seat was vacant.',
+  },
+  BULK_VOID: {
+    reason: 'bulk',
+    message: 'Your reservation was ended when library staff cleared this area.',
+  },
+  MIDNIGHT_SWEEP: {
+    reason: 'midnight',
+    message: 'Your reservation ended automatically at midnight.',
+  },
+};
+
+interface VoidOptions {
+  endReason: ReservationEndReason;
+  endedById: string | null; // the admin responsible; null for the midnight sweep
+  endedAt?: Date; // backdates the end (midnight sweep); defaults to now
+  requireActiveFlag?: boolean; // ghost-seat confirmation: only if the flag is still open
+}
+
+// Shared by every void path (single, ghost-seat, bulk, midnight). With
+// requireActiveFlag, a flag resolved in the meantime rolls the whole void back.
+async function voidActiveReservation(
   reservation: Reservation,
-  requireActiveFlag: boolean,
+  options: VoidOptions,
 ): Promise<Reservation> {
+  const { endReason, endedById, requireActiveFlag = false } = options;
+  const endedAt = options.endedAt ?? new Date();
   const notActiveMessage = requireActiveFlag
     ? GHOST_REPORT_INACTIVE
     : 'Only an active reservation can be voided';
@@ -640,8 +671,10 @@ async function endReservationAsStaff(
       where: {
         id: reservation.id,
         status: { in: [ReservationStatus.PENDING, ReservationStatus.CONFIRMED] },
+        // A backdated end must never precede the reservation's confirmation.
+        ...(options.endedAt && { OR: [{ confirmedAt: null }, { confirmedAt: { lte: endedAt } }] }),
       },
-      data: { status: ReservationStatus.VOIDED, endedAt: new Date() },
+      data: { status: ReservationStatus.VOIDED, endedAt, endReason, endedById },
     });
 
     if (ended.count !== 1) {
@@ -662,7 +695,11 @@ async function endReservationAsStaff(
 
     if (released.wasOccupied) {
       await tx.occupancyLog.create({
-        data: { reservationId: reservation.id, eventType: OccupancyEventType.VACATED },
+        data: {
+          reservationId: reservation.id,
+          eventType: OccupancyEventType.VACATED,
+          createdAt: endedAt,
+        },
       });
     }
 
@@ -702,19 +739,148 @@ async function endReservationAsStaff(
     notifyPendingReservationResolved(reservation.id);
   }
 
+  try {
+    notifyReservationVoided(reservation.userId, {
+      reservationId: reservation.id,
+      seatId: seat.id,
+      ...VOID_NOTICE[endReason],
+      endedAt: endedAt.toISOString(),
+    });
+  } catch (err) {
+    logger.warn({ err, reservationId: reservation.id }, 'Failed to notify student of void');
+  }
+
   return updated;
 }
 
 // Admin-only forced end of an active reservation.
 // Unlike student cancellation (PENDING only), void works on PENDING or CONFIRMED.
-export async function voidReservation(reservationId: string): Promise<Reservation> {
+export async function voidReservation(
+  adminId: string,
+  reservationId: string,
+): Promise<Reservation> {
   const reservation = await reservationRepository.findById(reservationId);
 
   if (!reservation) {
     throw new NotFoundError('Reservation not found');
   }
 
-  return endReservationAsStaff(reservation, false);
+  return voidActiveReservation(reservation, {
+    endReason: ReservationEndReason.STAFF_VOID,
+    endedById: adminId,
+  });
+}
+
+export interface VoidScope {
+  building: string;
+  floor?: number; // omitted = every floor of the building
+}
+
+export interface VoidPreview {
+  pending: number;
+  confirmed: number;
+  total: number;
+}
+
+export interface VoidSummary {
+  voided: number;
+  skipped: number; // ended by someone else while the batch was running
+  failed: number; // unexpected errors; safe to run the same void again
+}
+
+// Guards against a mistyped building or floor reporting a clean "0 voided".
+async function assertScopeHasSeats(scope: VoidScope): Promise<void> {
+  const seats = await prisma.seat.count({
+    where: {
+      building: scope.building,
+      ...(scope.floor !== undefined && { floor: scope.floor }),
+    },
+  });
+
+  if (seats === 0) {
+    throw new NotFoundError('No seats found for that building or floor');
+  }
+}
+
+// A few at a time: one void is about eight database round trips, so strictly
+// one-by-one is slow against a remote database. Each void is its own
+// transaction, so one failure can't undo or block the rest of the batch.
+const VOID_CONCURRENCY = 5;
+
+async function voidBatch(reservations: Reservation[], options: VoidOptions): Promise<VoidSummary> {
+  const summary: VoidSummary = { voided: 0, skipped: 0, failed: 0 };
+
+  for (let i = 0; i < reservations.length; i += VOID_CONCURRENCY) {
+    await Promise.all(
+      reservations.slice(i, i + VOID_CONCURRENCY).map(async (reservation) => {
+        try {
+          await voidActiveReservation(reservation, options);
+          summary.voided++;
+        } catch (err) {
+          if (err instanceof ConflictError) {
+            summary.skipped++;
+          } else {
+            summary.failed++;
+            logger.error({ err, reservationId: reservation.id }, 'Failed to void reservation');
+          }
+        }
+      }),
+    );
+  }
+
+  return summary;
+}
+
+// Dry run for the admin's confirmation prompt: what a void-all would end.
+export async function previewVoidAll(scope: VoidScope): Promise<VoidPreview> {
+  await assertScopeHasSeats(scope);
+  const active = await reservationRepository.findActiveInScope(scope);
+  const pending = active.filter((r) => r.status === ReservationStatus.PENDING).length;
+
+  return { pending, confirmed: active.length - pending, total: active.length };
+}
+
+// Admin-only: ends every active (PENDING or CONFIRMED) reservation in a
+// building, or on one floor of it.
+export async function voidAllInScope(adminId: string, scope: VoidScope): Promise<VoidSummary> {
+  await assertScopeHasSeats(scope);
+  const active = await reservationRepository.findActiveInScope(scope);
+  const summary = await voidBatch(active, {
+    endReason: ReservationEndReason.BULK_VOID,
+    endedById: adminId,
+  });
+
+  logger.info({ adminId, ...scope, ...summary }, 'Admin voided all active reservations in scope');
+  return summary;
+}
+
+// Asia/Manila is UTC+8 all year (no daylight saving), so a fixed offset is exact.
+const MANILA_OFFSET_MS = 8 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// The most recent 12:00 AM in Asia/Manila at or before `now`.
+export function lastManilaMidnight(now: Date): Date {
+  const manilaClock = now.getTime() + MANILA_OFFSET_MS;
+  return new Date(manilaClock - (manilaClock % DAY_MS) - MANILA_OFFSET_MS);
+}
+
+// Voids reservations still active from before the latest midnight, stamped as
+// ended at that midnight. Stateless, so a late run (server asleep at 12:00 AM)
+// gives the same result.
+export async function sweepMidnightReservations(now = new Date()): Promise<VoidSummary> {
+  const cutoff = lastManilaMidnight(now);
+  const stale = await reservationRepository.findActiveCreatedBefore(cutoff);
+  const summary = await voidBatch(stale, {
+    endReason: ReservationEndReason.MIDNIGHT_SWEEP,
+    endedById: null,
+    endedAt: cutoff,
+  });
+
+  if (summary.voided > 0 || summary.failed > 0) {
+    logger.info({ cutoff, ...summary }, 'Midnight sweep voided active reservations');
+  }
+
+  return summary;
 }
 
 const BREAK_BASE_SECONDS = 5 * 60;
@@ -1068,14 +1234,21 @@ export async function getFlaggedReservations(
 
 // Front desk confirms the seat really is empty. Voids the reservation and
 // closes its flag in a single transaction.
-export async function confirmGhostSeat(reservationId: string): Promise<Reservation> {
+export async function confirmGhostSeat(
+  adminId: string,
+  reservationId: string,
+): Promise<Reservation> {
   const reservation = await reservationRepository.findById(reservationId);
 
   if (!reservation || reservation.status !== ReservationStatus.CONFIRMED) {
     throw new ConflictError(GHOST_REPORT_INACTIVE);
   }
 
-  return endReservationAsStaff(reservation, true);
+  return voidActiveReservation(reservation, {
+    endReason: ReservationEndReason.GHOST_CONFIRMED,
+    endedById: adminId,
+    requireActiveFlag: true,
+  });
 }
 
 // Any authenticated user can flag someone else's seat as apparently

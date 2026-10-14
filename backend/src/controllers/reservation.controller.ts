@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import * as reservationService from '../services/reservation.service';
+import type { VoidScope } from '../services/reservation.service';
 import { UnauthorizedError } from '../utils/AppError';
 
 const createReservationSchema = z.object({
@@ -189,6 +190,11 @@ export async function voidReservation(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
   const { id } = req.params;
 
   if (typeof id !== 'string') {
@@ -197,7 +203,7 @@ export async function voidReservation(
   }
 
   try {
-    const reservation = await reservationService.voidReservation(id);
+    const reservation = await reservationService.voidReservation(req.user.id, id);
     res.json(reservation);
   } catch (err) {
     next(err);
@@ -209,6 +215,11 @@ export async function confirmGhostSeat(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
   const { id } = req.params;
 
   if (typeof id !== 'string') {
@@ -217,8 +228,76 @@ export async function confirmGhostSeat(
   }
 
   try {
-    const reservation = await reservationService.confirmGhostSeat(id);
+    const reservation = await reservationService.confirmGhostSeat(req.user.id, id);
     res.json(reservation);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Exactly one of `floor` or `allFloors: true`, so an omitted floor can never
+// silently widen a one-floor void into a whole-building one.
+const voidScopeSchema = z
+  .object({
+    building: z.string().min(1),
+    floor: z.int32().optional(), // the database column's range; anything larger would 500
+    allFloors: z.literal(true).optional(),
+  })
+  .refine((scope) => (scope.floor === undefined) !== (scope.allFloors === undefined), {
+    message: 'Provide either floor or allFloors: true',
+  });
+
+function parseVoidScope(body: unknown): VoidScope | null {
+  const parsed = voidScopeSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return null;
+  }
+
+  const { building, floor } = parsed.data;
+  return floor === undefined ? { building } : { building, floor };
+}
+
+const INVALID_VOID_SCOPE = 'Provide a building and either a floor or allFloors: true';
+
+// Admin-only, enforced at the route level. Counts what a void-all would end.
+export async function previewVoidAll(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const scope = parseVoidScope(req.body);
+
+  if (!scope) {
+    res.status(400).json({ error: { message: INVALID_VOID_SCOPE } });
+    return;
+  }
+
+  try {
+    const preview = await reservationService.previewVoidAll(scope);
+    res.json({ building: scope.building, floor: scope.floor ?? null, ...preview });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Admin-only, enforced at the route level.
+export async function voidAll(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (!req.user) {
+    next(new UnauthorizedError('Authentication required'));
+    return;
+  }
+
+  const scope = parseVoidScope(req.body);
+
+  if (!scope) {
+    res.status(400).json({ error: { message: INVALID_VOID_SCOPE } });
+    return;
+  }
+
+  try {
+    const summary = await reservationService.voidAllInScope(req.user.id, scope);
+    res.json({ building: scope.building, floor: scope.floor ?? null, ...summary });
   } catch (err) {
     next(err);
   }

@@ -16,6 +16,13 @@ router.post(
 );
 router.post('/:id/void', requireAuth, requireRole('ADMIN'), reservationController.voidReservation);
 router.post(
+  '/void-all/preview',
+  requireAuth,
+  requireRole('ADMIN'),
+  reservationController.previewVoidAll,
+);
+router.post('/void-all', requireAuth, requireRole('ADMIN'), reservationController.voidAll);
+router.post(
   '/:id/confirm-ghost',
   requireAuth,
   requireRole('ADMIN'),
