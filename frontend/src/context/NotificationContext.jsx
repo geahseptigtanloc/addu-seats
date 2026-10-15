@@ -94,11 +94,15 @@ export function NotificationProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [holderAlert, setHolderAlert] = useState(null);
   const [adminToast, setAdminToast] = useState(null);
+  const [voidedReservation, setVoidedReservation] = useState(null);
+  const [voidNotice, setVoidNotice] = useState(null);
 
   useEffect(() => {
     setNotifications([]);
     setHolderAlert(null);
     setAdminToast(null);
+    setVoidedReservation(null);
+    setVoidNotice(null);
 
     if (!user?.legalAcceptedAt) return undefined;
 
@@ -211,6 +215,14 @@ export function NotificationProvider({ children }) {
       setHolderAlert(null);
     });
 
+    socket.on('reservation_voided', (payload) => {
+      if (user.role !== 'student' || !payload?.reservationId) return;
+      setNotifications((current) => current.filter((item) => item.reservationId !== payload.reservationId));
+      setHolderAlert((current) => current?.reservationId === payload.reservationId ? null : current);
+      setVoidedReservation(payload);
+      setVoidNotice(payload);
+    });
+
     return () => {
       controller.abort();
       socket.disconnect();
@@ -242,7 +254,8 @@ export function NotificationProvider({ children }) {
     unreadCount: notifications.filter((item) => item.unread).length,
     markAllRead,
     clearReservationNotification,
-  }), [clearReservationNotification, markAllRead, notifications]);
+    voidedReservation,
+  }), [clearReservationNotification, markAllRead, notifications, voidedReservation]);
 
   const toastNotification = adminToast && (
     adminToast.type === 'reservation'
@@ -266,6 +279,20 @@ export function NotificationProvider({ children }) {
           navigate('/receipt');
         }}
         onClose={() => setHolderAlert(null)}
+      />
+
+      <AppDialog
+        open={Boolean(voidNotice)}
+        tone="warning"
+        title="Reservation ended"
+        description={voidNotice?.message || 'Your reservation was ended. The seat is available again.'}
+        confirmLabel="View seat maps"
+        cancelLabel="Dismiss"
+        onConfirm={() => {
+          setVoidNotice(null);
+          navigate('/');
+        }}
+        onClose={() => setVoidNotice(null)}
       />
 
       {adminToast && (

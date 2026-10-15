@@ -8,6 +8,7 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
 import SeatMap from './pages/SeatMap.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import AdminVoidAll from './pages/AdminVoidAll.jsx';
 
 import BuildingFloorSelector from './pages/BuildingFloorSelector.jsx';
 import ReservationReceipt from './pages/ReservationReceipt.jsx';
@@ -61,6 +62,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute adminOnly>
             <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/void-all"
+        element={
+          <ProtectedRoute adminOnly>
+            <AdminVoidAll />
           </ProtectedRoute>
         }
       />

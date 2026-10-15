@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import {
@@ -17,6 +17,7 @@ import AppDialog from '../components/AppDialog.jsx';
 import { apiClient, getToken } from '../api/client.js';
 import { getReceiptCode, normalizeReservation } from '../api/normalizers.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNotifications } from '../context/NotificationContext.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
@@ -41,7 +42,12 @@ export default function ReservationReceipt() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { voidedReservation } = useNotifications();
   const [reservation, setReservation] = useState(location.state?.reservation || null);
+  const voidedReservationIdRef = useRef(voidedReservation?.reservationId);
+  voidedReservationIdRef.current = voidedReservation?.reservationId;
+  const [hasCurrent, setHasCurrent] = useState(true);
+  const [voidMessage, setVoidMessage] = useState('');
   const [busyAction, setBusyAction] = useState('');
   const [activeFlag, setActiveFlag] = useState(location.state?.reservation?.flag || null);
   const [evictionMessage, setEvictionMessage] = useState('');
@@ -54,17 +60,34 @@ export default function ReservationReceipt() {
     try {
       const data = await apiClient('/api/reservations/me/current');
       const normalized = normalizeReservation(data, { user });
+      if (normalized?.reservationId === voidedReservationIdRef.current) return;
       setReservation(normalized);
+      setHasCurrent(true);
       const source = data?.reservation || data;
       if (source && Object.prototype.hasOwnProperty.call(source, 'flag')) {
         setActiveFlag(source.flag || null);
       }
-    } catch {
-      // Keep the current receipt visible if the server has just moved it to a terminal state.
+    } catch (error) {
+      if (error.status === 404) {
+        setReservation(null);
+        setActiveFlag(null);
+        setHasCurrent(false);
+      }
     }
   }, [user]);
 
   useEffect(() => {
+    if (!voidedReservation?.reservationId || reservation?.reservationId !== voidedReservation.reservationId) return;
+    setReservation(null);
+    setHasCurrent(false);
+    setVoidMessage(voidedReservation.message || 'Your reservation was ended. The seat is available again.');
+    setActiveFlag(null);
+    setConfirmation(null);
+    setShowBreakDialog(false);
+  }, [reservation?.reservationId, voidedReservation]);
+
+  useEffect(() => {
+    if (!hasCurrent) return undefined;
     refreshReservation();
     const pollInterval = setInterval(refreshReservation, 3000);
     const handleFocus = () => refreshReservation();
@@ -73,14 +96,15 @@ export default function ReservationReceipt() {
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [refreshReservation]);
+  }, [hasCurrent, refreshReservation]);
 
   useEffect(() => {
+    if (!reservation) return undefined;
     const interval = setInterval(() => {
       setTick((tick) => tick + 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [reservation?.reservationId]);
 
   useEffect(() => {
     const token = getToken();
@@ -98,22 +122,22 @@ export default function ReservationReceipt() {
     });
     socket.on('reservation_status_updated', (data) => {
       if (data.reservationId === reservation.reservationId) {
-        setReservation((current) => ({ ...current, status: data.status }));
+        setReservation((current) => current ? { ...current, status: data.status } : current);
       }
     });
     socket.on('break_expired', () => {
-      setReservation((current) => ({ ...current, status: 'expired' }));
+      setReservation((current) => current ? { ...current, status: 'expired' } : current);
     });
     socket.on('flag_expired', () => {
       setActiveFlag(null);
       setEvictionMessage('Your reservation ended because the vacant-seat report was not cleared in time.');
-      setReservation((current) => ({ ...current, status: 'expired' }));
+      setReservation((current) => current ? { ...current, status: 'expired' } : current);
     });
     socket.on('reservation_evicted', (data) => {
       if (data.reservationId === reservation.reservationId) {
         setActiveFlag(null);
         setEvictionMessage(data.message || 'Your reservation ended because the vacant-seat report was not cleared in time.');
-        setReservation((current) => ({ ...current, status: 'expired', endedAt: data.endedAt }));
+        setReservation((current) => current ? { ...current, status: 'expired', endedAt: data.endedAt } : current);
       }
     });
     return () => socket.disconnect();
@@ -167,7 +191,8 @@ export default function ReservationReceipt() {
       <Layout>
         <div className="mx-auto max-w-xl py-16">
           <div className="ui-panel p-8 text-center">
-            <h1 className="text-xl font-bold text-slate-950">No reservation found</h1>
+            <h1 className="text-xl font-bold text-slate-950">{voidMessage ? 'Reservation ended' : 'No reservation found'}</h1>
+            {voidMessage && <p className="mt-3 text-sm text-slate-600">{voidMessage}</p>}
             <Link to="/" className="ui-button-primary mt-5">Return to seat maps</Link>
           </div>
         </div>

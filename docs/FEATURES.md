@@ -48,6 +48,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Receive an immediate warning when another student reports their occupied seat as a possible ghost seat. The report can be cleared only through the same physical verify QR used for break return; there is no in-app confirmation shortcut.
 - Receive the warning as an immediate modal and persistent notification-bell item from any signed-in page.
 - Receive real-time reservation, break-expiry, and flagging updates.
+- Receive a private `reservation_voided` update for staff, ghost-seat, bulk, or midnight voids; the app clears the active reservation and timers and displays the reason message.
 - On first login, review and accept the Privacy Policy and Terms of Service before opening protected pages; the acceptance time is saved to the account.
 
 ### Staff
@@ -69,6 +70,7 @@ The paper is titled *AdDU-Seats: A Real-Time Library Space Optimization System w
 - Filter notification-bell items by All, Gisbert Library, or Miguel Pro Learning Commons while retaining the overall unread badge.
 - Review ghost-seat reports in a compact newest-first list that reveals five more records at a time.
 - Open a pending, occupied, or on-break seat from a floor map and void its active reservation, immediately releasing the seat.
+- Preview pending and confirmed reservation counts by library and floor, then void all active reservations in that scope. The result reports voided, skipped, and failed counts and permits retry after failures.
 - View the responsive occupancy dashboard and open individual floor maps.
 - View a seven-day occupancy outlook based on all previously recorded confirmed seat-use logs for the selected library or Gisbert floor, including records older than the dashboard's date filter. The outlook appears after at least five days and 12 Philippine Time hourly slots with seat use; before then, see actual history counts. Its main view summarizes the estimated busiest hour for each day and marks estimates made with fewer than two weeks of records as early. An expandable heat map shows typical occupied seats by hour, with colors relative to the busiest estimate shown.
 - The occupancy outlook displays Philippine Time hourly slots during library hours only: 8 AM through 7 PM, ending at the 8 PM closing time.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowClockwise, ArrowRight, Buildings, ChartBar, CheckCircle, Clock, Coffee, MapTrifold, Monitor, TrendUp, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, ArrowRight, Buildings, ChartBar, CheckCircle, Clock, Coffee, MapTrifold, Monitor, Trash, TrendUp, WarningCircle } from '@phosphor-icons/react';
 import { io } from 'socket.io-client';
 import AppDialog from '../components/AppDialog.jsx';
 import Layout from '../components/Layout.jsx';
@@ -325,10 +325,16 @@ export default function AdminDashboard() {
           <h1 className="ui-page-title">Operations and occupancy analytics</h1>
           <p className="ui-muted mt-2">Administrative trends and front-desk activity for {user?.name}.</p>
         </div>
-        <Link to="/frontdesk" className="ui-button-primary self-start">
-          <Monitor size={18} weight="bold" />
-          Open front desk
-        </Link>
+        <div className="flex flex-wrap gap-2 self-start">
+          <Link to="/admin/void-all" className="ui-button-secondary">
+            <Trash size={18} weight="bold" />
+            Void reservations
+          </Link>
+          <Link to="/frontdesk" className="ui-button-primary">
+            <Monitor size={18} weight="bold" />
+            Open front desk
+          </Link>
+        </div>
       </section>
 
       {loadError && (

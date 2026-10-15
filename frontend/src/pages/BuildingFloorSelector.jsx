@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Buildings, MapPin, Ticket } from '@phosphor-icons/react';
 import { apiClient } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
 import Layout from '../components/Layout.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNotifications } from '../context/NotificationContext.jsx';
 import { getGisbertPreviewSeats } from '../data/gisbertPreviewSeats.js';
 import { getMiguelProPreviewSeats } from '../data/miguelProMap.js';
 
@@ -41,6 +42,9 @@ export default function BuildingFloorSelector() {
   const [activeReservation, setActiveReservation] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { voidedReservation } = useNotifications();
+  const voidedReservationIdRef = useRef(voidedReservation?.reservationId);
+  voidedReservationIdRef.current = voidedReservation?.reservationId;
 
   const selectedLibrary = LIBRARIES[building];
   const floorOptions = useMemo(
@@ -60,10 +64,18 @@ export default function BuildingFloorSelector() {
     }
 
     apiClient('/api/reservations/me/current')
-      .then((data) => setActiveReservation(normalizeReservation(data, { user })))
+      .then((data) => {
+        const current = normalizeReservation(data, { user });
+        setActiveReservation(current?.reservationId === voidedReservationIdRef.current ? null : current);
+      })
       .catch(() => setActiveReservation(null));
     return undefined;
   }, [user]);
+
+  useEffect(() => {
+    if (!voidedReservation?.reservationId) return;
+    setActiveReservation((current) => current?.reservationId === voidedReservation.reservationId ? null : current);
+  }, [voidedReservation]);
 
   const openActiveReservation = () => {
     if (!activeReservation) return;

@@ -17,6 +17,7 @@ import {
   MIGUEL_PRO_AREAS,
 } from '../data/miguelProMap.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useNotifications } from '../context/NotificationContext.jsx';
 import { io } from 'socket.io-client';
 import { ArrowLeft, ArrowSquareOut, Clock, MagnifyingGlass, Minus, Plus, QrCode, Ticket, Trash, X } from '@phosphor-icons/react';
 
@@ -552,6 +553,9 @@ export default function SeatMap() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const { voidedReservation } = useNotifications();
+  const voidedReservationIdRef = useRef(voidedReservation?.reservationId);
+  voidedReservationIdRef.current = voidedReservation?.reservationId;
   const [seats, setSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -589,7 +593,8 @@ export default function SeatMap() {
 
       try {
         const data = await apiClient('/api/reservations/me/current');
-        setActiveReservation(normalizeReservation(data, { user }));
+        const current = normalizeReservation(data, { user });
+        setActiveReservation(current?.reservationId === voidedReservationIdRef.current ? null : current);
       } catch {
         setActiveReservation(null);
       }
@@ -632,6 +637,11 @@ export default function SeatMap() {
       socket?.disconnect();
     };
   }, [building, floor, user, miguelProArea]);
+
+  useEffect(() => {
+    if (!voidedReservation?.reservationId) return;
+    setActiveReservation((current) => current?.reservationId === voidedReservation.reservationId ? null : current);
+  }, [voidedReservation]);
 
   useEffect(() => {
     const canAdminVoid = user?.role === 'admin'
