@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Buildings, MapPin, Ticket } from '@phosphor-icons/react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Buildings, CheckCircle, Clock, Flag, MapPin, QrCode, SignOut, Ticket } from '@phosphor-icons/react';
 import { apiClient } from '../api/client.js';
 import { normalizeReservation } from '../api/normalizers.js';
 import Layout from '../components/Layout.jsx';
@@ -94,6 +94,29 @@ export default function BuildingFloorSelector() {
     { label: 'Guest browsing', value: 'Open' },
   ];
 
+  const reservationSteps = [
+    {
+      icon: Buildings,
+      title: 'Sign in with your AdDU account',
+      description: 'Open addu-seats.vercel.app. You can explore the maps as a guest, then sign in when you are ready to reserve.',
+    },
+    {
+      icon: QrCode,
+      title: 'Scan the reservation QR at the seat',
+      description: 'Find the physical QR label with the blue highlight along its bottom edge.',
+    },
+    {
+      icon: Ticket,
+      title: 'Tap Reserve for the scanned seat',
+      description: 'The seat is held for five minutes while you complete front-desk verification.',
+    },
+    {
+      icon: CheckCircle,
+      title: 'Show your code at the front desk',
+      description: 'Present your receipt code and university ID within five minutes. Your seat is reserved once the front desk approves it.',
+    },
+  ];
+
   return (
     <Layout>
       <section className="overflow-hidden rounded-[8px] bg-[linear-gradient(135deg,#032946_0%,#063a64_58%,#0b4d7a_100%)] text-white shadow-[0_24px_70px_rgba(3,41,70,0.24)]">
@@ -108,9 +131,13 @@ export default function BuildingFloorSelector() {
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-7 text-blue-100/82 sm:text-base">
               {user?.role === 'student'
-                ? `${firstName ? `${firstName}, ` : ''}select a ${building === 'gisbert' ? 'floor' : 'room'} and reserve from the live map.`
+                ? `${firstName ? `${firstName}, ` : ''}explore a ${building === 'gisbert' ? 'floor' : 'room'}, then scan the QR at your chosen seat to reserve.`
                 : `Browse formal seating across ${selectedLibrary.name} without signing in.`}
             </p>
+            <a href="#how-it-works" className="mt-6 inline-flex min-h-10 items-center gap-2 border-b border-amber-200/70 pb-1 text-sm font-semibold text-amber-100 hover:border-white hover:text-white">
+              How to use AdDU Seats
+              <ArrowRight size={17} weight="bold" />
+            </a>
           </div>
 
           <div className="grid gap-4">
@@ -184,6 +211,87 @@ export default function BuildingFloorSelector() {
               </span>
             </button>
           ))}
+        </div>
+      </section>
+
+      <section id="how-it-works" className="mt-16 scroll-mt-28 pb-6 sm:mt-20" aria-labelledby="how-it-works-title">
+        <div className="max-w-2xl">
+          <p className="text-sm font-semibold text-[#8a6b11]">How to use AdDU Seats</p>
+          <h2 id="how-it-works-title" className="mt-2 text-3xl font-semibold leading-tight tracking-tight text-[#032946] sm:text-4xl">Find a seat. Make it yours.</h2>
+          <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">The map helps you choose. A scan at the physical seat starts the reservation.</p>
+        </div>
+
+        <div className="mt-8 grid gap-5 lg:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)]">
+          <div className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-[0_16px_42px_rgba(14,35,56,0.06)] sm:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-xl font-semibold text-slate-950">To reserve a seat</h3>
+              {!user && <Link to="/login" className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#063a64] hover:text-[#032946]">Sign in <ArrowRight size={16} weight="bold" /></Link>}
+            </div>
+            <ol className="mt-5">
+              {reservationSteps.map(({ icon: Icon, title, description }) => (
+                <li key={title} className="grid grid-cols-[44px_minmax(0,1fr)] gap-4 border-t border-slate-100 py-4 first:border-t-0 first:pt-0 last:pb-0">
+                  <span className="grid h-11 w-11 place-items-center rounded-[8px] bg-[#e6f0f7] text-[#063a64]" aria-hidden="true"><Icon size={23} weight="duotone" /></span>
+                  <span>
+                    <span className="block text-base font-semibold text-slate-950">{title}</span>
+                    <span className="mt-1 block max-w-xl text-sm leading-6 text-slate-600">{description}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-6 flex items-start gap-2 rounded-[8px] bg-[#e6f0f7] px-4 py-3 text-sm font-semibold leading-6 text-[#063a64]"><CheckCircle size={21} weight="fill" className="mt-0.5 shrink-0" aria-hidden="true" />After approval, the seat is reserved for you.</p>
+          </div>
+
+          <aside className="rounded-[8px] border border-[#cbdbe8] bg-[#edf4f9] p-5 sm:p-8" aria-labelledby="qr-guide-title">
+            <h3 id="qr-guide-title" className="text-xl font-semibold text-[#032946]">Know which QR to scan</h3>
+            <p className="mt-2 max-w-sm text-sm leading-6 text-slate-600">Both labels are attached to the physical seat or table. Their markings tell you what each scan does.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+              <div className="flex flex-col rounded-[8px] border border-[#bdd2e2] bg-white p-4 shadow-[0_12px_26px_rgba(6,58,100,0.06)]">
+                <div className="grid h-28 place-items-center rounded-[6px] border border-slate-200 bg-slate-50 text-[#063a64]" aria-hidden="true"><QrCode size={73} weight="regular" /></div>
+                <span className="mt-[-6px] block h-[6px] rounded-b-[6px] bg-[#1269aa]" aria-hidden="true" />
+                <p className="mt-5 text-sm font-semibold text-[#032946]">Reservation QR</p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">Blue highlight at the bottom. Scan to reserve.</p>
+              </div>
+              <div className="flex flex-col rounded-[8px] border border-[#bdd2e2] bg-white p-4 shadow-[0_12px_26px_rgba(6,58,100,0.06)]">
+                <div className="grid h-28 place-items-center rounded-[6px] border border-slate-200 bg-slate-50 text-[#063a64]" aria-hidden="true"><QrCode size={73} weight="regular" /></div>
+                <span className="mt-[-6px] block h-[6px] rounded-b-[6px] bg-slate-50" aria-hidden="true" />
+                <p className="mt-5 text-sm font-semibold text-[#032946]">Verify QR</p>
+                <p className="mt-1 text-xs leading-5 text-slate-600">No blue highlight. Scan when you return or need to confirm your presence.</p>
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-slate-500">QR illustrations show the label difference. They are not scannable codes.</p>
+          </aside>
+        </div>
+
+        <div className="mt-14 max-w-2xl">
+          <h3 className="text-2xl font-semibold tracking-tight text-[#032946] sm:text-3xl">While your seat is reserved</h3>
+          <p className="mt-2 text-sm leading-7 text-slate-600 sm:text-base">Leave for good, take a short break, or report a seat that appears empty.</p>
+        </div>
+
+        <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
+          <div className="rounded-[8px] bg-[#063a64] p-6 text-white shadow-[0_22px_52px_rgba(6,58,100,0.17)] sm:p-8">
+            <Clock size={30} weight="duotone" className="text-amber-200" aria-hidden="true" />
+            <h4 className="mt-5 text-2xl font-semibold">Take a break, keep your seat</h4>
+            <p className="mt-2 max-w-xl text-sm leading-7 text-blue-100">Start the break timer from your reservation. You get five minutes to return and can extend it twice, for up to 15 minutes total.</p>
+            <div className="mt-7 grid grid-cols-3 gap-2 border-y border-white/20 py-5 sm:gap-4">
+              <div><strong className="block text-2xl font-semibold tabular-nums sm:text-3xl">5 min</strong><span className="mt-1 block text-xs leading-5 text-blue-100/80">Initial break</span></div>
+              <div><strong className="block text-2xl font-semibold tabular-nums sm:text-3xl">10 min</strong><span className="mt-1 block text-xs leading-5 text-blue-100/80">First extension</span></div>
+              <div><strong className="block text-2xl font-semibold tabular-nums sm:text-3xl">15 min</strong><span className="mt-1 block text-xs leading-5 text-blue-100/80">Final limit</span></div>
+            </div>
+            <p className="mt-5 text-sm leading-7 text-blue-100">To end your break, return to your seat and scan its <strong className="font-semibold text-white">verify QR</strong> before the timer expires. If you return on time after using all 15 minutes, a 30-minute cooldown starts.</p>
+          </div>
+
+          <div className="grid gap-5">
+            <div className="rounded-[8px] border border-slate-200 bg-white p-6 shadow-[0_16px_42px_rgba(14,35,56,0.06)] sm:p-7">
+              <SignOut size={28} weight="duotone" className="text-[#063a64]" aria-hidden="true" />
+              <h4 className="mt-4 text-lg font-semibold text-slate-950">Done studying?</h4>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Open your reservation and choose <strong className="font-semibold text-slate-800">Check out</strong> to end it and free the seat.</p>
+            </div>
+            <div className="rounded-[8px] border border-slate-200 bg-white p-6 shadow-[0_16px_42px_rgba(14,35,56,0.06)] sm:p-7">
+              <Flag size={28} weight="duotone" className="text-[#063a64]" aria-hidden="true" />
+              <h4 className="mt-4 text-lg font-semibold text-slate-950">Seat looks empty?</h4>
+              <p className="mt-2 text-sm leading-6 text-slate-600">If the map marks it occupied, flag the reservation. The owner must return and scan the verify QR before the countdown ends, or the seat is released.</p>
+            </div>
+          </div>
         </div>
       </section>
     </Layout>
