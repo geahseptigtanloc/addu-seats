@@ -88,7 +88,7 @@ export default function Login() {
         <div className="flex flex-col justify-between bg-[linear-gradient(145deg,#032946_0%,#063a64_60%,#0b4d7a_100%)] p-7 text-white sm:p-10">
           <div>
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-[8px] bg-white text-lg font-bold text-[#063a64] shadow-[0_10px_24px_rgba(3,41,70,0.24)]">A</span>
+              <img src="/android-chrome-192x192.png?v=2" alt="" width="40" height="40" className="h-10 w-10 shrink-0" />
               <span><span className="block font-semibold">AdDU Seats</span><span className="block text-xs text-blue-100/70">University Libraries</span></span>
             </div>
             <div className="mt-12 hidden lg:block">

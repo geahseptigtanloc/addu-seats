@@ -42,7 +42,7 @@ export default function LegalAgreement() {
     <main className="app-shell min-h-[100dvh] px-4 py-10 sm:px-6 sm:py-14">
       <div className="mx-auto max-w-3xl">
         <div className="mb-7 flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-[8px] bg-[#063a64] text-lg font-bold text-white">A</span>
+          <img src="/android-chrome-192x192.png?v=2" alt="" width="40" height="40" className="h-10 w-10 shrink-0" />
           <span className="font-semibold text-slate-900">AdDU Seats</span>
         </div>
 

@@ -45,7 +45,7 @@ export default function Layout({ children }) {
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[linear-gradient(135deg,#032946_0%,#063a64_54%,#0b4d7a_100%)] text-white shadow-[0_12px_36px_rgba(3,41,70,0.22)]">
         <div className="mx-auto flex min-h-[72px] max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <Link to="/" className="flex shrink-0 items-center gap-3" aria-label="AdDU Seats home">
-            <span className="grid h-10 w-10 place-items-center rounded-[8px] border border-white/25 bg-white text-base font-bold text-[#063a64] shadow-[0_10px_24px_rgba(3,41,70,0.24)]">A</span>
+            <img src="/android-chrome-192x192.png?v=2" alt="" width="40" height="40" className="h-10 w-10 shrink-0" />
             <span className="hidden leading-none min-[420px]:block">
               <span className="block text-[15px] font-semibold">AdDU Seats</span>
               <span className="mt-1 hidden text-[11px] font-medium text-blue-100/70 sm:block">University Libraries</span>
