@@ -913,6 +913,10 @@ export async function startBreak(userId: string, reservationId: string): Promise
     throw new ConflictError('Only a confirmed reservation can start a break');
   }
 
+  if (await isOnBreakCooldown(userId)) {
+    throw new ConflictError('You are on a break cooldown, please try again later');
+  }
+
   const updatedSeat = await prisma.$transaction(async (tx) => {
     if (!(await lockConfirmedReservation(tx, reservationId))) {
       throw new ConflictError('Only a confirmed reservation can start a break');
