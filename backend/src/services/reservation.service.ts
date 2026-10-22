@@ -1566,6 +1566,9 @@ export async function expireBreakTimers(): Promise<void> {
         notifyBreakExpired(reservation.userId, {
           reservationId: reservation.id,
           seatId: forfeitedSeat.seat.id,
+          seatLabel: getSeatLabel(forfeitedSeat.seat),
+          building: forfeitedSeat.seat.building,
+          floor: forfeitedSeat.seat.floor,
           endedAt: forfeitedSeat.endedAt,
         });
       } catch (err) {
