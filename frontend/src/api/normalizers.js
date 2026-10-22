@@ -72,6 +72,7 @@ export function normalizeReservation(payload, fallback = {}) {
 
   const remainingSeconds = Number(source.remainingSeconds);
   const breakRemainingSeconds = Number(source.breakRemainingSeconds);
+  const cooldownRemainingSeconds = Number(source.cooldownRemainingSeconds);
   const entryDeadline = source.entryDeadline || (
     Number.isFinite(remainingSeconds)
       ? new Date(Date.now() + Math.max(0, remainingSeconds) * 1000).toISOString()
@@ -80,6 +81,11 @@ export function normalizeReservation(payload, fallback = {}) {
   const breakDeadline = source.breakDeadline || (
     Number.isFinite(breakRemainingSeconds)
       ? new Date(Date.now() + Math.max(0, breakRemainingSeconds) * 1000).toISOString()
+      : null
+  );
+  const cooldownUntil = source.cooldownUntil || (
+    Number.isFinite(cooldownRemainingSeconds) && cooldownRemainingSeconds > 0
+      ? new Date(Date.now() + cooldownRemainingSeconds * 1000).toISOString()
       : null
   );
 
@@ -91,6 +97,7 @@ export function normalizeReservation(payload, fallback = {}) {
     user: normalizeUser(source.user || fallback.user),
     entryDeadline,
     breakDeadline,
+    cooldownUntil,
     breakMinutesUsed: source.breakMinutesUsed || fallback.breakMinutesUsed || 5,
     qrToken: envelope.qrToken || source.qrToken || source.reservationId || source.id,
   };

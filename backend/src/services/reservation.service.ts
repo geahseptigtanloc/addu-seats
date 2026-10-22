@@ -27,6 +27,7 @@ import {
   notifyAdminsReservationPending,
   notifyAdminsReservationPendingResolved,
   notifyReservationEvicted,
+  notifyBreakExpired,
   type SeatFlagResolution,
   notifyReservationVoided,
   type ReservationVoidReason,
@@ -89,10 +90,6 @@ export async function createReservation(
   qrToken: string,
 ): Promise<ReservationReceipt> {
   const userId = student.id;
-
-  if (await isOnBreakCooldown(userId)) {
-    throw new ConflictError('You are on a break cooldown — please try again later');
-  }
 
   if (isRetiredSeatToken(resolveSeatQrToken(qrToken))) {
     throw new NotFoundError('This seat QR code is no longer active');
@@ -412,6 +409,7 @@ export interface ReservationDetails {
   remainingSeconds?: number;
   breakRemainingSeconds?: number;
   breakMinutesUsed?: number;
+  cooldownRemainingSeconds?: number;
   flag?: ActiveFlagInfo;
   seat: Seat;
   user: { name: string; studentIdLast4: string | null };
@@ -451,6 +449,20 @@ async function toReservationDetails(
       details.breakRemainingSeconds = Math.max(0, ttl);
     } catch (err) {
       logger.warn({ err, reservationId: reservation.id }, 'Failed to read break details');
+    }
+  }
+
+  if (
+    reservation.status === ReservationStatus.CONFIRMED &&
+    reservation.seat.status === SeatStatus.OCCUPIED
+  ) {
+    try {
+      details.cooldownRemainingSeconds = Math.max(
+        0,
+        await redisClient.ttl(breakCooldownKey(reservation.userId)),
+      );
+    } catch (err) {
+      logger.warn({ err, userId: reservation.userId }, 'Failed to read break cooldown');
     }
   }
 
@@ -1003,8 +1015,12 @@ export async function extendBreak(
   const elapsedSeconds = (Date.now() - new Date(state.breakStartedAt).getTime()) / 1000;
   const remainingSeconds = Math.max(0, Math.round(allowedSeconds - elapsedSeconds));
 
+  if (remainingSeconds === 0) {
+    throw new ConflictError('Break time has expired');
+  }
+
   await redisClient.set(breakTimerKey(reservationId), JSON.stringify(state), {
-    EX: remainingSeconds || 1, // EX must be > 0; guards an already-expired edge case
+    EX: remainingSeconds,
   });
 
   return { remainingSeconds };
@@ -1042,26 +1058,20 @@ async function completeBreakReturn(
   seat: Seat,
   reservation: Reservation,
 ): Promise<Seat> {
-  // Missing key (expired, or lost to the best-effort write in startBreak)
-  // is treated as 0 extensions used, fails open, no cooldown applied,
-  // consistent with how Redis misses are handled everywhere else here.
-  let extensionsUsed = 0;
-  try {
-    const raw = await redisClient.get(breakTimerKey(reservation.id));
-    if (raw) {
-      extensionsUsed = (JSON.parse(raw) as BreakTimerState).extensionsUsed;
-    }
-  } catch (err) {
-    logger.warn({ err, reservationId: reservation.id }, 'Failed to read break timer from Redis');
-  }
-  const cooldownApplies = extensionsUsed >= BREAK_MAX_EXTENSIONS;
-
   const updatedSeat = await prisma.$transaction(async (tx) => {
     // Lock first: a concurrent void, checkout or forfeit has then either fully
     // happened (this return is rejected) or waits for this one to finish.
     if (!(await lockConfirmedReservation(tx, reservation.id))) {
       throw new NotFoundError('No matching reservation found for this seat');
     }
+
+    // The Redis key expires at the actual deadline. Check under the same
+    // reservation lock as forfeiture so a scan cannot revive an elapsed break.
+    const raw = await redisClient.get(breakTimerKey(reservation.id));
+    if (!raw) {
+      throw new ConflictError('Break time has expired');
+    }
+    const extensionsUsed = (JSON.parse(raw) as BreakTimerState).extensionsUsed;
 
     // Conditional claim: only a seat still on break returns to OCCUPIED. This
     // also turns a double-scanned return into a rejection, not a duplicate log.
@@ -1085,7 +1095,10 @@ async function completeBreakReturn(
       data: { reservationId: reservation.id, eventType: OccupancyEventType.OCCUPIED },
     });
 
-    return tx.seat.findUniqueOrThrow({ where: { id: seat.id } });
+    return {
+      seat: await tx.seat.findUniqueOrThrow({ where: { id: seat.id } }),
+      cooldownApplies: extensionsUsed >= BREAK_MAX_EXTENSIONS,
+    };
   });
 
   try {
@@ -1094,7 +1107,7 @@ async function completeBreakReturn(
     logger.warn({ err, reservationId: reservation.id }, 'Failed to clear break timer in Redis');
   }
 
-  if (cooldownApplies) {
+  if (updatedSeat.cooldownApplies) {
     try {
       await redisClient.set(breakCooldownKey(userId), '1', { EX: BREAK_COOLDOWN_SECONDS });
     } catch (err) {
@@ -1103,15 +1116,15 @@ async function completeBreakReturn(
   }
 
   try {
-    broadcastSeatStatusUpdate(updatedSeat.building, updatedSeat.floor, {
-      seatId: updatedSeat.id,
-      status: updatedSeat.status,
+    broadcastSeatStatusUpdate(updatedSeat.seat.building, updatedSeat.seat.floor, {
+      seatId: updatedSeat.seat.id,
+      status: updatedSeat.seat.status,
     });
   } catch (err) {
     logger.warn({ err, reservationId: reservation.id }, 'Failed to broadcast seat status update');
   }
 
-  return updatedSeat;
+  return updatedSeat.seat;
 }
 
 const FLAG_WINDOW_SECONDS = 5 * 60;
@@ -1520,12 +1533,15 @@ export async function expireBreakTimers(): Promise<void> {
           return null; // the student returned in the meantime
         }
 
-        await tx.reservation.update({
+        const forfeitedReservation = await tx.reservation.update({
           where: { id: reservation.id },
           data: { status: ReservationStatus.FORFEITED, endedAt: new Date() },
         });
 
-        return tx.seat.findUniqueOrThrow({ where: { id: seat.id } });
+        return {
+          seat: await tx.seat.findUniqueOrThrow({ where: { id: seat.id } }),
+          endedAt: forfeitedReservation.endedAt!.toISOString(),
+        };
       });
 
       if (!forfeitedSeat) {
@@ -1535,15 +1551,25 @@ export async function expireBreakTimers(): Promise<void> {
       expiredCount++;
 
       try {
-        broadcastSeatStatusUpdate(forfeitedSeat.building, forfeitedSeat.floor, {
-          seatId: forfeitedSeat.id,
-          status: forfeitedSeat.status,
+        broadcastSeatStatusUpdate(forfeitedSeat.seat.building, forfeitedSeat.seat.floor, {
+          seatId: forfeitedSeat.seat.id,
+          status: forfeitedSeat.seat.status,
         });
       } catch (err) {
         logger.warn(
           { err, reservationId: reservation.id },
           'Failed to broadcast seat status update',
         );
+      }
+
+      try {
+        notifyBreakExpired(reservation.userId, {
+          reservationId: reservation.id,
+          seatId: forfeitedSeat.seat.id,
+          endedAt: forfeitedSeat.endedAt,
+        });
+      } catch (err) {
+        logger.warn({ err, reservationId: reservation.id }, 'Failed to notify expired break');
       }
     } catch (err) {
       logger.error({ err, seatId: seat.id }, 'Failed to process break-timer expiry for seat');

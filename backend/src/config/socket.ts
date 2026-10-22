@@ -87,6 +87,12 @@ interface ReservationEvictedPayload {
   endedAt: string;
 }
 
+interface BreakExpiredPayload {
+  reservationId: string;
+  seatId: string;
+  endedAt: string;
+}
+
 interface ServerToClientEvents {
   joined_floor: (payload: { room: string }) => void;
   seat_status_update: (payload: { seatId: string; status: SeatStatus }) => void;
@@ -96,6 +102,7 @@ interface ServerToClientEvents {
   reservation_pending_admin_notice: (payload: ReservationPendingAdminPayload) => void;
   reservation_pending_resolved_admin_notice: (payload: ReservationPendingResolvedPayload) => void;
   reservation_evicted: (payload: ReservationEvictedPayload) => void;
+  break_expired: (payload: BreakExpiredPayload) => void;
   reservation_voided: (payload: ReservationVoidedPayload) => void;
   socket_error: (payload: { message: string }) => void;
 }
@@ -256,6 +263,10 @@ export function notifyAdminsReservationPendingResolved(
 // page can leave the "active reservation" state without a refresh.
 export function notifyReservationEvicted(userId: string, payload: ReservationEvictedPayload): void {
   getIO().to(getUserRoom(userId)).emit('reservation_evicted', payload);
+}
+
+export function notifyBreakExpired(userId: string, payload: BreakExpiredPayload): void {
+  getIO().to(getUserRoom(userId)).emit('break_expired', payload);
 }
 
 // Tells the reservation holder their reservation was ended by staff, a bulk
