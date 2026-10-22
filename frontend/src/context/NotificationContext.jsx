@@ -4,7 +4,7 @@ import { ArrowRight, Bell, ClockCountdown, WarningCircle, X } from '@phosphor-ic
 import { io } from 'socket.io-client';
 import AppDialog from '../components/AppDialog.jsx';
 import { API_URL, apiClient, getToken } from '../api/client.js';
-import { formatSeatLocation, getSeatLocation } from '../data/seatLocations.js';
+import { formatSeatLocation, getSeatLocation, getSeatMapPath } from '../data/seatLocations.js';
 import { useAuth } from './AuthContext.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_URL;
@@ -81,6 +81,20 @@ function studentNotification(flag, seat, reservationId, unread) {
   };
 }
 
+function breakExpiredNotification(payload) {
+  return {
+    id: `break-expired:${payload.reservationId}`,
+    reservationId: payload.reservationId,
+    title: 'Break expired',
+    location: formatSeatLocation(payload),
+    message: `Your break at ${payload.seatLabel || 'your seat'} expired. The reservation was forfeited and the seat was released.`,
+    createdAt: payload.endedAt || new Date().toISOString(),
+    href: getSeatMapPath(payload) || '/',
+    kind: 'break',
+    unread: true,
+  };
+}
+
 function upsertNotification(current, incoming) {
   const existing = current.find((item) => item.id === incoming.id);
   const merged = existing ? { ...incoming, unread: existing.unread || incoming.unread } : incoming;
@@ -96,6 +110,7 @@ export function NotificationProvider({ children }) {
   const [adminToast, setAdminToast] = useState(null);
   const [voidedReservation, setVoidedReservation] = useState(null);
   const [voidNotice, setVoidNotice] = useState(null);
+  const [breakExpiryNotice, setBreakExpiryNotice] = useState(null);
 
   useEffect(() => {
     setNotifications([]);
@@ -103,6 +118,7 @@ export function NotificationProvider({ children }) {
     setAdminToast(null);
     setVoidedReservation(null);
     setVoidNotice(null);
+    setBreakExpiryNotice(null);
 
     if (!user?.legalAcceptedAt) return undefined;
 
@@ -215,6 +231,17 @@ export function NotificationProvider({ children }) {
       setHolderAlert(null);
     });
 
+    socket.on('break_expired', (payload) => {
+      if (user.role !== 'student' || !payload?.reservationId) return;
+      const notification = breakExpiredNotification(payload);
+      setNotifications((current) => upsertNotification(
+        current.filter((item) => item.reservationId !== payload.reservationId),
+        notification,
+      ));
+      setHolderAlert(null);
+      setBreakExpiryNotice(notification);
+    });
+
     socket.on('reservation_voided', (payload) => {
       if (user.role !== 'student' || !payload?.reservationId) return;
       setNotifications((current) => current.filter((item) => item.reservationId !== payload.reservationId));
@@ -293,6 +320,20 @@ export function NotificationProvider({ children }) {
           navigate('/');
         }}
         onClose={() => setVoidNotice(null)}
+      />
+
+      <AppDialog
+        open={Boolean(breakExpiryNotice)}
+        tone="warning"
+        title="Your break expired"
+        description={breakExpiryNotice?.message || ''}
+        confirmLabel="View seat map"
+        cancelLabel="Dismiss"
+        onConfirm={() => {
+          navigate(breakExpiryNotice?.href || '/');
+          setBreakExpiryNotice(null);
+        }}
+        onClose={() => setBreakExpiryNotice(null)}
       />
 
       {adminToast && (
@@ -388,7 +429,7 @@ export function NotificationBell() {
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <div>
               <p className="font-semibold text-slate-950">Seat notifications</p>
-              <p className="mt-0.5 text-xs text-slate-500">Pending reservations and active reports</p>
+              <p className="mt-0.5 text-xs text-slate-500">Reservation and seat updates</p>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="ui-icon-button h-8 w-8 border-transparent" aria-label="Close notifications">
               <X size={16} weight="bold" />
@@ -429,7 +470,7 @@ export function NotificationBell() {
                   className="flex w-full items-start gap-3 px-4 py-4 text-left hover:bg-slate-50"
                 >
                   <span className={`relative mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-[8px] ${notification.kind === 'reservation' ? 'bg-blue-50 text-[#063a64]' : 'bg-red-50 text-red-700'}`}>
-                    {notification.kind === 'reservation'
+                    {notification.kind === 'reservation' || notification.kind === 'break'
                       ? <ClockCountdown size={20} weight="duotone" />
                       : <WarningCircle size={20} weight="duotone" />}
                     {notification.unread && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-600" />}
@@ -447,7 +488,7 @@ export function NotificationBell() {
             <div className="px-5 py-8 text-center">
               <Bell size={24} weight="duotone" className="mx-auto text-slate-400" />
               <p className="mt-3 text-sm font-semibold text-slate-800">{isAdmin && buildingFilter !== 'all' ? 'No alerts for this library' : 'No active seat alerts'}</p>
-              <p className="mt-1 text-xs text-slate-500">{isAdmin && buildingFilter !== 'all' ? 'Choose another library or All to see other alerts.' : 'New reservations and flag reports will appear here.'}</p>
+              <p className="mt-1 text-xs text-slate-500">{isAdmin && buildingFilter !== 'all' ? 'Choose another library or All to see other alerts.' : 'Reservation and seat updates will appear here.'}</p>
             </div>
           )}
         </div>

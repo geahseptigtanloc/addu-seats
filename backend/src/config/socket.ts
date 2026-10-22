@@ -90,6 +90,9 @@ interface ReservationEvictedPayload {
 interface BreakExpiredPayload {
   reservationId: string;
   seatId: string;
+  seatLabel: string;
+  building: string;
+  floor: number;
   endedAt: string;
 }
 
