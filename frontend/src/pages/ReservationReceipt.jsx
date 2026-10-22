@@ -69,12 +69,15 @@ export default function ReservationReceipt() {
       }
     } catch (error) {
       if (error.status === 404) {
+        if (reservation?.status === 'on_break') {
+          setVoidMessage('Your break expired before you scanned the seat verify QR. The seat has been released.');
+        }
         setReservation(null);
         setActiveFlag(null);
         setHasCurrent(false);
       }
     }
-  }, [user]);
+  }, [user, reservation?.status]);
 
   useEffect(() => {
     if (!voidedReservation?.reservationId || reservation?.reservationId !== voidedReservation.reservationId) return;
@@ -125,8 +128,11 @@ export default function ReservationReceipt() {
         setReservation((current) => current ? { ...current, status: data.status } : current);
       }
     });
-    socket.on('break_expired', () => {
-      setReservation((current) => current ? { ...current, status: 'expired' } : current);
+    socket.on('break_expired', (data) => {
+      if (data.reservationId === reservation.reservationId) {
+        setVoidMessage('Your break expired before you scanned the seat verify QR. The seat has been released.');
+        setReservation((current) => current ? { ...current, status: 'expired' } : current);
+      }
     });
     socket.on('flag_expired', () => {
       setActiveFlag(null);
@@ -213,6 +219,7 @@ export default function ReservationReceipt() {
   const allocatedBreakMinutes = reservation.breakMinutesUsed || 5;
   const breakProgress = Math.min(100, Math.max(0, (breakSeconds / (allocatedBreakMinutes * 60)) * 100));
   const breakIsUrgent = status === 'on_break' && breakSeconds <= 60;
+  const breakTimeIsUp = status === 'on_break' && breakSeconds === 0;
 
   return (
     <Layout>
@@ -346,9 +353,13 @@ export default function ReservationReceipt() {
                     <div>
                       <div className="flex items-center gap-2 text-sm font-semibold text-blue-100">
                         {breakIsUrgent ? <Warning size={20} weight="fill" className="text-red-200" /> : <Coffee size={20} weight="fill" />}
-                        {breakIsUrgent ? 'Return now' : 'Break protected'}
+                        {breakTimeIsUp ? 'Break time is up' : breakIsUrgent ? 'Return now' : 'Break protected'}
                       </div>
-                      <p className="mt-2 max-w-md text-sm leading-relaxed text-blue-100">Your belongings may remain at {seatLabel}. Scan the verify QR at your seat to end your break.</p>
+                      <p className="mt-2 max-w-md text-sm leading-relaxed text-blue-100">
+                        {breakTimeIsUp
+                          ? 'Your return deadline has passed. Checking the reservation status with the server...'
+                          : `Your belongings may remain at ${seatLabel}. Scan the verify QR at your seat to end your break.`}
+                      </p>
                     </div>
                     <div
                       className="grid h-28 w-28 shrink-0 place-items-center self-center rounded-full p-2 sm:self-auto"
@@ -370,7 +381,7 @@ export default function ReservationReceipt() {
                     <button
                       type="button"
                       onClick={() => performAction('extend_break', `/api/reservations/${reservation.reservationId}/break/extend`)}
-                      disabled={Boolean(busyAction) || allocatedBreakMinutes >= 15}
+                      disabled={Boolean(busyAction) || allocatedBreakMinutes >= 15 || breakTimeIsUp}
                       className="inline-flex items-center gap-2 whitespace-nowrap rounded-[8px] border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900 transition hover:bg-blue-100 active:translate-y-px disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
                     >
                       <Plus size={17} weight="bold" />
@@ -388,9 +399,24 @@ export default function ReservationReceipt() {
                   {allocatedBreakMinutes >= 15 && (
                     <p className="mt-4 text-sm leading-relaxed text-amber-800">Maximum time reached. Returning on time starts a 30-minute break cooldown.</p>
                   )}
-                  <p className="mt-4 rounded-[8px] border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-semibold leading-6 text-blue-950">
-                    Scan the verify QR at your seat to end your break. This scan prompt stays available if the countdown reaches zero while the server finishes checking the break.
-                  </p>
+                  {!breakTimeIsUp && (
+                    <div className={`mt-5 rounded-[8px] border p-4 ${breakIsUrgent ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50'}`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-[8px] ${breakIsUrgent ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-900'}`}>
+                          <QrCode size={24} weight="bold" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-950">When you get back</h3>
+                          <p className="mt-1 text-sm leading-6 text-gray-700">Complete these steps before the timer reaches zero:</p>
+                        </div>
+                      </div>
+                      <ol className="mt-4 space-y-2 text-sm leading-6 text-gray-800">
+                        <li><strong className="mr-2 text-blue-900">1.</strong>Return to {seatLabel}.</li>
+                        <li><strong className="mr-2 text-blue-900">2.</strong>Use your phone camera to scan the physical <strong>verify QR</strong> at your seat.</li>
+                        <li><strong className="mr-2 text-blue-900">3.</strong>Open the scan link while signed in. Your break ends after the scan is verified.</li>
+                      </ol>
+                    </div>
+                  )}
                 </div>
               </section>
             )}
@@ -400,7 +426,7 @@ export default function ReservationReceipt() {
                 <p className="font-semibold text-gray-900">
                   {status === 'expired' ? 'Reservation expired' : status === 'cancelled' ? 'Reservation cancelled' : 'Session completed'}
                 </p>
-                <p className="mt-2 text-sm text-gray-500">The reserved seat is available for another student.</p>
+                <p className="mt-2 text-sm text-gray-500">{voidMessage || 'The reserved seat is available for another student.'}</p>
                 <Link to="/" className="ui-button-primary mt-4">Find another seat</Link>
               </section>
             )}
@@ -494,7 +520,7 @@ function BreakStartDialog({ seatLabel, busy, onClose, onConfirm }) {
           <div className="space-y-4 text-sm text-gray-700">
             <Rule icon={Timer} title="Starts with five minutes" copy="Add five minutes twice if needed. The maximum is 15 minutes." />
             <Rule icon={QrCode} title="Return at your seat" copy={`Scan the verify QR attached to ${seatLabel}. There is no in-app return button.`} />
-            <Rule icon={Warning} title="Timer expiry releases the seat" copy="Keep the scan prompt available at zero. The verify scan can still succeed until the server confirms expiry." />
+            <Rule icon={Warning} title="Timer expiry releases the seat" copy="Return and scan the seat verify QR before the countdown reaches zero, or the reservation will be forfeited." />
           </div>
 
           <div className="mt-6 flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">

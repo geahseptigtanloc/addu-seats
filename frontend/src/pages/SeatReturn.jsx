@@ -65,6 +65,7 @@ export default function SeatReturn() {
             ? 'Your break has ended and your study session is active again.'
             : 'Your presence is confirmed and the ghost-seat report has been cleared.',
           seatLabel: current.seat?.label,
+          cooldownUntil: refreshedReservation?.cooldownUntil,
         });
         clearReservationNotification(current.reservationId);
         window.setTimeout(() => {
@@ -156,6 +157,9 @@ function verificationErrorMessage(error) {
   }
   if (error?.status === 409 && error.message?.includes('verification window has expired')) {
     return 'The verification window has expired. Please speak with the front desk.';
+  }
+  if (error?.status === 409 && error.message?.includes('Break time has expired')) {
+    return 'Your break time has expired and the seat is being released. Please return to your reservation for the latest status.';
   }
   if (error?.status === 409) {
     return 'Nothing to verify right now.';
