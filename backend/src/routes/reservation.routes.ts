@@ -5,7 +5,7 @@ import * as reservationController from '../controllers/reservation.controller';
 
 const router = Router();
 
-router.post('/', requireAuth, reservationController.createReservation);
+router.post('/', requireAuth, requireRole('STUDENT'), reservationController.createReservation);
 router.post('/:id/cancel', requireAuth, reservationController.cancelReservation);
 router.post('/:id/checkout', requireAuth, reservationController.checkoutReservation);
 router.post(
